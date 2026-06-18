@@ -2,7 +2,7 @@
 import {
   emptyConfig, makeRole, makeLocation, makePerson, makeShift, makeConstraint,
 } from './schema.js';
-import { solve } from './solver.js';
+import { solve, computeHours } from './solver.js';
 import { CONSTRAINT_TYPES as CT } from './schema.js';
 
 function assert(cond, msg) {
@@ -146,5 +146,56 @@ assert(!seedB_mon.some((s) => s.shiftName === 'Dr. R'),
 const weekAShiftsInB = Object.values(seedB).flatMap((d) => d.shifts)
   .filter((s) => seedCfg.shifts.find((sh) => sh.id === s.shiftId && sh.week === 'A'));
 assert(weekAShiftsInB.length === 0, 'No Week A shifts appear when solving Week B');
+
+// ============================================================
+// Suite 5 — computeHours with known exact totals
+// ============================================================
+console.log('\n=== Suite 5: computeHours ===');
+
+const mockResult = {
+  Mon: {
+    shifts: [
+      {
+        shiftId: 'sx1', shiftName: 'Morning', location: 'A',
+        start: 480, end: 1020, // 9 h
+        staffing: [],
+        assigned: [{ personId: 'px1', name: 'Alice', role: 'Scribe', color: '#000' }],
+      },
+    ],
+    unplaced: [], issues: [],
+  },
+  Tue: {
+    shifts: [
+      {
+        shiftId: 'sx2', shiftName: 'Afternoon', location: 'B',
+        start: 480, end: 720, // 4 h
+        staffing: [],
+        assigned: [
+          { personId: 'px1', name: 'Alice', role: 'Scribe', color: '#000' },
+          { personId: 'px2', name: 'Bob',   role: 'Opener', color: '#fff' },
+        ],
+      },
+      {
+        shiftId: 'sx3', shiftName: 'Eve', location: 'B',
+        start: 720, end: 900, // 3 h
+        staffing: [],
+        assigned: [{ personId: 'px2', name: 'Bob', role: 'Opener', color: '#fff' }],
+      },
+    ],
+    unplaced: [], issues: [],
+  },
+};
+
+const h = computeHours(mockResult);
+// Alice: Mon 9h + Tue 4h = 13h
+// Bob:   Tue 4h + Tue 3h = 7h
+assert(h.px1 === 13, `Alice total = 13h (got ${h.px1})`);
+assert(h.px2 === 7,  `Bob total = 7h (got ${h.px2})`);
+assert(h.nobody === undefined, 'Unknown person not in result');
+
+// Zero-duration edge case
+const zeroResult = { Mon: { shifts: [{ shiftId: 'sz', shiftName: 'X', location: 'Y', start: 600, end: 600, staffing: [], assigned: [{ personId: 'pz', name: 'C', role: 'R', color: '#0' }] }], unplaced: [], issues: [] } };
+const hz = computeHours(zeroResult);
+assert(hz.pz === 0, 'Zero-duration shift contributes 0h');
 
 console.log('\nAll suites done.');

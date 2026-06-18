@@ -170,6 +170,21 @@ function totalMin(locationId, cfg) {
     .reduce((s, c) => s + (c.count || 0), 0);
 }
 
+// Compute total weekly hours per person from a solve() result.
+// Uses start/end stored on each card — no cfg dependency.
+export function computeHours(result) {
+  const totals = {};
+  Object.values(result).forEach((day) => {
+    day.shifts.forEach((card) => {
+      const hrs = Math.max(0, ((card.end ?? 0) - (card.start ?? 0)) / 60);
+      card.assigned.forEach((a) => {
+        totals[a.personId] = (totals[a.personId] || 0) + hrs;
+      });
+    });
+  });
+  return totals;
+}
+
 function activeDays(cfg, week = null) {
   const set = new Set();
   cfg.shifts
