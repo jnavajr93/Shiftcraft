@@ -662,8 +662,10 @@ html, body, #root {
   display: flex; align-items: center; justify-content: center;
   width: 22px; height: 22px; border-radius: var(--radius); flex-shrink: 0;
   border: none; background: transparent; cursor: pointer;
-  color: var(--text-muted); transition: color 100ms, background 100ms;
+  color: var(--text-muted); transition: color 100ms, background 100ms, opacity 120ms;
+  opacity: 0;
 }
+.task-slot:hover .task-remove-btn { opacity: 1; }
 .task-remove-btn:hover { color: var(--red); background: var(--red-bg); }
 .task-card {
   background: var(--bg-elevated); border: 0.5px solid var(--border);

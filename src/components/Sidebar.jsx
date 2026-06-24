@@ -35,8 +35,15 @@ function PersonCard({ person, onPersonClick, clinics }) {
   );
 }
 
+const GRADE_ORDER = { A: 0, B: 1, C: 2 };
+
 export default function Sidebar({ onPersonClick }) {
   const { data } = useApp();
+
+  // Sort by grade A → B → C → ungraded; stable within each group (preserves Setup order)
+  const sorted = [...data.people].sort(
+    (a, b) => (GRADE_ORDER[a.grade] ?? 3) - (GRADE_ORDER[b.grade] ?? 3)
+  );
 
   return (
     <div className="sidebar">
@@ -45,7 +52,7 @@ export default function Sidebar({ onPersonClick }) {
         <span className="count-badge">{data.people.length}</span>
       </div>
       <div className="sidebar-body">
-        {data.people.map(person => (
+        {sorted.map(person => (
           <PersonCard
             key={person.id}
             person={person}

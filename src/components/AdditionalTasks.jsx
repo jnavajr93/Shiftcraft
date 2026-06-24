@@ -1,10 +1,78 @@
-import { useState, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useDroppable } from '@dnd-kit/core';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, Trash2 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { DAYS, generateId } from '../data/seed.js';
-import SlotPopover from './SlotPopover.jsx';
 
+// ─── Task Slot Popover ───────────────────────
+// No role filtering — any staff can be assigned to any task.
+// Sorted by grade A → B → C → ungraded.
+function TaskPopover({ task, currentPersonId, onAssign, onRemove, onClose }) {
+  const { data } = useApp();
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) onClose();
+    };
+    const keyH = (e) => { if (e.key === 'Escape') onClose(); };
+    const t = setTimeout(() => {
+      document.addEventListener('mousedown', handler);
+      document.addEventListener('keydown', keyH);
+    }, 0);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('keydown', keyH);
+    };
+  }, [onClose]);
+
+  const gradeOrder = { A: 0, B: 1, C: 2 };
+  const currentPerson = currentPersonId
+    ? data.people.find(p => p.id === currentPersonId)
+    : null;
+
+  const sorted = [...data.people].sort(
+    (a, b) => (gradeOrder[a.grade] ?? 3) - (gradeOrder[b.grade] ?? 3)
+  );
+
+  return (
+    <div ref={ref} className="popover" onClick={e => e.stopPropagation()}>
+      {currentPerson && (
+        <>
+          <div className="popover-section-label">Assigned</div>
+          <div className="popover-item current-person">
+            <div className="dot" style={{ background: currentPerson.color }} />
+            <span style={{ flex: 1 }}>{currentPerson.name}</span>
+            <button
+              className="btn btn-icon popover-remove"
+              style={{ minHeight: 'unset', padding: '2px 4px', gap: 0 }}
+              onClick={e => { e.stopPropagation(); onRemove(); }}
+              title="Remove"
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
+          <div className="popover-divider" />
+        </>
+      )}
+      <div className="popover-section-label">Staff</div>
+      {sorted.map(p => (
+        <div
+          key={p.id}
+          className={`popover-item${p.id === currentPersonId ? ' current-person' : ''}`}
+          onClick={() => onAssign(p.id)}
+        >
+          <div className="dot" style={{ background: p.color }} />
+          <span style={{ flex: 1 }}>{p.name}</span>
+          {p.grade && <span className={`grade-badge ${p.grade}`}>{p.grade}</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Task Slot Row ───────────────────────────
 function TaskSlotRow({ task, onPersonClick, onRemove }) {
   const { data, isAdmin, assignTask } = useApp();
   const [showPopover, setShowPopover] = useState(false);
@@ -42,11 +110,11 @@ function TaskSlotRow({ task, onPersonClick, onRemove }) {
           </div>
         ) : (
           <div className={`slot-empty${isOver && isAdmin ? ' droppable' : ''}`}>
-            Assign…
+            {isAdmin ? 'Assign…' : '—'}
           </div>
         )}
       </div>
-      {onRemove && (
+      {onRemove && isAdmin && (
         <button
           className="task-remove-btn"
           onClick={e => { e.stopPropagation(); onRemove(); }}
@@ -68,59 +136,7 @@ function TaskSlotRow({ task, onPersonClick, onRemove }) {
   );
 }
 
-function TaskPopover({ task, currentPersonId, onAssign, onRemove, onClose }) {
-  const { data } = useApp();
-  const ref = useCallback((el) => {
-    if (!el) return;
-    const handler = (e) => { if (!el.contains(e.target)) onClose(); };
-    const keyH = (e) => { if (e.key === 'Escape') onClose(); };
-    const t = setTimeout(() => {
-      document.addEventListener('mousedown', handler);
-      document.addEventListener('keydown', keyH);
-    }, 0);
-    return () => {
-      clearTimeout(t);
-      document.removeEventListener('mousedown', handler);
-      document.removeEventListener('keydown', keyH);
-    };
-  }, [onClose]);
-
-  const currentPerson = currentPersonId ? data.people.find(p => p.id === currentPersonId) : null;
-
-  return (
-    <div ref={ref} className="popover" onClick={e => e.stopPropagation()}>
-      {currentPerson && (
-        <>
-          <div className="popover-section-label">Assigned</div>
-          <div className="popover-item current-person">
-            <div className="dot" style={{ background: currentPerson.color }} />
-            <span style={{ flex: 1 }}>{currentPerson.name}</span>
-            <button
-              className="btn btn-icon popover-remove"
-              style={{ minHeight: 'unset', padding: '2px 4px' }}
-              onClick={e => { e.stopPropagation(); onRemove(); }}
-            >
-              <X size={13} />
-            </button>
-          </div>
-          <div className="popover-divider" />
-        </>
-      )}
-      <div className="popover-section-label">Staff</div>
-      {data.people.map(p => (
-        <div
-          key={p.id}
-          className={`popover-item${p.id === currentPersonId ? ' current-person' : ''}`}
-          onClick={() => onAssign(p.id)}
-        >
-          <div className="dot" style={{ background: p.color }} />
-          <span>{p.name}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
+// ─── Add Task Form ───────────────────────────
 function AddTaskForm({ day, onAdd, onCancel }) {
   const { data } = useApp();
   const [label, setLabel] = useState('');
@@ -194,14 +210,24 @@ function AddTaskForm({ day, onAdd, onCancel }) {
   );
 }
 
+// ─── Additional Tasks Panel ──────────────────
 export default function AdditionalTasks({ onPersonClick }) {
-  const { data, isAdmin, removeTask } = useApp();
+  const { data, isAdmin, removeTask, addTask, addLog } = useApp();
   const [addingDay, setAddingDay] = useState(null);
-  const { addTask } = useApp();
 
   const handleAdd = (task) => {
     addTask(task);
     setAddingDay(null);
+  };
+
+  const handleRemove = (task) => {
+    addLog({
+      action: `${task.label} removed from ${task.day}`,
+      personName: '',
+      day: task.day,
+      detail: '',
+    });
+    removeTask(task.id);
   };
 
   return (
@@ -220,7 +246,7 @@ export default function AdditionalTasks({ onPersonClick }) {
                         key={task.id}
                         task={task}
                         onPersonClick={onPersonClick}
-                        onRemove={isAdmin ? () => removeTask(task.id) : undefined}
+                        onRemove={isAdmin ? () => handleRemove(task) : undefined}
                       />
                     ))}
                   </div>
