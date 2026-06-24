@@ -106,7 +106,15 @@ export default function ClinicConfig({ clinicId, onClose }) {
           onChange={(v) => set('startTime', v)}
         />
         <TimeInput
-          label="End Time"
+          label="Last Patient"
+          value={clinic.lastPatientTime ?? (clinic.endTime - 90)}
+          onChange={(v) => set('lastPatientTime', v)}
+        />
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: -8 }}>
+          Closer stays ~1–1.5h after last patient
+        </div>
+        <TimeInput
+          label="Door Close (End Time)"
           value={clinic.endTime}
           onChange={(v) => set('endTime', v)}
         />

@@ -25,7 +25,7 @@ function WeekRows({ person, clinics }) {
                   time: slotType === 'scribe'
                     ? `${minutesToTime(c.startTime)} – ${minutesToTime(c.endTime)}`
                     : slotType === 'opener'  ? `${minutesToTime(c.startTime)} – 5:00 PM`
-                    : slotType === 'closing' ? `9:00 AM – ${minutesToTime(c.endTime)}`
+                    : slotType === 'closing' ? '9:00 AM – Close'
                     : slotType === 'middle'  ? '9:00 AM – 6:00 PM'
                     : '8:00 AM – 5:00 PM',
                 });

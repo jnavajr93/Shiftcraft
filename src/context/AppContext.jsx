@@ -81,6 +81,10 @@ function migrateData(raw) {
   return {
     ...raw,
     people: (raw.people ?? []).map(migratePerson),
+    clinics: (raw.clinics ?? []).map(c => ({
+      ...c,
+      lastPatientTime: c.lastPatientTime ?? (c.endTime - 90),
+    })),
     // Strip pre-seeded tasks; keep only admin-created ones
     additionalTasks: (raw.additionalTasks ?? []).filter(t => !SEEDED_TASK_IDS.has(t.id)),
     taskTypes: raw.taskTypes ?? getSeedData().taskTypes,
@@ -413,6 +417,35 @@ export function AppProvider({ children }) {
     setGlobalData(prev => ({ ...prev, people: newOrder }));
   }, []);
 
+  // Bulk-apply AI-generated assignments: [{clinicId, slot, personId}]
+  const applyBulkAssignments = useCallback((assignments) => {
+    setGlobalData(prev => {
+      let clinics = prev.clinics;
+      for (const { clinicId, slot, personId } of assignments) {
+        clinics = clinics.map(c => {
+          if (c.id !== clinicId) return c;
+          return { ...c, slots: { ...c.slots, [slot]: personId } };
+        });
+      }
+      const map = extractSlotMap(clinics, prev.additionalTasks);
+      saveWeekSlotMap(currentWeek, map);
+      return { ...prev, clinics };
+    });
+  }, [currentWeek]);
+
+  // Restore a slot snapshot: {[clinicId]: {scribe, opener, ...}} — used for undo
+  const restoreClinicSlots = useCallback((slotSnapshot) => {
+    setGlobalData(prev => {
+      const clinics = prev.clinics.map(c => ({
+        ...c,
+        slots: slotSnapshot[c.id] ?? c.slots,
+      }));
+      const map = extractSlotMap(clinics, prev.additionalTasks);
+      saveWeekSlotMap(currentWeek, map);
+      return { ...prev, clinics };
+    });
+  }, [currentWeek]);
+
   const deletePerson = useCallback((personId) => {
     // Scan ALL stored weeks in localStorage and null out this person
     try {
@@ -512,6 +545,7 @@ export function AppProvider({ children }) {
       updateClinic, assignSlot,
       assignTask, addTask, removeTask,
       updatePerson, addPerson, deletePerson, reorderPeople,
+      applyBulkAssignments, restoreClinicSlots,
       addClinic, removeClinic, addLocation, removeLocation,
       changelog, clearChangelog, addLog,
     }}>

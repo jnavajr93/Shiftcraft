@@ -704,6 +704,11 @@ html, body, #root {
 }
 .shake { animation: shake 400ms ease; border-color: var(--red) !important; }
 
+/* ─── Generate Button ────────────────── */
+.generate-btn { font-weight: 500; }
+.generate-done { color: #16a34a !important; border-color: #16a34a !important; }
+.generate-error { color: var(--red) !important; border-color: var(--red) !important; }
+
 /* ─── Toast ─────────────────────────── */
 .copy-toast {
   position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
