@@ -148,6 +148,14 @@ function runMigrations(data) {
     dirty = true;
   }
 
+  // ── Migration: cleartasks ────────────────────
+  // Wipe any additional task instances left over from old static seeds.
+  if (!localStorage.getItem('shiftcraft.migration.cleartasks')) {
+    d = { ...d, additionalTasks: [] };
+    try { localStorage.setItem('shiftcraft.migration.cleartasks', '1'); } catch { /* ignore */ }
+    dirty = true;
+  }
+
   // ── Migration: skills (legacy split — no-op, kept for flag compat) ──
   if (!localStorage.getItem('shiftcraft.migration.skills')) {
     try { localStorage.setItem('shiftcraft.migration.skills', '1'); } catch { /* ignore */ }
