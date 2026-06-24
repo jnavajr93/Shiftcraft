@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { DAYS, calcPersonWeeklyHours, getSlotLabel, minutesToTime } from '../data/seed.js';
+import { DAYS, calcPersonWeeklyHours, getSlotLabel, getSlotPersonId, formatVariableSlotTime, minutesToTime } from '../data/seed.js';
 import ArcChart from './ArcChart.jsx';
 
 function useIsMobile() {
@@ -16,18 +16,26 @@ function WeekRows({ person, clinics }) {
         clinics
           .filter(c => c.day === day && c.open)
           .forEach(c => {
-            Object.entries(c.slots).forEach(([slotType, pid]) => {
+            Object.entries(c.slots).forEach(([slotType, slotVal]) => {
+              const pid = getSlotPersonId(slotVal);
               if (pid === person.id) {
+                let time;
+                if (slotType === 'scribe') {
+                  time = `${minutesToTime(c.startTime)} – ${minutesToTime(c.endTime)}`;
+                } else if (slotType === 'opener') {
+                  time = `${minutesToTime(c.startTime)} – 5:00 PM`;
+                } else if (slotType === 'closing') {
+                  time = '9:00 AM – Close';
+                } else if (slotType === 'middle' || slotType === 'training') {
+                  time = formatVariableSlotTime(slotVal) ?? 'Time not set';
+                } else {
+                  time = '';
+                }
                 assignments.push({
                   clinic: c,
                   slotType,
                   label: getSlotLabel(slotType, c.location),
-                  time: slotType === 'scribe'
-                    ? `${minutesToTime(c.startTime)} – ${minutesToTime(c.endTime)}`
-                    : slotType === 'opener'  ? `${minutesToTime(c.startTime)} – 5:00 PM`
-                    : slotType === 'closing' ? '9:00 AM – Close'
-                    : slotType === 'middle'  ? '9:00 AM – 6:00 PM'
-                    : '8:00 AM – 5:00 PM',
+                  time,
                 });
               }
             });

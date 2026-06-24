@@ -259,6 +259,48 @@ html, body, #root {
 .slot-time { font-size: 10px; color: var(--text-muted); margin-top: 1px; }
 .slot-content { flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0; }
 
+/* ─── Variable Slot Time Row ─────────────── */
+.variable-time-row {
+  display: flex; align-items: center; gap: 5px;
+  padding: 3px 12px 6px 64px;
+  font-size: 10px; color: var(--text-muted);
+  border-bottom: 0.5px solid var(--border);
+  min-height: 0;
+}
+.variable-time-row:last-child { border-bottom: none; }
+.variable-time-row.editable { cursor: pointer; }
+.variable-time-row.editable:hover { color: var(--text-secondary); }
+.variable-time-row.editable:hover svg { opacity: 1 !important; }
+
+.variable-time-editor {
+  padding: 6px 12px 8px 64px;
+  border-bottom: 0.5px solid var(--border);
+  background: var(--bg-surface);
+}
+.variable-time-fields {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 6px;
+}
+.vte-label { font-size: 10px; color: var(--text-muted); font-weight: 500; }
+.vte-input {
+  font-size: 11px; color: var(--text-primary);
+  background: var(--bg-elevated); border: 0.5px solid var(--border-strong);
+  border-radius: var(--radius); padding: 2px 5px; cursor: text;
+  height: 24px;
+}
+.vte-close-badge {
+  font-size: 11px; color: var(--text-muted); font-style: italic;
+  background: var(--bg-surface); border: 0.5px solid var(--border);
+  border-radius: var(--radius); padding: 2px 7px; height: 24px;
+  display: inline-flex; align-items: center;
+}
+.vte-close-toggle {
+  display: flex; align-items: center; gap: 3px;
+  font-size: 10px; color: var(--text-muted); cursor: pointer;
+  padding: 0 4px;
+}
+.vte-close-toggle input { cursor: pointer; width: 11px; height: 11px; }
+.variable-time-actions { display: flex; gap: 4px; }
+
 /* ─── Person Chip ─────────────────────────── */
 .person-chip {
   display: inline-flex; align-items: center; gap: 5px;

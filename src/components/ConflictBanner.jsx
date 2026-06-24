@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
+import { getSlotPersonId } from '../data/seed.js';
 
 export function detectConflicts(clinics, people) {
   // Returns array of { personId, personName, day, clinicA, clinicB }
@@ -12,8 +13,8 @@ export function detectConflicts(clinics, people) {
     const byDay = {};
     for (const clinic of clinics) {
       if (!clinic.open) continue;
-      for (const [, pid] of Object.entries(clinic.slots)) {
-        if (pid === person.id) {
+      for (const [, slotVal] of Object.entries(clinic.slots)) {
+        if (getSlotPersonId(slotVal) === person.id) {
           if (!byDay[clinic.day]) byDay[clinic.day] = [];
           byDay[clinic.day].push(clinic);
         }

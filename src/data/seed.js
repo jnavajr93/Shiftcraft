@@ -24,6 +24,37 @@ export function minutesToTime(min) {
   return `${hour}${m > 0 ? ':' + String(m).padStart(2, '0') : ''} ${ampm}`;
 }
 
+export function minutesToTimeInput(min) {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+export function timeInputToMinutes(str) {
+  if (!str) return null;
+  const [h, m] = str.split(':').map(Number);
+  return h * 60 + m;
+}
+// Extract personId from any slot value (handles both string and new object form)
+export function getSlotPersonId(slotVal) {
+  if (!slotVal) return null;
+  if (typeof slotVal === 'object') return slotVal.personId ?? null;
+  return slotVal;
+}
+// Get { start, end } from a variable slot value
+export function getSlotTimeObj(slotVal) {
+  if (!slotVal || typeof slotVal !== 'object') return { start: null, end: null };
+  return { start: slotVal.start ?? null, end: slotVal.end ?? null };
+}
+// Format variable slot time for display. Returns null if not set.
+export function formatVariableSlotTime(slotVal) {
+  if (!slotVal || typeof slotVal !== 'object') return null;
+  const { start, end } = slotVal;
+  if (start == null && end == null) return null;
+  const startStr = start != null ? minutesToTime(start) : '?';
+  const endStr = end === 'close' ? 'Close' : end != null ? minutesToTime(end) : '?';
+  return `${startStr} – ${endStr}`;
+}
+
 export function accommodationLabel(acc) {
   switch (acc.type) {
     case 'extended_lunch':
@@ -42,13 +73,11 @@ export function accommodationLabel(acc) {
 }
 
 export function getSlotTimeLabel(clinic, slotType) {
-  const { startTime, endTime } = clinic;
+  const { startTime } = clinic;
   switch (slotType) {
     case 'scribe':   return null;
     case 'opener':   return `${minutesToTime(startTime)} – 5:00 PM`;
     case 'closing':  return '9:00 AM – Close';
-    case 'middle':   return '9:00 AM – 6:00 PM';
-    case 'training': return '8:00 AM – 5:00 PM';
     default:         return null;
   }
 }
@@ -64,9 +93,19 @@ export function calcSlotHours(clinic, slotType) {
     case 'scribe':   return (endTime - startTime) / 60;
     case 'opener':   return (17 * 60 - startTime) / 60;
     case 'closing':  return (endTime - 9 * 60) / 60;
-    case 'middle':   return 9;
-    case 'training': return 9;
-    default:         return 0;
+    case 'middle': {
+      const sv = clinic.slots?.middle;
+      if (!sv || typeof sv !== 'object' || sv.start == null || sv.end == null) return 0;
+      const endMin = sv.end === 'close' ? endTime : sv.end;
+      return (endMin - sv.start) / 60;
+    }
+    case 'training': {
+      const sv = clinic.slots?.training;
+      if (!sv || typeof sv !== 'object' || sv.start == null || sv.end == null) return 0;
+      const endMin = sv.end === 'close' ? endTime : sv.end;
+      return (endMin - sv.start) / 60;
+    }
+    default: return 0;
   }
 }
 
@@ -74,8 +113,8 @@ export function calcPersonWeeklyHours(personId, clinics) {
   let total = 0;
   for (const clinic of clinics) {
     if (!clinic.open) continue;
-    for (const [slotType, assignedId] of Object.entries(clinic.slots)) {
-      if (assignedId === personId) {
+    for (const [slotType, slotVal] of Object.entries(clinic.slots)) {
+      if (getSlotPersonId(slotVal) === personId) {
         total += calcSlotHours(clinic, slotType);
       }
     }
@@ -212,26 +251,26 @@ export function getSeedData() {
   // Yadi is locked to Dr. B (Skibell) as Scribe on all Dr. B Estrella clinics
   const clinics = [
     // Monday — JC off Mon, John assigned; Yadi scribes Dr. B @ Estrella
-    { id: 'mon-phoenix-drr',    day: 'Mon', week: 'A', location: 'Phoenix',    provider: 'Dr. R', open: true, startTime: 480, endTime: 1020, patientCount: 45, slots: { scribe: 'john',   opener: null,      closing: 'jocelyn', middle: null,     training: null } },
-    { id: 'mon-chandler-dra',   day: 'Mon', week: 'A', location: 'Chandler',   provider: 'Dr. A', open: true, startTime: 480, endTime: 1020, patientCount: 30, slots: { scribe: null,     opener: 'martha',  closing: 'jaron',   middle: null,     training: null } },
-    { id: 'mon-estrella-drb',   day: 'Mon', week: 'A', location: 'Estrella',   provider: 'Dr. B', open: true, startTime: 480, endTime:  990, patientCount: 18, slots: { scribe: 'yadi',   opener: null,      closing: null,      middle: null,     training: null } },
+    { id: 'mon-phoenix-drr',    day: 'Mon', week: 'A', location: 'Phoenix',    provider: 'Dr. R', open: true, startTime: 480, endTime: 1020, patientCount: 45, slots: { scribe: 'john',   opener: null,      closing: 'jocelyn', middle: { personId: null, start: null, end: null },     training: { personId: null, start: null, end: null } } },
+    { id: 'mon-chandler-dra',   day: 'Mon', week: 'A', location: 'Chandler',   provider: 'Dr. A', open: true, startTime: 480, endTime: 1020, patientCount: 30, slots: { scribe: null,     opener: 'martha',  closing: 'jaron',   middle: { personId: null, start: null, end: null },     training: { personId: null, start: null, end: null } } },
+    { id: 'mon-estrella-drb',   day: 'Mon', week: 'A', location: 'Estrella',   provider: 'Dr. B', open: true, startTime: 480, endTime:  990, patientCount: 18, slots: { scribe: 'yadi',   opener: null,      closing: null,      middle: { personId: null, start: null, end: null },     training: { personId: null, start: null, end: null } } },
     // Tuesday — John off Tue; Yadi scribes Dr. B @ Estrella
-    { id: 'tue-scottsdale-drr', day: 'Tue', week: 'A', location: 'Scottsdale', provider: 'Dr. R', open: true, startTime: 480, endTime: 1020, patientCount: 55, slots: { scribe: null,     opener: 'alondra', closing: 'itzel',   middle: 'katina', training: null } },
-    { id: 'tue-estrella-drs',   day: 'Tue', week: 'A', location: 'Estrella',   provider: 'Dr. S', open: true, startTime: 540, endTime: 1080, patientCount: 20, slots: { scribe: 'nikole', opener: 'lizbeth', closing: null,      middle: null,     training: null } },
-    { id: 'tue-estrella-drb',   day: 'Tue', week: 'A', location: 'Estrella',   provider: 'Dr. B', open: true, startTime: 480, endTime: 1020, patientCount: 22, slots: { scribe: 'yadi',   opener: null,      closing: null,      middle: null,     training: null } },
+    { id: 'tue-scottsdale-drr', day: 'Tue', week: 'A', location: 'Scottsdale', provider: 'Dr. R', open: true, startTime: 480, endTime: 1020, patientCount: 55, slots: { scribe: null,     opener: 'alondra', closing: 'itzel',   middle: { personId: 'katina', start: null, end: null }, training: { personId: null, start: null, end: null } } },
+    { id: 'tue-estrella-drs',   day: 'Tue', week: 'A', location: 'Estrella',   provider: 'Dr. S', open: true, startTime: 540, endTime: 1080, patientCount: 20, slots: { scribe: 'nikole', opener: 'lizbeth', closing: null,      middle: { personId: null, start: null, end: null },     training: { personId: null, start: null, end: null } } },
+    { id: 'tue-estrella-drb',   day: 'Tue', week: 'A', location: 'Estrella',   provider: 'Dr. B', open: true, startTime: 480, endTime: 1020, patientCount: 22, slots: { scribe: 'yadi',   opener: null,      closing: null,      middle: { personId: null, start: null, end: null },     training: { personId: null, start: null, end: null } } },
     // Wednesday — JC off Wed, John off Wed; Yadi scribes Dr. B @ Estrella
-    { id: 'wed-phoenix-dra',    day: 'Wed', week: 'A', location: 'Phoenix',    provider: 'Dr. A', open: true, startTime: 480, endTime: 1020, patientCount: 35, slots: { scribe: null,     opener: 'jocelyn', closing: null,      middle: null,     training: null } },
-    { id: 'wed-estrella-drb',   day: 'Wed', week: 'A', location: 'Estrella',   provider: 'Dr. B', open: true, startTime: 480, endTime:  990, patientCount: 16, slots: { scribe: 'yadi',   opener: null,      closing: null,      middle: null,     training: null } },
+    { id: 'wed-phoenix-dra',    day: 'Wed', week: 'A', location: 'Phoenix',    provider: 'Dr. A', open: true, startTime: 480, endTime: 1020, patientCount: 35, slots: { scribe: null,     opener: 'jocelyn', closing: null,      middle: { personId: null, start: null, end: null },     training: { personId: null, start: null, end: null } } },
+    { id: 'wed-estrella-drb',   day: 'Wed', week: 'A', location: 'Estrella',   provider: 'Dr. B', open: true, startTime: 480, endTime:  990, patientCount: 16, slots: { scribe: 'yadi',   opener: null,      closing: null,      middle: { personId: null, start: null, end: null },     training: { personId: null, start: null, end: null } } },
     // Thursday
-    { id: 'thu-scottsdale-drr', day: 'Thu', week: 'A', location: 'Scottsdale', provider: 'Dr. R', open: true, startTime: 480, endTime: 1020, patientCount: 52, slots: { scribe: 'john',   opener: 'katina',  closing: 'itzel',   middle: 'alondra', training: null } },
-    { id: 'thu-phoenix-dra',    day: 'Thu', week: 'A', location: 'Phoenix',    provider: 'Dr. A', open: true, startTime: 480, endTime: 1020, patientCount: 42, slots: { scribe: 'jc',     opener: 'lizbeth', closing: 'jocelyn', middle: null,     training: null } },
+    { id: 'thu-scottsdale-drr', day: 'Thu', week: 'A', location: 'Scottsdale', provider: 'Dr. R', open: true, startTime: 480, endTime: 1020, patientCount: 52, slots: { scribe: 'john',   opener: 'katina',  closing: 'itzel',   middle: { personId: 'alondra', start: null, end: null }, training: { personId: null, start: null, end: null } } },
+    { id: 'thu-phoenix-dra',    day: 'Thu', week: 'A', location: 'Phoenix',    provider: 'Dr. A', open: true, startTime: 480, endTime: 1020, patientCount: 42, slots: { scribe: 'jc',     opener: 'lizbeth', closing: 'jocelyn', middle: { personId: null, start: null, end: null },     training: { personId: null, start: null, end: null } } },
     // Friday — Yadi scribes Dr. B @ Estrella
-    { id: 'fri-estrella-drs',   day: 'Fri', week: 'A', location: 'Estrella',   provider: 'Dr. S', open: true, startTime: 540, endTime: 1080, patientCount: 15, slots: { scribe: 'nikole', opener: null,      closing: null,      middle: null,     training: null } },
-    { id: 'fri-estrella-drb',   day: 'Fri', week: 'A', location: 'Estrella',   provider: 'Dr. B', open: true, startTime: 480, endTime:  990, patientCount: 20, slots: { scribe: 'yadi',   opener: null,      closing: null,      middle: null,     training: null } },
-    { id: 'fri-phoenix-drr',    day: 'Fri', week: 'A', location: 'Phoenix',    provider: 'Dr. R', open: true, startTime: 480, endTime: 1020, patientCount: 38, slots: { scribe: 'john',   opener: 'martha',  closing: 'jaron',   middle: null,     training: null } },
+    { id: 'fri-estrella-drs',   day: 'Fri', week: 'A', location: 'Estrella',   provider: 'Dr. S', open: true, startTime: 540, endTime: 1080, patientCount: 15, slots: { scribe: 'nikole', opener: null,      closing: null,      middle: { personId: null, start: null, end: null },     training: { personId: null, start: null, end: null } } },
+    { id: 'fri-estrella-drb',   day: 'Fri', week: 'A', location: 'Estrella',   provider: 'Dr. B', open: true, startTime: 480, endTime:  990, patientCount: 20, slots: { scribe: 'yadi',   opener: null,      closing: null,      middle: { personId: null, start: null, end: null },     training: { personId: null, start: null, end: null } } },
+    { id: 'fri-phoenix-drr',    day: 'Fri', week: 'A', location: 'Phoenix',    provider: 'Dr. R', open: true, startTime: 480, endTime: 1020, patientCount: 38, slots: { scribe: 'john',   opener: 'martha',  closing: 'jaron',   middle: { personId: null, start: null, end: null },     training: { personId: null, start: null, end: null } } },
     // OBS (Surgery Center)
-    { id: 'thu-obs', day: 'Thu', week: 'A', location: 'OBS', provider: '', open: true, startTime: 480, endTime: 1020, patientCount: null, slots: { scribe: null, opener: null, closing: null, middle: null, training: null } },
-    { id: 'fri-obs', day: 'Fri', week: 'A', location: 'OBS', provider: '', open: true, startTime: 480, endTime: 1020, patientCount: null, slots: { scribe: null, opener: null, closing: null, middle: null, training: null } },
+    { id: 'thu-obs', day: 'Thu', week: 'A', location: 'OBS', provider: '', open: true, startTime: 480, endTime: 1020, patientCount: null, slots: { scribe: null, opener: null, closing: null, middle: { personId: null, start: null, end: null }, training: { personId: null, start: null, end: null } } },
+    { id: 'fri-obs', day: 'Fri', week: 'A', location: 'OBS', provider: '', open: true, startTime: 480, endTime: 1020, patientCount: null, slots: { scribe: null, opener: null, closing: null, middle: { personId: null, start: null, end: null }, training: { personId: null, start: null, end: null } } },
   ];
 
   const additionalTasks = [];

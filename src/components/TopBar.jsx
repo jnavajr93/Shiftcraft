@@ -206,7 +206,11 @@ export default function TopBar({ activeTab, setActiveTab }) {
       if (keepExisting) {
         assignments = assignments.filter(a => {
           const clinic = data.clinics.find(c => c.id === a.clinicId);
-          return !clinic?.slots[a.slot];
+          const sv = clinic?.slots[a.slot];
+          if (a.slot === 'middle' || a.slot === 'training') {
+            return !sv?.personId;
+          }
+          return !sv;
         });
       }
 

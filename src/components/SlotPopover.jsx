@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext.jsx';
 import { Trash2, Zap } from 'lucide-react';
-import { DAYS } from '../data/seed.js';
+import { DAYS, getSlotPersonId } from '../data/seed.js';
 
 /** Returns reason why person can't fill this slot, or null if they can */
 function ineligibleReason(person, clinic, slotType, clinics) {
@@ -13,7 +13,7 @@ function ineligibleReason(person, clinic, slotType, clinics) {
     c.id !== clinic.id &&
     c.day === clinic.day &&
     c.open &&
-    Object.values(c.slots).includes(person.id)
+    Object.entries(c.slots).some(([, sv]) => getSlotPersonId(sv) === person.id)
   );
   if (alreadyAssigned) return 'Already assigned this day';
 

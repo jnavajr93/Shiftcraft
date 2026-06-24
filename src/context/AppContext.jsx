@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { getSeedData, migratePerson, generateId } from '../data/seed.js';
+import { getSeedData, migratePerson, generateId, getSlotPersonId } from '../data/seed.js';
 
 const STORAGE_KEY = 'shiftcraft.v5';         // global clinic/people definitions
 const CHANGELOG_KEY = 'shiftcraft.changelog';
@@ -57,7 +57,11 @@ function saveWeekSlotMap(weekStr, map) {
 function applySlotMap(clinics, tasks, map) {
   const newClinics = clinics.map(c => ({
     ...c,
-    slots: map[c.id] ?? { scribe: null, opener: null, closing: null, middle: null, training: null },
+    slots: map[c.id] ?? {
+      scribe: null, opener: null, closing: null,
+      middle: { personId: null, start: null, end: null },
+      training: { personId: null, start: null, end: null },
+    },
   }));
   const newTasks = (tasks ?? []).map(t => ({
     ...t,
@@ -68,7 +72,11 @@ function applySlotMap(clinics, tasks, map) {
 
 function blankSlotMap(clinics, tasks) {
   const map = {};
-  for (const c of clinics) map[c.id] = { scribe: null, opener: null, closing: null, middle: null, training: null };
+  for (const c of clinics) map[c.id] = {
+    scribe: null, opener: null, closing: null,
+    middle: { personId: null, start: null, end: null },
+    training: { personId: null, start: null, end: null },
+  };
   for (const t of (tasks ?? [])) map[`task:${t.id}`] = null;
   return map;
 }
@@ -82,6 +90,12 @@ const SEEDED_TASK_IDS = new Set([
   'triage-fri','see-matt-jo-fri',
 ]);
 
+function migrateVariableSlot(val) {
+  if (val === null || val === undefined) return { personId: null, start: null, end: null };
+  if (typeof val === 'object') return val; // already object form
+  return { personId: val, start: null, end: null }; // legacy string personId
+}
+
 // ─── Migration ────────────────────────────────
 function migrateData(raw) {
   return {
@@ -90,6 +104,11 @@ function migrateData(raw) {
     clinics: (raw.clinics ?? []).map(c => ({
       ...c,
       lastPatientTime: c.lastPatientTime ?? (c.endTime - 90),
+      slots: {
+        ...(c.slots ?? {}),
+        middle: migrateVariableSlot((c.slots ?? {}).middle),
+        training: migrateVariableSlot((c.slots ?? {}).training),
+      },
     })),
     // Strip pre-seeded tasks; keep only admin-created ones
     additionalTasks: (raw.additionalTasks ?? []).filter(t => !SEEDED_TASK_IDS.has(t.id)),
@@ -139,14 +158,14 @@ function runMigrations(data) {
       clinics = [...clinics, {
         id: 'thu-obs', day: 'Thu', week: 'A', location: 'OBS', provider: '',
         open: true, startTime: 480, endTime: 1020, patientCount: null,
-        slots: { scribe: null, opener: null, closing: null, middle: null, training: null },
+        slots: { scribe: null, opener: null, closing: null, middle: { personId: null, start: null, end: null }, training: { personId: null, start: null, end: null } },
       }];
     }
     if (!clinics.some(c => c.location === 'OBS' && c.day === 'Fri')) {
       clinics = [...clinics, {
         id: 'fri-obs', day: 'Fri', week: 'A', location: 'OBS', provider: '',
         open: true, startTime: 480, endTime: 1020, patientCount: null,
-        slots: { scribe: null, opener: null, closing: null, middle: null, training: null },
+        slots: { scribe: null, opener: null, closing: null, middle: { personId: null, start: null, end: null }, training: { personId: null, start: null, end: null } },
       }];
     }
     d = { ...d, locations, clinics };
@@ -188,13 +207,57 @@ function runMigrations(data) {
     dirty = true;
   }
 
+  // ── Migration: slottimes ─────────────────────────
+  // Convert middle/training slot values in ALL week stores from personId strings
+  // (or null) to { personId, start: null, end: null } objects.
+  if (!localStorage.getItem('shiftcraft.migration.slottimes')) {
+    // Migrate all week slot stores
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key?.startsWith('shiftcraft.week.')) continue;
+      try {
+        const weekMap = JSON.parse(localStorage.getItem(key) ?? '{}');
+        let changed = false;
+        for (const clinicId of Object.keys(weekMap)) {
+          const slots = weekMap[clinicId];
+          if (slots && typeof slots === 'object') {
+            if ('middle' in slots && (slots.middle === null || typeof slots.middle === 'string')) {
+              slots.middle = migrateVariableSlot(slots.middle);
+              changed = true;
+            }
+            if ('training' in slots && (slots.training === null || typeof slots.training === 'string')) {
+              slots.training = migrateVariableSlot(slots.training);
+              changed = true;
+            }
+          }
+        }
+        if (changed) localStorage.setItem(key, JSON.stringify(weekMap));
+      } catch { /* ignore */ }
+    }
+    try { localStorage.setItem('shiftcraft.migration.slottimes', '1'); } catch { /* ignore */ }
+    // d itself: global store slots are always blank (stripped on save), but
+    // update in-memory to object form in case loadGlobal is reading old seed data
+    d = {
+      ...d,
+      clinics: d.clinics.map(c => ({
+        ...c,
+        slots: {
+          ...c.slots,
+          middle: migrateVariableSlot(c.slots?.middle),
+          training: migrateVariableSlot(c.slots?.training),
+        },
+      })),
+    };
+    dirty = true;
+  }
+
   // Save corrected data back to localStorage
   if (dirty) {
     try {
       const { clinics, additionalTasks, ...rest } = d;
       const definitionClinics = clinics.map(({ slots, ...def }) => ({
         ...def,
-        slots: { scribe: null, opener: null, closing: null, middle: null, training: null },
+        slots: { scribe: null, opener: null, closing: null, middle: { personId: null, start: null, end: null }, training: { personId: null, start: null, end: null } },
       }));
       const definitionTasks = (additionalTasks ?? []).map(({ assignedPersonId, ...t }) => ({
         ...t, assignedPersonId: null,
@@ -266,7 +329,7 @@ export function AppProvider({ children }) {
     // Strip slots from clinics before saving to global store
     const definitionClinics = clinics.map(({ slots, ...def }) => ({
       ...def,
-      slots: { scribe: null, opener: null, closing: null, middle: null, training: null },
+      slots: { scribe: null, opener: null, closing: null, middle: { personId: null, start: null, end: null }, training: { personId: null, start: null, end: null } },
     }));
     const definitionTasks = additionalTasks.map(({ assignedPersonId, ...t }) => ({
       ...t, assignedPersonId: null,
@@ -295,7 +358,7 @@ export function AppProvider({ children }) {
         const { clinics, additionalTasks, ...rest } = globalData;
         const definitionClinics = clinics.map(({ slots, ...def }) => ({
           ...def,
-          slots: { scribe: null, opener: null, closing: null, middle: null, training: null },
+          slots: { scribe: null, opener: null, closing: null, middle: { personId: null, start: null, end: null }, training: { personId: null, start: null, end: null } },
         }));
         const definitionTasks = additionalTasks.map(({ assignedPersonId, ...t }) => ({
           ...t, assignedPersonId: null,
@@ -362,9 +425,9 @@ export function AppProvider({ children }) {
   }, [globalData.clinics, globalData.additionalTasks]);
 
   const weekIsEmpty = useCallback(() => {
-    const allSlots = globalData.clinics.flatMap(c => Object.values(c.slots));
+    const allSlotPersonIds = globalData.clinics.flatMap(c => Object.values(c.slots).map(sv => getSlotPersonId(sv)));
     const allTasks = globalData.additionalTasks.map(t => t.assignedPersonId);
-    return [...allSlots, ...allTasks].every(v => v == null);
+    return [...allSlotPersonIds, ...allTasks].every(v => v == null);
   }, [globalData]);
 
   const copyFromPreviousWeek = useCallback(() => {
@@ -398,12 +461,20 @@ export function AppProvider({ children }) {
     setGlobalData(prev => {
       const clinics = prev.clinics.map(c => {
         if (c.id !== clinicId) return c;
-        return { ...c, slots: { ...c.slots, [slotType]: personId } };
+        let newSlotVal;
+        if (slotType === 'middle' || slotType === 'training') {
+          const existing = c.slots[slotType];
+          const times = (existing && typeof existing === 'object')
+            ? { start: existing.start, end: existing.end }
+            : { start: null, end: null };
+          newSlotVal = { personId, ...times };
+        } else {
+          newSlotVal = personId;
+        }
+        return { ...c, slots: { ...c.slots, [slotType]: newSlotVal } };
       });
       const map = extractSlotMap(clinics, prev.additionalTasks);
       saveWeekSlotMap(currentWeek, map);
-
-      // Change log
       const clinic = clinics.find(c => c.id === clinicId);
       const person = personId ? prev.people.find(p => p.id === personId) : null;
       if (clinic) {
@@ -415,7 +486,20 @@ export function AppProvider({ children }) {
           personName: person?.name ?? '—', day: clinic.day, detail: '',
         }, ...log].slice(0, 500));
       }
+      return { ...prev, clinics };
+    });
+  }, [currentWeek]);
 
+  const updateSlotTime = useCallback((clinicId, slotType, start, end) => {
+    setGlobalData(prev => {
+      const clinics = prev.clinics.map(c => {
+        if (c.id !== clinicId) return c;
+        const existing = c.slots[slotType];
+        const personId = (existing && typeof existing === 'object') ? existing.personId : null;
+        return { ...c, slots: { ...c.slots, [slotType]: { personId, start, end } } };
+      });
+      const map = extractSlotMap(clinics, prev.additionalTasks);
+      saveWeekSlotMap(currentWeek, map);
       return { ...prev, clinics };
     });
   }, [currentWeek]);
@@ -487,7 +571,17 @@ export function AppProvider({ children }) {
       for (const { clinicId, slot, personId } of assignments) {
         clinics = clinics.map(c => {
           if (c.id !== clinicId) return c;
-          return { ...c, slots: { ...c.slots, [slot]: personId } };
+          let newSlotVal;
+          if (slot === 'middle' || slot === 'training') {
+            const existing = c.slots[slot];
+            const times = (existing && typeof existing === 'object')
+              ? { start: existing.start, end: existing.end }
+              : { start: null, end: null };
+            newSlotVal = { personId, ...times };
+          } else {
+            newSlotVal = personId;
+          }
+          return { ...c, slots: { ...c.slots, [slot]: newSlotVal } };
         });
       }
       const map = extractSlotMap(clinics, prev.additionalTasks);
@@ -524,7 +618,12 @@ export function AppProvider({ children }) {
             changed = true;
           } else if (val && typeof val === 'object') {
             for (const slot of Object.keys(val)) {
-              if (val[slot] === personId) { val[slot] = null; changed = true; }
+              const sv = val[slot];
+              if (sv === personId) {
+                val[slot] = null; changed = true;
+              } else if (sv && typeof sv === 'object' && sv.personId === personId) {
+                val[slot] = { ...sv, personId: null }; changed = true;
+              }
             }
           }
         }
@@ -536,7 +635,11 @@ export function AppProvider({ children }) {
       const clinics = prev.clinics.map(c => ({
         ...c,
         slots: Object.fromEntries(
-          Object.entries(c.slots).map(([k, v]) => [k, v === personId ? null : v])
+          Object.entries(c.slots).map(([k, v]) => {
+            if (v === personId) return [k, null];
+            if (v && typeof v === 'object' && v.personId === personId) return [k, { ...v, personId: null }];
+            return [k, v];
+          })
         ),
       }));
       const additionalTasks = (prev.additionalTasks ?? []).map(t =>
@@ -607,7 +710,7 @@ export function AppProvider({ children }) {
       theme, setTheme,
       currentWeek, weekLabel,
       navigateWeek, weekIsEmpty, copyFromPreviousWeek,
-      updateClinic, assignSlot,
+      updateClinic, assignSlot, updateSlotTime,
       assignTask, addTask, removeTask,
       updatePerson, addPerson, deletePerson, reorderPeople,
       applyBulkAssignments, restoreClinicSlots,
