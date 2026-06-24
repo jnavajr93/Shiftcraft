@@ -291,6 +291,28 @@ export function AppProvider({ children }) {
   }, []);
 
   const deletePerson = useCallback((personId) => {
+    // Scan ALL stored weeks in localStorage and null out this person
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key?.startsWith('shiftcraft.week.')) continue;
+        const map = JSON.parse(localStorage.getItem(key) ?? '{}');
+        let changed = false;
+        for (const slotKey of Object.keys(map)) {
+          const val = map[slotKey];
+          if (val === personId) {
+            map[slotKey] = null;
+            changed = true;
+          } else if (val && typeof val === 'object') {
+            for (const slot of Object.keys(val)) {
+              if (val[slot] === personId) { val[slot] = null; changed = true; }
+            }
+          }
+        }
+        if (changed) localStorage.setItem(key, JSON.stringify(map));
+      }
+    } catch { /* ignore */ }
+
     setGlobalData(prev => {
       const clinics = prev.clinics.map(c => ({
         ...c,
@@ -349,7 +371,7 @@ export function AppProvider({ children }) {
       assignTask, addTask, removeTask,
       updatePerson, addPerson, deletePerson,
       addClinic, addLocation, removeLocation,
-      changelog, clearChangelog,
+      changelog, clearChangelog, addLog,
     }}>
       {children}
     </AppContext.Provider>

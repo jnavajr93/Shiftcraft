@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Trash2, Plus, Pencil, GripVertical, X } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import {
@@ -11,6 +11,7 @@ const GRADE_OPTIONS = ['A', 'B', 'C'];
 const PRESET_COLORS = [
   '#2563eb','#16a34a','#0891b2','#db2777','#9333ea',
   '#ea580c','#65a30d','#0d9488','#c026d3','#0284c7','#7c3aed',
+  '#b45309','#0f766e','#7e22ce','#be185d','#166534','#1d4ed8',
 ];
 
 function toggleArr(arr, item) {
@@ -402,34 +403,243 @@ function PersonCard({ person, providers, locations }) {
   );
 }
 
-// ─── People Tab ───────────────────────────────
-function PeopleTab() {
-  const { data, addPerson } = useApp();
+// ─── Add Person Modal ────────────────────────
+function AddPersonModal({ onClose, existingNames, providers, locations }) {
+  const { addPerson, addLog } = useApp();
 
-  const handleAdd = () => {
-    const name = window.prompt('Enter person name:')?.trim();
-    if (!name) return;
-    addPerson({
+  // Pick the first unused color from the palette
+  const defaultColor = PRESET_COLORS.find(c => !existingNames.includes(c)) ?? PRESET_COLORS[0];
+
+  const [form, setForm] = useState({
+    name: '',
+    color: defaultColor,
+    employmentType: 'Full-time',
+    grade: null,
+    roles: [],
+    clearedLocations: [],
+    preferredLocations: [],
+    lockedTo: [],
+    daysOff: [],
+    targetHours: 40,
+  });
+  const [nameError, setNameError] = useState('');
+  const [shake, setShake] = useState(false);
+
+  const set = (field, val) => setForm(f => ({ ...f, [field]: val }));
+
+  const togglePrefLocation = (loc) => {
+    const cur = form.preferredLocations;
+    set('preferredLocations', cur.includes(loc) ? cur.filter(l => l !== loc) : [...cur, loc]);
+  };
+
+  const validate = () => {
+    const trimmed = form.name.trim();
+    if (!trimmed) {
+      setNameError('Name is required');
+      triggerShake();
+      return false;
+    }
+    if (existingNames.map(n => n.toLowerCase()).includes(trimmed.toLowerCase())) {
+      setNameError('A staff member with this name already exists');
+      triggerShake();
+      return false;
+    }
+    return true;
+  };
+
+  const triggerShake = () => {
+    setShake(true);
+    setTimeout(() => setShake(false), 400);
+  };
+
+  const handleSave = () => {
+    if (!validate()) return;
+    const person = {
       id: generateId(),
-      name,
-      color: PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)],
-      employmentType: 'Full-time',
-      grade: null,
-      roles: [],
-      clearedLocations: [],
-      preferredLocations: [],
-      lockedTo: [],
-      daysOff: [],
+      name: form.name.trim(),
+      color: form.color,
+      employmentType: form.employmentType,
+      grade: form.grade,
+      roles: form.roles,
+      clearedLocations: form.clearedLocations,
+      preferredLocations: form.preferredLocations,
+      lockedTo: form.lockedTo,
+      daysOff: form.daysOff,
       availabilityWindows: {},
       accommodations: [],
-      targetHours: 40,
-    });
+      targetHours: form.targetHours,
+    };
+    addPerson(person);
+    addLog({ action: `${person.name} added to roster`, personName: person.name, day: '', detail: '' });
+    onClose();
   };
+
+  // Close on backdrop click
+  const handleBackdrop = (e) => { if (e.target === e.currentTarget) onClose(); };
+
+  // Close on Escape
+  useEffect(() => {
+    const h = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', h);
+    return () => document.removeEventListener('keydown', h);
+  }, [onClose]);
+
+  return (
+    <div className="overlay-backdrop" onClick={handleBackdrop} style={{ zIndex: 250, alignItems: 'flex-start', paddingTop: 40 }}>
+      <div className="overlay-modal" style={{ maxWidth: 520, maxHeight: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '0.5px solid var(--border)', flexShrink: 0 }}>
+          <div style={{ fontWeight: 500, fontSize: 16 }}>Add new staff member</div>
+          <button className="overlay-close" style={{ position: 'static' }} onClick={onClose}><X size={16} /></button>
+        </div>
+
+        {/* Body */}
+        <div style={{ overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+          {/* Name */}
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Name <span style={{ color: 'var(--red)' }}>*</span></label>
+            <input
+              className={`form-input${shake ? ' shake' : ''}`}
+              style={{ fontWeight: 500 }}
+              autoFocus
+              placeholder="Full name"
+              value={form.name}
+              onChange={e => { set('name', e.target.value); setNameError(''); }}
+            />
+            {nameError && <div style={{ fontSize: 12, color: 'var(--red)', marginTop: 4 }}>{nameError}</div>}
+          </div>
+
+          {/* Color */}
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Color</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {PRESET_COLORS.map(c => (
+                <button
+                  key={c}
+                  onClick={() => set('color', c)}
+                  style={{
+                    width: 26, height: 26, borderRadius: '50%', background: c,
+                    border: form.color === c ? '2.5px solid var(--text-primary)' : '2px solid transparent',
+                    outline: form.color === c ? '2px solid var(--bg-elevated)' : 'none',
+                    outlineOffset: -4, cursor: 'pointer', flexShrink: 0,
+                    boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.12)',
+                  }}
+                  title={c}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Employment */}
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Employment</label>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {EMPLOYMENT_TYPES.map(et => (
+                <button key={et} className={`pill small${form.employmentType === et ? ' active' : ''}`} onClick={() => set('employmentType', et)}>{et}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Grade */}
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Grade</label>
+            <div className="grade-picker">
+              {GRADE_OPTIONS.map(g => (
+                <button key={g} className={`grade-pill ${g}${form.grade === g ? ' active' : ''}`} onClick={() => set('grade', form.grade === g ? null : g)}>{g}</button>
+              ))}
+              <button className="grade-pill" onClick={() => set('grade', null)}>—</button>
+            </div>
+          </div>
+
+          {/* Roles */}
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Roles</label>
+            <div className="pill-group">
+              {ROLES.map(r => (
+                <button key={r} className={`pill${form.roles.includes(r) ? ' active' : ''}`} onClick={() => set('roles', toggleArr(form.roles, r))}>{r}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Cleared locations */}
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Cleared Locations <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'none', fontWeight: 400 }}>(none = any)</span></label>
+            <div className="pill-group">
+              {locations.map(l => (
+                <button key={l} className={`pill small${form.clearedLocations.includes(l) ? ' active' : ''}`} onClick={() => set('clearedLocations', toggleArr(form.clearedLocations, l))}>{l}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Preferred locations */}
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Preferred Locations <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'none', fontWeight: 400 }}>(first = top)</span></label>
+            <div className="pill-group">
+              {locations.map(l => {
+                const idx = form.preferredLocations.indexOf(l);
+                const isActive = idx !== -1;
+                return (
+                  <button key={l} className={`pill small${isActive ? ' active' : ''}`} onClick={() => togglePrefLocation(l)}>
+                    {isActive ? `${idx + 1}. ` : ''}{l}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Locked to provider */}
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Locked to Provider <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'none', fontWeight: 400 }}>(none = flexible)</span></label>
+            <div className="pill-group">
+              {providers.map(p => (
+                <button key={p} className={`pill small${form.lockedTo.includes(p) ? ' active' : ''}`} onClick={() => set('lockedTo', toggleArr(form.lockedTo, p))}>{p}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Days off */}
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Days Off</label>
+            <div className="pill-group">
+              {DAYS.map(d => (
+                <button key={d} className={`pill small${form.daysOff.includes(d) ? ' active' : ''}`} onClick={() => set('daysOff', toggleArr(form.daysOff, d))}>{d}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Target hours */}
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Target Hours / Week</label>
+            <input
+              className="form-input"
+              type="number" min="0" max="80"
+              value={form.targetHours}
+              onChange={e => set('targetHours', Number(e.target.value))}
+              style={{ width: 100 }}
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '12px 20px', borderTop: '0.5px solid var(--border)', flexShrink: 0 }}>
+          <button className="btn" style={{ minHeight: 40 }} onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" style={{ minHeight: 40 }} onClick={handleSave}>Add to roster</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── People Tab ───────────────────────────────
+function PeopleTab() {
+  const { data } = useApp();
+  const [showModal, setShowModal] = useState(false);
 
   return (
     <div className="setup-content">
       <div className="section-add" style={{ marginBottom: 16 }}>
-        <button className="btn btn-primary" onClick={handleAdd}>
+        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
           <Plus size={15} /> Add Person
         </button>
       </div>
@@ -443,6 +653,14 @@ function PeopleTab() {
           />
         ))}
       </div>
+      {showModal && (
+        <AddPersonModal
+          onClose={() => setShowModal(false)}
+          existingNames={data.people.map(p => p.name)}
+          providers={data.providers}
+          locations={data.locations}
+        />
+      )}
     </div>
   );
 }

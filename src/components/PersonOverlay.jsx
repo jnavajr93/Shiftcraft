@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { DAYS, calcPersonWeeklyHours, getSlotLabel, minutesToTime } from '../data/seed.js';
@@ -53,8 +53,15 @@ function WeekRows({ person, clinics }) {
 }
 
 function OverlayInner({ person, onClose }) {
-  const { data, isAdmin } = useApp();
+  const { data, isAdmin, deletePerson, addLog } = useApp();
+  const [confirming, setConfirming] = useState(false);
   const hours = calcPersonWeeklyHours(person.id, data.clinics);
+
+  const handleRemove = () => {
+    addLog({ action: `${person.name} removed from roster by admin`, personName: person.name, day: '', detail: '' });
+    deletePerson(person.id);
+    onClose();
+  };
 
   return (
     <>
@@ -80,6 +87,33 @@ function OverlayInner({ person, onClose }) {
           />
         )}
       </div>
+      {isAdmin && (
+        <div style={{ padding: '12px 24px 20px', borderTop: '0.5px solid var(--border)' }}>
+          {confirming ? (
+            <div style={{ background: 'var(--red-bg)', border: '0.5px solid var(--red)', borderRadius: 'var(--radius)', padding: '12px 14px' }}>
+              <div style={{ fontSize: 13, color: 'var(--text-primary)', marginBottom: 10, lineHeight: 1.5 }}>
+                Remove <strong>{person.name}</strong> from the roster? This will unassign them from all current shifts. This cannot be undone.
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn btn-danger" style={{ minHeight: 36, fontSize: 13 }} onClick={handleRemove}>
+                  Yes, remove
+                </button>
+                <button className="btn" style={{ minHeight: 36, fontSize: 13 }} onClick={() => setConfirming(false)}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              className="btn btn-danger"
+              style={{ minHeight: 36, fontSize: 13 }}
+              onClick={() => setConfirming(true)}
+            >
+              Remove from roster
+            </button>
+          )}
+        </div>
+      )}
     </>
   );
 }

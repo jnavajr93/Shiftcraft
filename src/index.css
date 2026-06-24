@@ -646,6 +646,15 @@ html, body, #root {
 @keyframes spin { to { transform: rotate(360deg); } }
 .spin { animation: spin 800ms linear infinite; }
 
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%       { transform: translateX(-5px); }
+  40%       { transform: translateX(5px); }
+  60%       { transform: translateX(-4px); }
+  80%       { transform: translateX(4px); }
+}
+.shake { animation: shake 400ms ease; border-color: var(--red) !important; }
+
 /* ─── Toast ─────────────────────────── */
 .copy-toast {
   position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
