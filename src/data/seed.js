@@ -2,7 +2,7 @@ export const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 export const ROLES = ['Scribe', 'Opener', 'Middle', 'Closing', 'Training'];
 export const SLOT_TYPES = ['scribe', 'opener', 'closing', 'middle', 'training'];
 export const EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'PRN'];
-export const SKILLS = ['Workup', 'Treatments', 'FAs', 'Autoclave', 'Closing'];
+export const SKILLS = ['Workup', 'Treatments', 'FAs', 'Autoclave & Closing'];
 export const ACCOMMODATION_TYPES = [
   'extended_lunch',
   'early_leave',

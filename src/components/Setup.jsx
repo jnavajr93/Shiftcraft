@@ -360,20 +360,6 @@ function PersonCard({ person, providers, locations }) {
         </div>
       </div>
 
-      {/* Cleared locations */}
-      <div className="form-group">
-        <label className="form-label">Cleared Locations <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'none', fontWeight: 400 }}>(none = any)</span></label>
-        <div className="pill-group">
-          {locations.map(l => (
-            <button
-              key={l}
-              className={`pill small${(person.clearedLocations ?? []).includes(l) ? ' active' : ''}`}
-              onClick={() => up('clearedLocations', toggleArr(person.clearedLocations ?? [], l))}
-            >{l}</button>
-          ))}
-        </div>
-      </div>
-
       {/* Preferred locations */}
       <div className="form-group">
         <label className="form-label">Preferred Locations <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'none', fontWeight: 400 }}>(first = top)</span></label>
@@ -648,16 +634,6 @@ function AddPersonModal({ onClose, existingNames, providers, locations }) {
             <div className="pill-group">
               {SKILLS.map(s => (
                 <button key={s} className={`pill small${form.skills.includes(s) ? ' active' : ''}`} onClick={() => set('skills', toggleArr(form.skills, s))}>{s}</button>
-              ))}
-            </div>
-          </div>
-
-          {/* Cleared locations */}
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label">Cleared Locations <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'none', fontWeight: 400 }}>(none = any)</span></label>
-            <div className="pill-group">
-              {locations.map(l => (
-                <button key={l} className={`pill small${form.clearedLocations.includes(l) ? ' active' : ''}`} onClick={() => set('clearedLocations', toggleArr(form.clearedLocations, l))}>{l}</button>
               ))}
             </div>
           </div>

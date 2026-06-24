@@ -144,23 +144,29 @@ function runMigrations(data) {
     dirty = true;
   }
 
-  // ── Migration: skills ────────────────────────
-  // Split any merged 'Autoclave and Closing' / 'Autoclave, Closing'
-  // skill entries into two separate entries.
+  // ── Migration: skills (legacy split — no-op, kept for flag compat) ──
   if (!localStorage.getItem('shiftcraft.migration.skills')) {
+    try { localStorage.setItem('shiftcraft.migration.skills', '1'); } catch { /* ignore */ }
+  }
+
+  // ── Migration: skillsmerge ───────────────────
+  // Merge any combination of 'Autoclave', 'Closing', 'Autoclave and Closing',
+  // 'Autoclave, Closing' into a single 'Autoclave & Closing' entry.
+  if (!localStorage.getItem('shiftcraft.migration.skillsmerge')) {
+    const MERGE_TRIGGERS = new Set(['Autoclave', 'Closing', 'Autoclave and Closing', 'Autoclave, Closing', 'Autoclave & Closing']);
     d = {
       ...d,
       people: d.people.map(p => {
-        const skills = (p.skills ?? []).flatMap(s => {
-          if (s === 'Autoclave and Closing' || s === 'Autoclave, Closing') {
-            return ['Autoclave', 'Closing'];
-          }
-          return [s];
-        });
+        const raw = p.skills ?? [];
+        const hasMergeable = raw.some(s => MERGE_TRIGGERS.has(s));
+        if (!hasMergeable) return p;
+        const skills = raw
+          .filter(s => !MERGE_TRIGGERS.has(s))
+          .concat(['Autoclave & Closing']);
         return { ...p, skills };
       }),
     };
-    try { localStorage.setItem('shiftcraft.migration.skills', '1'); } catch { /* ignore */ }
+    try { localStorage.setItem('shiftcraft.migration.skillsmerge', '1'); } catch { /* ignore */ }
     dirty = true;
   }
 

@@ -3,11 +3,10 @@ import { useApp } from '../context/AppContext.jsx';
 import { calcPersonWeeklyHours } from '../data/seed.js';
 
 const SKILL_ABBR = {
-  'Workup':     'WU',
-  'Treatments': 'Tx',
-  'FAs':        'FA',
-  'Autoclave':  'AC',
-  'Closing':    'CL',
+  'Workup':             'WU',
+  'Treatments':         'Tx',
+  'FAs':                'FA',
+  'Autoclave & Closing': 'AC/CL',
 };
 
 function PersonCard({ person, onPersonClick, clinics }) {
