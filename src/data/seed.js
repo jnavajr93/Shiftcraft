@@ -84,6 +84,9 @@ export function calcPersonWeeklyHours(personId, clinics) {
 
 /** Migrate old Person shape to new shape */
 export function migratePerson(p) {
+  // Migrate lockedTo: string|null → string[]
+  let lockedTo = p.lockedTo ?? [];
+  if (typeof lockedTo === 'string') lockedTo = lockedTo ? [lockedTo] : [];
   return {
     id: p.id,
     name: p.name,
@@ -93,7 +96,7 @@ export function migratePerson(p) {
     roles: p.roles ?? [],
     clearedLocations: p.clearedLocations ?? p.locations ?? [],
     preferredLocations: p.preferredLocations ?? p.preferences?.preferredLocations ?? [],
-    lockedTo: p.lockedTo ?? null,
+    lockedTo,
     daysOff: p.daysOff ?? p.preferences?.daysOff ?? [],
     availabilityWindows: p.availabilityWindows ?? {},
     accommodations: p.accommodations ?? [],
@@ -106,7 +109,7 @@ export function getSeedData() {
     {
       id: 'john', name: 'John', color: '#2563eb', employmentType: 'Full-time',
       grade: null, roles: ['Scribe'], clearedLocations: [], preferredLocations: [],
-      lockedTo: 'Dr. R', daysOff: ['Tue', 'Wed'],
+      lockedTo: ['Dr. R'], daysOff: ['Tue', 'Wed'],
       availabilityWindows: {},
       accommodations: [],
       targetHours: 40,
@@ -114,7 +117,7 @@ export function getSeedData() {
     {
       id: 'jc', name: 'JC', color: '#16a34a', employmentType: 'Full-time',
       grade: null, roles: ['Scribe'], clearedLocations: [], preferredLocations: [],
-      lockedTo: 'Dr. A', daysOff: ['Mon', 'Wed'],
+      lockedTo: ['Dr. A'], daysOff: ['Mon', 'Wed'],
       availabilityWindows: {},
       accommodations: [],
       targetHours: 40,
@@ -122,15 +125,15 @@ export function getSeedData() {
     {
       id: 'nikole', name: 'Nikole', color: '#0891b2', employmentType: 'Full-time',
       grade: null, roles: ['Scribe'], clearedLocations: [], preferredLocations: [],
-      lockedTo: null, daysOff: [],
+      lockedTo: [], daysOff: [],
       availabilityWindows: {},
       accommodations: [],
       targetHours: 40,
     },
     {
       id: 'yadi', name: 'Yadi', color: '#db2777', employmentType: 'Full-time',
-      grade: null, roles: ['Opener', 'Middle', 'Closing'], clearedLocations: [], preferredLocations: [],
-      lockedTo: null, daysOff: [],
+      grade: null, roles: ['Scribe', 'Opener', 'Middle', 'Closing'], clearedLocations: [], preferredLocations: [],
+      lockedTo: ['Dr. B'], daysOff: [],
       availabilityWindows: {
         Mon: { startNotBefore: null, endNoLater: 990 },
         Wed: { startNotBefore: null, endNoLater: 990 },
@@ -143,7 +146,7 @@ export function getSeedData() {
     {
       id: 'martha', name: 'Martha', color: '#9333ea', employmentType: 'Part-time',
       grade: null, roles: ['Opener'], clearedLocations: [], preferredLocations: [],
-      lockedTo: null, daysOff: [],
+      lockedTo: [], daysOff: [],
       availabilityWindows: {},
       accommodations: [
         { type: 'early_leave', day: '*', endTime: 930, reason: 'personal' },
@@ -153,7 +156,7 @@ export function getSeedData() {
     {
       id: 'alondra', name: 'Alondra', color: '#ea580c', employmentType: 'Full-time',
       grade: null, roles: ['Opener', 'Middle', 'Closing', 'Scribe'], clearedLocations: [], preferredLocations: [],
-      lockedTo: null, daysOff: [],
+      lockedTo: [], daysOff: [],
       availabilityWindows: {},
       accommodations: [],
       targetHours: 40,
@@ -161,7 +164,7 @@ export function getSeedData() {
     {
       id: 'jaron', name: 'Jaron', color: '#65a30d', employmentType: 'Full-time',
       grade: null, roles: ['Opener', 'Middle', 'Closing'], clearedLocations: [], preferredLocations: [],
-      lockedTo: null, daysOff: [],
+      lockedTo: [], daysOff: [],
       availabilityWindows: {},
       accommodations: [],
       targetHours: 40,
@@ -169,7 +172,7 @@ export function getSeedData() {
     {
       id: 'jocelyn', name: 'Jocelyn', color: '#0d9488', employmentType: 'Full-time',
       grade: null, roles: ['Opener', 'Middle', 'Closing'], clearedLocations: [], preferredLocations: [],
-      lockedTo: null, daysOff: [],
+      lockedTo: [], daysOff: [],
       availabilityWindows: {},
       accommodations: [],
       targetHours: 40,
@@ -177,7 +180,7 @@ export function getSeedData() {
     {
       id: 'itzel', name: 'Itzel', color: '#c026d3', employmentType: 'Full-time',
       grade: null, roles: ['Opener', 'Middle', 'Closing'], clearedLocations: [], preferredLocations: [],
-      lockedTo: null, daysOff: [],
+      lockedTo: [], daysOff: [],
       availabilityWindows: {},
       accommodations: [],
       targetHours: 40,
@@ -185,7 +188,7 @@ export function getSeedData() {
     {
       id: 'katina', name: 'Katina', color: '#0284c7', employmentType: 'Full-time',
       grade: null, roles: ['Opener', 'Middle', 'Closing', 'Scribe'], clearedLocations: [], preferredLocations: [],
-      lockedTo: null, daysOff: [],
+      lockedTo: [], daysOff: [],
       availabilityWindows: {},
       accommodations: [],
       targetHours: 40,
@@ -193,7 +196,7 @@ export function getSeedData() {
     {
       id: 'lizbeth', name: 'Lizbeth', color: '#7c3aed', employmentType: 'Full-time',
       grade: null, roles: ['Opener', 'Middle', 'Closing', 'Scribe'], clearedLocations: [], preferredLocations: [],
-      lockedTo: null, daysOff: [],
+      lockedTo: [], daysOff: [],
       availabilityWindows: {},
       accommodations: [],
       targetHours: 40,
@@ -204,21 +207,25 @@ export function getSeedData() {
   const providers = ['Dr. R', 'Dr. A', 'Dr. S', 'Dr. B'];
 
   // Note: JC daysOff Mon,Wed and John daysOff Tue,Wed — seed reflects this
+  // Yadi is locked to Dr. B (Skibell) as Scribe on all Dr. B Estrella clinics
   const clinics = [
-    // Monday — JC off Mon, John assigned
-    { id: 'mon-phoenix-drr',    day: 'Mon', week: 'A', location: 'Phoenix',    provider: 'Dr. R', open: true, startTime: 480, endTime: 1020, patientCount: 45, slots: { scribe: 'john',   opener: 'yadi',    closing: 'jocelyn', middle: null,     training: null } },
+    // Monday — JC off Mon, John assigned; Yadi scribes Dr. B @ Estrella
+    { id: 'mon-phoenix-drr',    day: 'Mon', week: 'A', location: 'Phoenix',    provider: 'Dr. R', open: true, startTime: 480, endTime: 1020, patientCount: 45, slots: { scribe: 'john',   opener: null,      closing: 'jocelyn', middle: null,     training: null } },
     { id: 'mon-chandler-dra',   day: 'Mon', week: 'A', location: 'Chandler',   provider: 'Dr. A', open: true, startTime: 480, endTime: 1020, patientCount: 30, slots: { scribe: null,     opener: 'martha',  closing: 'jaron',   middle: null,     training: null } },
-    // Tuesday — John off Tue
+    { id: 'mon-estrella-drb',   day: 'Mon', week: 'A', location: 'Estrella',   provider: 'Dr. B', open: true, startTime: 480, endTime:  990, patientCount: 18, slots: { scribe: 'yadi',   opener: null,      closing: null,      middle: null,     training: null } },
+    // Tuesday — John off Tue; Yadi scribes Dr. B @ Estrella
     { id: 'tue-scottsdale-drr', day: 'Tue', week: 'A', location: 'Scottsdale', provider: 'Dr. R', open: true, startTime: 480, endTime: 1020, patientCount: 55, slots: { scribe: null,     opener: 'alondra', closing: 'itzel',   middle: 'katina', training: null } },
     { id: 'tue-estrella-drs',   day: 'Tue', week: 'A', location: 'Estrella',   provider: 'Dr. S', open: true, startTime: 540, endTime: 1080, patientCount: 20, slots: { scribe: 'nikole', opener: 'lizbeth', closing: null,      middle: null,     training: null } },
-    // Wednesday — JC off Wed, John off Wed
-    { id: 'wed-phoenix-dra',    day: 'Wed', week: 'A', location: 'Phoenix',    provider: 'Dr. A', open: true, startTime: 480, endTime: 1020, patientCount: 35, slots: { scribe: null,     opener: 'jocelyn', closing: 'yadi',    middle: null,     training: null } },
-    { id: 'wed-chandler-drb',   day: 'Wed', week: 'A', location: 'Chandler',   provider: 'Dr. B', open: true, startTime: 480, endTime: 1020, patientCount: 28, slots: { scribe: null,     opener: 'martha',  closing: 'jaron',   middle: null,     training: null } },
+    { id: 'tue-estrella-drb',   day: 'Tue', week: 'A', location: 'Estrella',   provider: 'Dr. B', open: true, startTime: 480, endTime: 1020, patientCount: 22, slots: { scribe: 'yadi',   opener: null,      closing: null,      middle: null,     training: null } },
+    // Wednesday — JC off Wed, John off Wed; Yadi scribes Dr. B @ Estrella
+    { id: 'wed-phoenix-dra',    day: 'Wed', week: 'A', location: 'Phoenix',    provider: 'Dr. A', open: true, startTime: 480, endTime: 1020, patientCount: 35, slots: { scribe: null,     opener: 'jocelyn', closing: null,      middle: null,     training: null } },
+    { id: 'wed-estrella-drb',   day: 'Wed', week: 'A', location: 'Estrella',   provider: 'Dr. B', open: true, startTime: 480, endTime:  990, patientCount: 16, slots: { scribe: 'yadi',   opener: null,      closing: null,      middle: null,     training: null } },
     // Thursday
     { id: 'thu-scottsdale-drr', day: 'Thu', week: 'A', location: 'Scottsdale', provider: 'Dr. R', open: true, startTime: 480, endTime: 1020, patientCount: 52, slots: { scribe: 'john',   opener: 'katina',  closing: 'itzel',   middle: 'alondra', training: null } },
     { id: 'thu-phoenix-dra',    day: 'Thu', week: 'A', location: 'Phoenix',    provider: 'Dr. A', open: true, startTime: 480, endTime: 1020, patientCount: 42, slots: { scribe: 'jc',     opener: 'lizbeth', closing: 'jocelyn', middle: null,     training: null } },
-    // Friday
-    { id: 'fri-estrella-drs',   day: 'Fri', week: 'A', location: 'Estrella',   provider: 'Dr. S', open: true, startTime: 540, endTime: 1080, patientCount: 15, slots: { scribe: 'nikole', opener: 'yadi',    closing: null,      middle: null,     training: null } },
+    // Friday — Yadi scribes Dr. B @ Estrella
+    { id: 'fri-estrella-drs',   day: 'Fri', week: 'A', location: 'Estrella',   provider: 'Dr. S', open: true, startTime: 540, endTime: 1080, patientCount: 15, slots: { scribe: 'nikole', opener: null,      closing: null,      middle: null,     training: null } },
+    { id: 'fri-estrella-drb',   day: 'Fri', week: 'A', location: 'Estrella',   provider: 'Dr. B', open: true, startTime: 480, endTime:  990, patientCount: 20, slots: { scribe: 'yadi',   opener: null,      closing: null,      middle: null,     training: null } },
     { id: 'fri-phoenix-drr',    day: 'Fri', week: 'A', location: 'Phoenix',    provider: 'Dr. R', open: true, startTime: 480, endTime: 1020, patientCount: 38, slots: { scribe: 'john',   opener: 'martha',  closing: 'jaron',   middle: null,     training: null } },
   ];
 

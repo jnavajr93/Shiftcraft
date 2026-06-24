@@ -143,7 +143,7 @@ export default function SlotPopover({ clinic, slotType, currentPersonId, onAssig
 }
 
 function PersonRow({ person, isCurrent, dimmed, suggested, reason, clinic, slotType, onAssign }) {
-  const hasLockedWarning = person.lockedTo && person.lockedTo !== clinic.provider;
+  const hasLockedWarning = person.lockedTo?.length > 0 && !person.lockedTo.includes(clinic.provider);
 
   return (
     <div
@@ -156,7 +156,7 @@ function PersonRow({ person, isCurrent, dimmed, suggested, reason, clinic, slotT
       <span style={{ flex: 1 }}>{person.name}</span>
       {person.grade && <span className={`grade-badge ${person.grade}`}>{person.grade}</span>}
       {hasLockedWarning && !dimmed && (
-        <span style={{ fontSize: 10, color: 'var(--amber)', marginLeft: 2 }} title={`Locked to ${person.lockedTo}`}>⚠</span>
+        <span style={{ fontSize: 10, color: 'var(--amber)', marginLeft: 2 }} title={`Locked to ${person.lockedTo.join(', ')}`}>⚠</span>
       )}
       {reason && <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{reason}</span>}
     </div>

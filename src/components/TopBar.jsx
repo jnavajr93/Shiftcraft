@@ -1,11 +1,14 @@
 import { useState } from 'react';
-import { Calendar, Sun, Moon, ChevronLeft, ChevronRight, History, Printer } from 'lucide-react';
-import { useApp } from '../context/AppContext.jsx';
+import { Calendar, Sun, Moon, ChevronLeft, ChevronRight, History, Printer, Sparkles } from 'lucide-react';
+import { useApp, isoWeek } from '../context/AppContext.jsx';
 import ChangeLogDrawer from './ChangeLogDrawer.jsx';
+import ChatPanel from './ChatPanel.jsx';
 
 export default function TopBar({ activeTab, setActiveTab }) {
-  const { isAdmin, setIsAdmin, theme, setTheme, weekLabel, navigateWeek, weekIsEmpty, copyFromPreviousWeek } = useApp();
+  const { isAdmin, setIsAdmin, theme, setTheme, weekLabel, currentWeek, navigateWeek, weekIsEmpty, copyFromPreviousWeek } = useApp();
   const [showLog, setShowLog] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+  const isCurrentWeek = currentWeek === isoWeek(new Date());
   const [copyToast, setCopyToast] = useState(null);
 
   const handleCopy = () => {
@@ -36,7 +39,8 @@ export default function TopBar({ activeTab, setActiveTab }) {
           >
             <ChevronLeft size={18} />
           </button>
-          <span style={{ padding: '0 10px', fontWeight: 500, fontSize: 14, color: 'var(--text-secondary)' }}>
+          <span style={{ padding: '0 10px', fontWeight: 500, fontSize: 14, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}>
+            {isCurrentWeek && <span className="topbar-week-dot" title="Current week" />}
             Week of {weekLabel}
           </span>
           <button
@@ -74,6 +78,14 @@ export default function TopBar({ activeTab, setActiveTab }) {
                 <History size={20} strokeWidth={1.5} />
               </button>
               <button
+                className={`btn btn-icon${showChat ? ' active' : ''}`}
+                onClick={() => setShowChat(s => !s)}
+                aria-label="Schedule assistant"
+                title="AI Schedule Assistant"
+              >
+                <Sparkles size={20} strokeWidth={1.5} />
+              </button>
+              <button
                 className={`btn btn-pill ${activeTab === 'setup' ? 'active' : ''}`}
                 onClick={() => setActiveTab(t => t === 'setup' ? 'schedule' : 'setup')}
               >
@@ -104,6 +116,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
       )}
 
       {showLog && <ChangeLogDrawer onClose={() => setShowLog(false)} />}
+      {showChat && <ChatPanel onClose={() => setShowChat(false)} />}
     </>
   );
 }

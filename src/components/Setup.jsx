@@ -314,15 +314,16 @@ function PersonCard({ person, providers, locations }) {
 
       {/* Locked to */}
       <div className="form-group">
-        <label className="form-label">Locked to Provider</label>
-        <select
-          className="form-input"
-          value={person.lockedTo ?? ''}
-          onChange={e => up('lockedTo', e.target.value || null)}
-        >
-          <option value="">None</option>
-          {providers.map(p => <option key={p}>{p}</option>)}
-        </select>
+        <label className="form-label">Locked to Provider <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'none', fontWeight: 400 }}>(none = flexible)</span></label>
+        <div className="pill-group">
+          {providers.map(p => (
+            <button
+              key={p}
+              className={`pill small${(person.lockedTo ?? []).includes(p) ? ' active' : ''}`}
+              onClick={() => up('lockedTo', toggleArr(person.lockedTo ?? [], p))}
+            >{p}</button>
+          ))}
+        </div>
       </div>
 
       {/* Days off */}
@@ -406,16 +407,18 @@ function PeopleTab() {
   const { data, addPerson } = useApp();
 
   const handleAdd = () => {
+    const name = window.prompt('Enter person name:')?.trim();
+    if (!name) return;
     addPerson({
       id: generateId(),
-      name: 'New Person',
+      name,
       color: PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)],
       employmentType: 'Full-time',
       grade: null,
       roles: [],
       clearedLocations: [],
       preferredLocations: [],
-      lockedTo: null,
+      lockedTo: [],
       daysOff: [],
       availabilityWindows: {},
       accommodations: [],

@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useDroppable } from '@dnd-kit/core';
-import { Pencil, AlertTriangle, Users } from 'lucide-react';
+import { Pencil, AlertTriangle, Users, Power } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { getSlotLabel, getSlotTimeLabel, SLOT_TYPES } from '../data/seed.js';
 import SlotPopover from './SlotPopover.jsx';
@@ -17,7 +17,7 @@ function PatientBadge({ count }) {
   );
 }
 
-function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch, conflictSet }) {
+function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch, conflictSet, clinicOpen }) {
   const { data, isAdmin, assignSlot } = useApp();
   const personId = clinic.slots[slotType];
   const person = personId ? data.people.find(p => p.id === personId) : null;
@@ -29,7 +29,7 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
   const setRef = useCallback((el) => { setDropRef(el); }, [setDropRef]);
 
   const hasRoleWarning = person && !person.roles.map(r => r.toLowerCase()).includes(slotType);
-  const hasLockedWarning = person && person.lockedTo && person.lockedTo !== clinic.provider;
+  const hasLockedWarning = person && person.lockedTo?.length > 0 && !person.lockedTo.includes(clinic.provider);
   const showWarning = hasRoleWarning || hasLockedWarning;
   const hasConflict = person && conflictSet && conflictSet.has(`${person.id}:${clinic.day}`);
 
@@ -38,9 +38,10 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
 
   const isHighlighted = hasSearch && person && matchedPersonIds.includes(personId);
   const isDimmed = hasSearch && person && !matchedPersonIds.includes(personId);
+  const interactive = isAdmin && clinicOpen;
 
   const handleRowClick = () => {
-    if (isAdmin) setShowPopover(s => !s);
+    if (interactive) setShowPopover(s => !s);
   };
 
   return (
@@ -48,11 +49,11 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
       ref={setRef}
       className={[
         'slot-row',
-        isOver && isAdmin ? 'drop-target' : '',
+        isOver && interactive ? 'drop-target' : '',
         showWarning ? 'warning-slot' : '',
       ].filter(Boolean).join(' ')}
       onClick={handleRowClick}
-      style={{ cursor: isAdmin ? 'pointer' : 'default' }}
+      style={{ cursor: interactive ? 'pointer' : 'default' }}
     >
       <div className="slot-label-col">
         <div className="slot-label">{slotType}</div>
@@ -74,20 +75,24 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
             {hasConflict && <AlertTriangle size={11} style={{ color: 'var(--red)', flexShrink: 0 }} />}
           </div>
         ) : (
-          <div className={`slot-empty ${isOver && isAdmin ? 'droppable' : ''}`}>
+          <div className={[
+            'slot-empty',
+            isOver && interactive ? 'droppable' : '',
+            slotType === 'scribe' ? 'slot-empty-scribe' : '',
+          ].filter(Boolean).join(' ')}>
             {slotLabel}
           </div>
         )}
         {showWarning && (
           <span
             className="warning-icon"
-            title={hasLockedWarning ? `Locked to ${person.lockedTo}` : 'Not cleared for this role'}
+            title={hasLockedWarning ? `Locked to ${person.lockedTo.join(', ')}` : 'Not cleared for this role'}
           >
             <AlertTriangle size={13} />
           </span>
         )}
       </div>
-      {showPopover && isAdmin && (
+      {showPopover && interactive && (
         <SlotPopover
           clinic={clinic}
           slotType={slotType}
@@ -102,8 +107,8 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
 }
 
 export default function ClinicCard({ clinic, onPersonClick, onEditClinic, matchedPersonIds, hasSearch }) {
-  const { data, isAdmin } = useApp();
-  const showMiddleHint = isAdmin && (clinic.patientCount ?? 0) > 50 && !clinic.slots.middle;
+  const { data, isAdmin, updateClinic } = useApp();
+  const showMiddleHint = isAdmin && clinic.open && (clinic.patientCount ?? 0) > 50 && !clinic.slots.middle;
   const conflictSet = isAdmin ? getConflictPersonDays(data.clinics, data.people) : null;
 
   if (!clinic.open && !isAdmin) return null;
@@ -116,31 +121,54 @@ export default function ClinicCard({ clinic, onPersonClick, onEditClinic, matche
           <div className="clinic-card-sub">{clinic.location}</div>
         </div>
         <div className="clinic-card-header-right">
-          <PatientBadge count={clinic.patientCount} />
+          {clinic.open && <PatientBadge count={clinic.patientCount} />}
           {isAdmin && (
-            <button
-              className="clinic-edit-btn"
-              onClick={(e) => { e.stopPropagation(); onEditClinic(clinic.id); }}
-              title="Edit clinic"
-            >
-              <Pencil size={14} />
-            </button>
+            <>
+              <button
+                className="clinic-edit-btn"
+                onClick={(e) => { e.stopPropagation(); updateClinic(clinic.id, { open: !clinic.open }); }}
+                title={clinic.open ? 'Mark as closed this week' : 'Mark as open'}
+                style={{ color: clinic.open ? 'var(--text-muted)' : 'var(--red)' }}
+              >
+                <Power size={14} />
+              </button>
+              <button
+                className="clinic-edit-btn"
+                onClick={(e) => { e.stopPropagation(); onEditClinic(clinic.id); }}
+                title="Edit clinic"
+              >
+                <Pencil size={14} />
+              </button>
+            </>
           )}
         </div>
       </div>
-      <div>
-        {SLOT_TYPES.map(slotType => (
-          <SlotRow
-            key={slotType}
-            clinic={clinic}
-            slotType={slotType}
-            onPersonClick={onPersonClick}
-            matchedPersonIds={matchedPersonIds}
-            hasSearch={hasSearch}
-            conflictSet={conflictSet}
-          />
-        ))}
-      </div>
+      {!clinic.open && isAdmin ? (
+        <div style={{
+          padding: '10px 12px',
+          fontSize: 12,
+          color: 'var(--text-muted)',
+          fontStyle: 'italic',
+          textAlign: 'center',
+        }}>
+          Closed this week
+        </div>
+      ) : (
+        <div>
+          {SLOT_TYPES.map(slotType => (
+            <SlotRow
+              key={slotType}
+              clinic={clinic}
+              slotType={slotType}
+              onPersonClick={onPersonClick}
+              matchedPersonIds={matchedPersonIds}
+              hasSearch={hasSearch}
+              conflictSet={conflictSet}
+              clinicOpen={clinic.open}
+            />
+          ))}
+        </div>
+      )}
       {showMiddleHint && (
         <div className="hint-middle">
           <Users size={12} />
