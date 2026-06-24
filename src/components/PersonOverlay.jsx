@@ -25,7 +25,7 @@ function WeekRows({ person, clinics }) {
                 } else if (slotType === 'opener') {
                   time = `${minutesToTime(c.startTime)} – 5:00 PM`;
                 } else if (slotType === 'closing') {
-                  time = '9:00 AM – Close';
+                  time = '9:00 AM – ~Close';
                 } else if (slotType === 'middle' || slotType === 'training') {
                   time = formatVariableSlotTime(slotVal) ?? 'Time not set';
                 } else {

@@ -77,7 +77,7 @@ export function getSlotTimeLabel(clinic, slotType) {
   switch (slotType) {
     case 'scribe':   return null;
     case 'opener':   return `${minutesToTime(startTime)} – 5:00 PM`;
-    case 'closing':  return '9:00 AM – Close';
+    case 'closing':  return '9:00 AM – ~Close';
     default:         return null;
   }
 }
@@ -277,11 +277,5 @@ export function getSeedData() {
 
   const taskTypes = ['Triage', 'See Matt/Jo', 'Imaging Upload'];
 
-  // Default lastPatientTime = endTime - 90 min (closer stays ~1.5h after last pt)
-  const clinicsWithLastPt = clinics.map(c => ({
-    ...c,
-    lastPatientTime: c.endTime - 90,
-  }));
-
-  return { people, clinics: clinicsWithLastPt, locations, providers, additionalTasks, taskTypes };
+  return { people, clinics, locations, providers, additionalTasks, taskTypes };
 }

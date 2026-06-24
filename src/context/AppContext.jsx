@@ -101,15 +101,17 @@ function migrateData(raw) {
   return {
     ...raw,
     people: (raw.people ?? []).map(migratePerson),
-    clinics: (raw.clinics ?? []).map(c => ({
-      ...c,
-      lastPatientTime: c.lastPatientTime ?? (c.endTime - 90),
-      slots: {
-        ...(c.slots ?? {}),
-        middle: migrateVariableSlot((c.slots ?? {}).middle),
-        training: migrateVariableSlot((c.slots ?? {}).training),
-      },
-    })),
+    clinics: (raw.clinics ?? []).map(c => {
+      const { lastPatientTime: _lpt, ...rest } = c;
+      return {
+        ...rest,
+        slots: {
+          ...(rest.slots ?? {}),
+          middle: migrateVariableSlot((rest.slots ?? {}).middle),
+          training: migrateVariableSlot((rest.slots ?? {}).training),
+        },
+      };
+    }),
     // Strip pre-seeded tasks; keep only admin-created ones
     additionalTasks: (raw.additionalTasks ?? []).filter(t => !SEEDED_TASK_IDS.has(t.id)),
     taskTypes: raw.taskTypes ?? getSeedData().taskTypes,
@@ -248,6 +250,20 @@ function runMigrations(data) {
         },
       })),
     };
+    dirty = true;
+  }
+
+  // ── Migration: removelastpatient ─────────────
+  // Strip lastPatientTime from all clinic objects — endTime now is the last patient time.
+  if (!localStorage.getItem('shiftcraft.migration.removelastpatient')) {
+    d = {
+      ...d,
+      clinics: d.clinics.map(c => {
+        const { lastPatientTime: _lpt, ...rest } = c;
+        return rest;
+      }),
+    };
+    try { localStorage.setItem('shiftcraft.migration.removelastpatient', '1'); } catch { /* ignore */ }
     dirty = true;
   }
 

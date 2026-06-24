@@ -142,8 +142,8 @@ export default function TopBar({ activeTab, setActiveTab }) {
 
     const openClinics = data.clinics
       .filter(c => c.open)
-      .map(({ id, day, location, provider, startTime, endTime, lastPatientTime, slots, patientCount }) => ({
-        id, day, location, provider, startTime, endTime, lastPatientTime, patientCount,
+      .map(({ id, day, location, provider, startTime, endTime, slots, patientCount }) => ({
+        id, day, location, provider, startTime, endTime, patientCount,
         currentSlots: slots,
       }));
 

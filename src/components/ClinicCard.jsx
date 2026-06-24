@@ -119,7 +119,7 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
         <div className="slot-label-col">
           <div className="slot-label">{slotType}</div>
           {slotType === 'closing' ? (
-            <div className="slot-time">9:00 AM – <em>Close</em></div>
+            <div className="slot-time">9:00 AM – <em>~Close</em></div>
           ) : (
             slotTime && <div className="slot-time">{slotTime}</div>
           )}
