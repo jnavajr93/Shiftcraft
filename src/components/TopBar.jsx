@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Calendar, Sun, Moon, ChevronLeft, ChevronRight,
   History, Printer, Sparkles, Wand2, Loader2, X,
@@ -79,8 +79,25 @@ export default function TopBar({ activeTab, setActiveTab }) {
   const {
     isAdmin, setIsAdmin, theme, setTheme,
     weekLabel, currentWeek, navigateWeek, weekIsEmpty, copyFromPreviousWeek,
-    data, addLog, applyBulkAssignments, restoreClinicSlots,
+    data, addLog, applyBulkAssignments, restoreClinicSlots, lastSaved,
   } = useApp();
+
+  // Relative "X ago" label — re-evaluated every 15 s
+  const [, forceUpdate] = useState(0);
+  useEffect(() => {
+    if (!lastSaved) return;
+    const id = setInterval(() => forceUpdate(n => n + 1), 15000);
+    return () => clearInterval(id);
+  }, [lastSaved]);
+
+  const savedAgoLabel = (() => {
+    if (!lastSaved) return null;
+    const secs = Math.floor((Date.now() - lastSaved) / 1000);
+    if (secs < 10) return 'Saved just now';
+    if (secs < 60) return `Saved ${secs}s ago`;
+    const mins = Math.floor(secs / 60);
+    return `Saved ${mins}m ago`;
+  })();
 
   const isCurrentWeek = currentWeek === isoWeek(new Date());
   const [copyToast, setCopyToast] = useState(null);
@@ -329,6 +346,11 @@ export default function TopBar({ activeTab, setActiveTab }) {
               ? <Sun size={20} strokeWidth={1.5} />
               : <Moon size={20} strokeWidth={1.5} />}
           </button>
+          {savedAgoLabel && (
+            <span style={{ fontSize: 11, color: 'var(--text-muted, var(--text-secondary))', opacity: 0.7, whiteSpace: 'nowrap' }}>
+              {savedAgoLabel}
+            </span>
+          )}
           <button
             className={`btn btn-pill ${isAdmin ? 'active' : ''}`}
             onClick={() => setIsAdmin(a => !a)}

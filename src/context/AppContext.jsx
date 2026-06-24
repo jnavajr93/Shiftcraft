@@ -44,7 +44,13 @@ function loadWeekSlotMap(weekStr) {
 }
 
 function saveWeekSlotMap(weekStr, map) {
-  try { localStorage.setItem(weekStorageKey(weekStr), JSON.stringify(map)); } catch { /* ignore */ }
+  try {
+    const payload = JSON.stringify(map);
+    localStorage.setItem(weekStorageKey(weekStr), payload);
+    console.log('[Shiftcraft] Saved week slots:', weekStorageKey(weekStr), payload.length, 'chars');
+  } catch (e) {
+    console.error('[Shiftcraft] Week slot save failed:', e);
+  }
 }
 
 /** Apply a slotMap onto clinics and tasks, returning new arrays */
@@ -237,6 +243,8 @@ export function AppProvider({ children }) {
   );
   const [isAdmin, setIsAdmin] = useState(false);
 
+  const [lastSaved, setLastSaved] = useState(null);
+
   // Global data (clinic definitions, people, locations)
   const [globalData, setGlobalData] = useState(() => {
     const g = loadGlobal();
@@ -264,16 +272,44 @@ export function AppProvider({ children }) {
       ...t, assignedPersonId: null,
     }));
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        ...rest, clinics: definitionClinics, additionalTasks: definitionTasks,
-      }));
-    } catch { /* ignore */ }
+      const payload = JSON.stringify({ ...rest, clinics: definitionClinics, additionalTasks: definitionTasks });
+      localStorage.setItem(STORAGE_KEY, payload);
+      console.log('[Shiftcraft] Saved to localStorage:', STORAGE_KEY, payload.length, 'chars');
+      setLastSaved(Date.now());
+    } catch (e) {
+      console.error('[Shiftcraft] localStorage save failed:', e);
+    }
   }, [globalData]);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('shiftcraft.theme', theme);
   }, [theme]);
+
+  // Belt-and-suspenders: flush both stores synchronously before the page unloads.
+  // The useEffect above already saves on every change, but beforeunload catches
+  // any edge cases where the effect hadn't fired yet.
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      try {
+        const { clinics, additionalTasks, ...rest } = globalData;
+        const definitionClinics = clinics.map(({ slots, ...def }) => ({
+          ...def,
+          slots: { scribe: null, opener: null, closing: null, middle: null, training: null },
+        }));
+        const definitionTasks = additionalTasks.map(({ assignedPersonId, ...t }) => ({
+          ...t, assignedPersonId: null,
+        }));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...rest, clinics: definitionClinics, additionalTasks: definitionTasks }));
+      } catch { /* ignore */ }
+      try {
+        const map = extractSlotMap(globalData.clinics, globalData.additionalTasks);
+        saveWeekSlotMap(currentWeek, map);
+      } catch { /* ignore */ }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [globalData, currentWeek]);
 
   useEffect(() => {
     saveChangelog(changelog);
@@ -414,9 +450,12 @@ export function AppProvider({ children }) {
       const taskTypes = prev.taskTypes.includes(task.label)
         ? prev.taskTypes
         : [...prev.taskTypes, task.label];
+      // Keep week slot store in sync so the new task survives a reload
+      const map = extractSlotMap(prev.clinics, additionalTasks);
+      saveWeekSlotMap(currentWeek, map);
       return { ...prev, additionalTasks, taskTypes };
     });
-  }, []);
+  }, [currentWeek]);
 
   const removeTask = useCallback((taskId) => {
     setGlobalData(prev => ({
@@ -563,6 +602,7 @@ export function AppProvider({ children }) {
     <AppContext.Provider value={{
       data,
       savedToast,
+      lastSaved,
       isAdmin, setIsAdmin,
       theme, setTheme,
       currentWeek, weekLabel,
