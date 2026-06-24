@@ -30,15 +30,6 @@ function PersonCard({ person, onPersonClick, clinics }) {
         {person.name}
       </span>
       {person.grade && <span className={`grade-badge ${person.grade}`}>{person.grade}</span>}
-      {skills.length > 0 && (
-        <div className="sidebar-skills">
-          {skills.map(s => (
-            <span key={s} className="skill-badge" title={s}>
-              {SKILL_ABBR[s] ?? s.slice(0, 2)}
-            </span>
-          ))}
-        </div>
-      )}
       <span className="person-sidebar-hours">{hours}h</span>
     </div>
   );
