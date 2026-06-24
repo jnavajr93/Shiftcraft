@@ -4,6 +4,7 @@ import { Pencil, AlertTriangle, Users } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { getSlotLabel, getSlotTimeLabel, SLOT_TYPES } from '../data/seed.js';
 import SlotPopover from './SlotPopover.jsx';
+import { getConflictPersonDays } from './ConflictBanner.jsx';
 
 function PatientBadge({ count }) {
   if (count == null) return null;
@@ -16,7 +17,7 @@ function PatientBadge({ count }) {
   );
 }
 
-function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch }) {
+function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch, conflictSet }) {
   const { data, isAdmin, assignSlot } = useApp();
   const personId = clinic.slots[slotType];
   const person = personId ? data.people.find(p => p.id === personId) : null;
@@ -30,6 +31,7 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch 
   const hasRoleWarning = person && !person.roles.map(r => r.toLowerCase()).includes(slotType);
   const hasLockedWarning = person && person.lockedTo && person.lockedTo !== clinic.provider;
   const showWarning = hasRoleWarning || hasLockedWarning;
+  const hasConflict = person && conflictSet && conflictSet.has(`${person.id}:${clinic.day}`);
 
   const slotLabel = getSlotLabel(slotType, clinic.location);
   const slotTime = getSlotTimeLabel(clinic, slotType);
@@ -63,11 +65,13 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch 
               'person-chip',
               isHighlighted ? 'highlighted' : '',
               isDimmed ? 'dimmed' : '',
+              hasConflict ? 'conflict-ring' : '',
             ].filter(Boolean).join(' ')}
             onClick={e => { e.stopPropagation(); onPersonClick(personId); }}
           >
             <div className="dot" style={{ background: person.color }} />
             {person.name}
+            {hasConflict && <AlertTriangle size={11} style={{ color: 'var(--red)', flexShrink: 0 }} />}
           </div>
         ) : (
           <div className={`slot-empty ${isOver && isAdmin ? 'droppable' : ''}`}>
@@ -98,8 +102,9 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch 
 }
 
 export default function ClinicCard({ clinic, onPersonClick, onEditClinic, matchedPersonIds, hasSearch }) {
-  const { isAdmin } = useApp();
+  const { data, isAdmin } = useApp();
   const showMiddleHint = isAdmin && (clinic.patientCount ?? 0) > 50 && !clinic.slots.middle;
+  const conflictSet = isAdmin ? getConflictPersonDays(data.clinics, data.people) : null;
 
   if (!clinic.open && !isAdmin) return null;
 
@@ -132,6 +137,7 @@ export default function ClinicCard({ clinic, onPersonClick, onEditClinic, matche
             onPersonClick={onPersonClick}
             matchedPersonIds={matchedPersonIds}
             hasSearch={hasSearch}
+            conflictSet={conflictSet}
           />
         ))}
       </div>

@@ -1,6 +1,15 @@
 export const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 export const ROLES = ['Scribe', 'Opener', 'Middle', 'Closing', 'Training'];
 export const SLOT_TYPES = ['scribe', 'opener', 'closing', 'middle', 'training'];
+export const EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'PRN'];
+export const ACCOMMODATION_TYPES = [
+  'extended_lunch',
+  'early_leave',
+  'no_half_days',
+  'no_back_to_back_locations',
+  'late_start',
+];
+export const EARLY_LEAVE_REASONS = ['school', 'childcare', 'medical', 'personal'];
 
 export function generateId() {
   return Math.random().toString(36).slice(2, 10);
@@ -12,6 +21,23 @@ export function minutesToTime(min) {
   const ampm = h >= 12 ? 'PM' : 'AM';
   const hour = h > 12 ? h - 12 : h === 0 ? 12 : h;
   return `${hour}${m > 0 ? ':' + String(m).padStart(2, '0') : ''} ${ampm}`;
+}
+
+export function accommodationLabel(acc) {
+  switch (acc.type) {
+    case 'extended_lunch':
+      return `Extended lunch ${acc.day} ${minutesToTime(acc.start)}–${minutesToTime(acc.end)}`;
+    case 'early_leave':
+      return `Leave by ${minutesToTime(acc.endTime)} on ${acc.day === '*' ? 'all days' : acc.day} (${acc.reason})`;
+    case 'no_half_days':
+      return `No half days at ${acc.locationId}`;
+    case 'no_back_to_back_locations':
+      return 'No back-to-back locations same day';
+    case 'late_start':
+      return `Late start ${acc.day} at ${minutesToTime(acc.startTime)} (${acc.reason})`;
+    default:
+      return acc.type;
+  }
 }
 
 export function getSlotTimeLabel(clinic, slotType) {
@@ -56,41 +82,162 @@ export function calcPersonWeeklyHours(personId, clinics) {
   return Math.round(total * 100) / 100;
 }
 
+/** Migrate old Person shape to new shape */
+export function migratePerson(p) {
+  return {
+    id: p.id,
+    name: p.name,
+    color: p.color,
+    employmentType: p.employmentType ?? 'Full-time',
+    grade: p.grade ?? null,
+    roles: p.roles ?? [],
+    clearedLocations: p.clearedLocations ?? p.locations ?? [],
+    preferredLocations: p.preferredLocations ?? p.preferences?.preferredLocations ?? [],
+    lockedTo: p.lockedTo ?? null,
+    daysOff: p.daysOff ?? p.preferences?.daysOff ?? [],
+    availabilityWindows: p.availabilityWindows ?? {},
+    accommodations: p.accommodations ?? [],
+    targetHours: p.targetHours ?? 40,
+  };
+}
+
 export function getSeedData() {
   const people = [
-    { id: 'john',    name: 'John',    color: '#2563eb', roles: ['Scribe'],                                   locations: [], grade: null, lockedTo: 'Dr. R', preferences: { preferredLocations: [], daysOff: [] }, targetHours: 40 },
-    { id: 'jc',      name: 'JC',      color: '#16a34a', roles: ['Scribe'],                                   locations: [], grade: null, lockedTo: 'Dr. A', preferences: { preferredLocations: [], daysOff: [] }, targetHours: 40 },
-    { id: 'nikole',  name: 'Nikole',  color: '#0891b2', roles: ['Scribe'],                                   locations: [], grade: null, lockedTo: null,    preferences: { preferredLocations: [], daysOff: [] }, targetHours: 40 },
-    { id: 'yadi',    name: 'Yadi',    color: '#db2777', roles: ['Opener', 'Middle', 'Closing'],              locations: [], grade: null, lockedTo: null,    preferences: { preferredLocations: [], daysOff: [] }, targetHours: 40 },
-    { id: 'martha',  name: 'Martha',  color: '#9333ea', roles: ['Opener'],                                   locations: [], grade: null, lockedTo: null,    preferences: { preferredLocations: [], daysOff: [] }, targetHours: 40 },
-    { id: 'alondra', name: 'Alondra', color: '#ea580c', roles: ['Opener', 'Middle', 'Closing', 'Scribe'],   locations: [], grade: null, lockedTo: null,    preferences: { preferredLocations: [], daysOff: [] }, targetHours: 40 },
-    { id: 'jaron',   name: 'Jaron',   color: '#65a30d', roles: ['Opener', 'Middle', 'Closing'],              locations: [], grade: null, lockedTo: null,    preferences: { preferredLocations: [], daysOff: [] }, targetHours: 40 },
-    { id: 'jocelyn', name: 'Jocelyn', color: '#0d9488', roles: ['Opener', 'Middle', 'Closing'],              locations: [], grade: null, lockedTo: null,    preferences: { preferredLocations: [], daysOff: [] }, targetHours: 40 },
-    { id: 'itzel',   name: 'Itzel',   color: '#c026d3', roles: ['Opener', 'Middle', 'Closing'],              locations: [], grade: null, lockedTo: null,    preferences: { preferredLocations: [], daysOff: [] }, targetHours: 40 },
-    { id: 'katina',  name: 'Katina',  color: '#0284c7', roles: ['Opener', 'Middle', 'Closing', 'Scribe'],   locations: [], grade: null, lockedTo: null,    preferences: { preferredLocations: [], daysOff: [] }, targetHours: 40 },
-    { id: 'lizbeth', name: 'Lizbeth', color: '#7c3aed', roles: ['Opener', 'Middle', 'Closing', 'Scribe'],   locations: [], grade: null, lockedTo: null,    preferences: { preferredLocations: [], daysOff: [] }, targetHours: 40 },
+    {
+      id: 'john', name: 'John', color: '#2563eb', employmentType: 'Full-time',
+      grade: null, roles: ['Scribe'], clearedLocations: [], preferredLocations: [],
+      lockedTo: 'Dr. R', daysOff: ['Tue', 'Wed'],
+      availabilityWindows: {},
+      accommodations: [],
+      targetHours: 40,
+    },
+    {
+      id: 'jc', name: 'JC', color: '#16a34a', employmentType: 'Full-time',
+      grade: null, roles: ['Scribe'], clearedLocations: [], preferredLocations: [],
+      lockedTo: 'Dr. A', daysOff: ['Mon', 'Wed'],
+      availabilityWindows: {},
+      accommodations: [],
+      targetHours: 40,
+    },
+    {
+      id: 'nikole', name: 'Nikole', color: '#0891b2', employmentType: 'Full-time',
+      grade: null, roles: ['Scribe'], clearedLocations: [], preferredLocations: [],
+      lockedTo: null, daysOff: [],
+      availabilityWindows: {},
+      accommodations: [],
+      targetHours: 40,
+    },
+    {
+      id: 'yadi', name: 'Yadi', color: '#db2777', employmentType: 'Full-time',
+      grade: null, roles: ['Opener', 'Middle', 'Closing'], clearedLocations: [], preferredLocations: [],
+      lockedTo: null, daysOff: [],
+      availabilityWindows: {
+        Mon: { startNotBefore: null, endNoLater: 990 },
+        Wed: { startNotBefore: null, endNoLater: 990 },
+        Thu: { startNotBefore: null, endNoLater: 870 },
+        Fri: { startNotBefore: null, endNoLater: 990 },
+      },
+      accommodations: [],
+      targetHours: 40,
+    },
+    {
+      id: 'martha', name: 'Martha', color: '#9333ea', employmentType: 'Part-time',
+      grade: null, roles: ['Opener'], clearedLocations: [], preferredLocations: [],
+      lockedTo: null, daysOff: [],
+      availabilityWindows: {},
+      accommodations: [
+        { type: 'early_leave', day: '*', endTime: 930, reason: 'personal' },
+      ],
+      targetHours: 24,
+    },
+    {
+      id: 'alondra', name: 'Alondra', color: '#ea580c', employmentType: 'Full-time',
+      grade: null, roles: ['Opener', 'Middle', 'Closing', 'Scribe'], clearedLocations: [], preferredLocations: [],
+      lockedTo: null, daysOff: [],
+      availabilityWindows: {},
+      accommodations: [],
+      targetHours: 40,
+    },
+    {
+      id: 'jaron', name: 'Jaron', color: '#65a30d', employmentType: 'Full-time',
+      grade: null, roles: ['Opener', 'Middle', 'Closing'], clearedLocations: [], preferredLocations: [],
+      lockedTo: null, daysOff: [],
+      availabilityWindows: {},
+      accommodations: [],
+      targetHours: 40,
+    },
+    {
+      id: 'jocelyn', name: 'Jocelyn', color: '#0d9488', employmentType: 'Full-time',
+      grade: null, roles: ['Opener', 'Middle', 'Closing'], clearedLocations: [], preferredLocations: [],
+      lockedTo: null, daysOff: [],
+      availabilityWindows: {},
+      accommodations: [],
+      targetHours: 40,
+    },
+    {
+      id: 'itzel', name: 'Itzel', color: '#c026d3', employmentType: 'Full-time',
+      grade: null, roles: ['Opener', 'Middle', 'Closing'], clearedLocations: [], preferredLocations: [],
+      lockedTo: null, daysOff: [],
+      availabilityWindows: {},
+      accommodations: [],
+      targetHours: 40,
+    },
+    {
+      id: 'katina', name: 'Katina', color: '#0284c7', employmentType: 'Full-time',
+      grade: null, roles: ['Opener', 'Middle', 'Closing', 'Scribe'], clearedLocations: [], preferredLocations: [],
+      lockedTo: null, daysOff: [],
+      availabilityWindows: {},
+      accommodations: [],
+      targetHours: 40,
+    },
+    {
+      id: 'lizbeth', name: 'Lizbeth', color: '#7c3aed', employmentType: 'Full-time',
+      grade: null, roles: ['Opener', 'Middle', 'Closing', 'Scribe'], clearedLocations: [], preferredLocations: [],
+      lockedTo: null, daysOff: [],
+      availabilityWindows: {},
+      accommodations: [],
+      targetHours: 40,
+    },
   ];
 
   const locations = ['Phoenix', 'Chandler', 'Estrella', 'Scottsdale'];
   const providers = ['Dr. R', 'Dr. A', 'Dr. S', 'Dr. B'];
 
+  // Note: JC daysOff Mon,Wed and John daysOff Tue,Wed — seed reflects this
   const clinics = [
-    // Monday
-    { id: 'mon-phoenix-drr',     day: 'Mon', week: 'A', location: 'Phoenix',    provider: 'Dr. R', open: true, startTime: 480, endTime: 1020, patientCount: 45, slots: { scribe: 'john',   opener: 'yadi',    closing: 'jocelyn', middle: null,    training: null } },
-    { id: 'mon-chandler-dra',    day: 'Mon', week: 'A', location: 'Chandler',   provider: 'Dr. A', open: true, startTime: 480, endTime: 1020, patientCount: 30, slots: { scribe: 'jc',     opener: 'martha',  closing: 'jaron',   middle: null,    training: null } },
-    // Tuesday
-    { id: 'tue-scottsdale-drr',  day: 'Tue', week: 'A', location: 'Scottsdale', provider: 'Dr. R', open: true, startTime: 480, endTime: 1020, patientCount: 55, slots: { scribe: 'john',   opener: 'alondra', closing: 'itzel',   middle: 'katina', training: null } },
-    { id: 'tue-estrella-drs',    day: 'Tue', week: 'A', location: 'Estrella',   provider: 'Dr. S', open: true, startTime: 540, endTime: 1080, patientCount: 20, slots: { scribe: 'nikole', opener: 'lizbeth', closing: null,      middle: null,    training: null } },
-    // Wednesday
-    { id: 'wed-phoenix-dra',     day: 'Wed', week: 'A', location: 'Phoenix',    provider: 'Dr. A', open: true, startTime: 480, endTime: 1020, patientCount: 35, slots: { scribe: 'jc',     opener: 'jocelyn', closing: 'yadi',    middle: null,    training: null } },
-    { id: 'wed-chandler-drb',    day: 'Wed', week: 'A', location: 'Chandler',   provider: 'Dr. B', open: true, startTime: 480, endTime: 1020, patientCount: 28, slots: { scribe: null,     opener: 'martha',  closing: 'jaron',   middle: null,    training: null } },
+    // Monday — JC off Mon, John assigned
+    { id: 'mon-phoenix-drr',    day: 'Mon', week: 'A', location: 'Phoenix',    provider: 'Dr. R', open: true, startTime: 480, endTime: 1020, patientCount: 45, slots: { scribe: 'john',   opener: 'yadi',    closing: 'jocelyn', middle: null,     training: null } },
+    { id: 'mon-chandler-dra',   day: 'Mon', week: 'A', location: 'Chandler',   provider: 'Dr. A', open: true, startTime: 480, endTime: 1020, patientCount: 30, slots: { scribe: null,     opener: 'martha',  closing: 'jaron',   middle: null,     training: null } },
+    // Tuesday — John off Tue
+    { id: 'tue-scottsdale-drr', day: 'Tue', week: 'A', location: 'Scottsdale', provider: 'Dr. R', open: true, startTime: 480, endTime: 1020, patientCount: 55, slots: { scribe: null,     opener: 'alondra', closing: 'itzel',   middle: 'katina', training: null } },
+    { id: 'tue-estrella-drs',   day: 'Tue', week: 'A', location: 'Estrella',   provider: 'Dr. S', open: true, startTime: 540, endTime: 1080, patientCount: 20, slots: { scribe: 'nikole', opener: 'lizbeth', closing: null,      middle: null,     training: null } },
+    // Wednesday — JC off Wed, John off Wed
+    { id: 'wed-phoenix-dra',    day: 'Wed', week: 'A', location: 'Phoenix',    provider: 'Dr. A', open: true, startTime: 480, endTime: 1020, patientCount: 35, slots: { scribe: null,     opener: 'jocelyn', closing: 'yadi',    middle: null,     training: null } },
+    { id: 'wed-chandler-drb',   day: 'Wed', week: 'A', location: 'Chandler',   provider: 'Dr. B', open: true, startTime: 480, endTime: 1020, patientCount: 28, slots: { scribe: null,     opener: 'martha',  closing: 'jaron',   middle: null,     training: null } },
     // Thursday
-    { id: 'thu-scottsdale-drr',  day: 'Thu', week: 'A', location: 'Scottsdale', provider: 'Dr. R', open: true, startTime: 480, endTime: 1020, patientCount: 52, slots: { scribe: 'john',   opener: 'katina',  closing: 'itzel',   middle: 'alondra', training: null } },
-    { id: 'thu-phoenix-dra',     day: 'Thu', week: 'A', location: 'Phoenix',    provider: 'Dr. A', open: true, startTime: 480, endTime: 1020, patientCount: 42, slots: { scribe: 'jc',     opener: 'lizbeth', closing: 'jocelyn', middle: null,    training: null } },
+    { id: 'thu-scottsdale-drr', day: 'Thu', week: 'A', location: 'Scottsdale', provider: 'Dr. R', open: true, startTime: 480, endTime: 1020, patientCount: 52, slots: { scribe: 'john',   opener: 'katina',  closing: 'itzel',   middle: 'alondra', training: null } },
+    { id: 'thu-phoenix-dra',    day: 'Thu', week: 'A', location: 'Phoenix',    provider: 'Dr. A', open: true, startTime: 480, endTime: 1020, patientCount: 42, slots: { scribe: 'jc',     opener: 'lizbeth', closing: 'jocelyn', middle: null,     training: null } },
     // Friday
-    { id: 'fri-estrella-drs',    day: 'Fri', week: 'A', location: 'Estrella',   provider: 'Dr. S', open: true, startTime: 540, endTime: 1080, patientCount: 15, slots: { scribe: 'nikole', opener: 'yadi',    closing: null,      middle: null,    training: null } },
-    { id: 'fri-phoenix-drr',     day: 'Fri', week: 'A', location: 'Phoenix',    provider: 'Dr. R', open: true, startTime: 480, endTime: 1020, patientCount: 38, slots: { scribe: null,     opener: 'martha',  closing: 'jaron',   middle: null,    training: null } },
+    { id: 'fri-estrella-drs',   day: 'Fri', week: 'A', location: 'Estrella',   provider: 'Dr. S', open: true, startTime: 540, endTime: 1080, patientCount: 15, slots: { scribe: 'nikole', opener: 'yadi',    closing: null,      middle: null,     training: null } },
+    { id: 'fri-phoenix-drr',    day: 'Fri', week: 'A', location: 'Phoenix',    provider: 'Dr. R', open: true, startTime: 480, endTime: 1020, patientCount: 38, slots: { scribe: 'john',   opener: 'martha',  closing: 'jaron',   middle: null,     training: null } },
   ];
 
-  return { people, clinics, locations, providers };
+  const additionalTasks = [
+    { id: 'triage-mon',        label: 'Triage',        day: 'Mon', locationTag: null,        assignedPersonId: null, isLocationSpecific: false },
+    { id: 'see-matt-jo-mon',   label: 'See Matt/Jo',   day: 'Mon', locationTag: null,        assignedPersonId: null, isLocationSpecific: false },
+    { id: 'img-upload-mon-ph', label: 'Imaging Upload', day: 'Mon', locationTag: 'Phoenix',  assignedPersonId: null, isLocationSpecific: true },
+    { id: 'img-upload-mon-es', label: 'Imaging Upload', day: 'Mon', locationTag: 'Estrella', assignedPersonId: null, isLocationSpecific: true },
+    { id: 'triage-tue',        label: 'Triage',        day: 'Tue', locationTag: null,        assignedPersonId: null, isLocationSpecific: false },
+    { id: 'see-matt-jo-tue',   label: 'See Matt/Jo',   day: 'Tue', locationTag: null,        assignedPersonId: null, isLocationSpecific: false },
+    { id: 'triage-wed',        label: 'Triage',        day: 'Wed', locationTag: null,        assignedPersonId: null, isLocationSpecific: false },
+    { id: 'see-matt-jo-wed',   label: 'See Matt/Jo',   day: 'Wed', locationTag: null,        assignedPersonId: null, isLocationSpecific: false },
+    { id: 'triage-thu',        label: 'Triage',        day: 'Thu', locationTag: null,        assignedPersonId: null, isLocationSpecific: false },
+    { id: 'see-matt-jo-thu',   label: 'See Matt/Jo',   day: 'Thu', locationTag: null,        assignedPersonId: null, isLocationSpecific: false },
+    { id: 'triage-fri',        label: 'Triage',        day: 'Fri', locationTag: null,        assignedPersonId: null, isLocationSpecific: false },
+    { id: 'see-matt-jo-fri',   label: 'See Matt/Jo',   day: 'Fri', locationTag: null,        assignedPersonId: null, isLocationSpecific: false },
+  ];
+
+  const taskTypes = ['Triage', 'See Matt/Jo', 'Imaging Upload'];
+
+  return { people, clinics, locations, providers, additionalTasks, taskTypes };
 }

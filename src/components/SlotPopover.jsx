@@ -1,17 +1,46 @@
 import { useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext.jsx';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Zap } from 'lucide-react';
+import { DAYS } from '../data/seed.js';
+
+/** Returns reason why person can't fill this slot, or null if they can */
+function ineligibleReason(person, clinic, slotType, clinics) {
+  // Day off
+  if ((person.daysOff ?? []).includes(clinic.day)) return 'Off this day';
+
+  // Already assigned elsewhere on this day (different clinic)
+  const alreadyAssigned = clinics.some(c =>
+    c.id !== clinic.id &&
+    c.day === clinic.day &&
+    c.open &&
+    Object.values(c.slots).includes(person.id)
+  );
+  if (alreadyAssigned) return 'Already assigned this day';
+
+  // Role check
+  if (!person.roles.map(r => r.toLowerCase()).includes(slotType)) return 'Role not in their list';
+
+  // Location check
+  const cleared = person.clearedLocations ?? [];
+  if (cleared.length > 0 && !cleared.includes(clinic.location)) return 'Not cleared for location';
+
+  // Availability window check
+  const win = (person.availabilityWindows ?? {})[clinic.day];
+  if (win) {
+    if (win.startNotBefore != null && clinic.startTime < win.startNotBefore) return 'Starts too early for their window';
+    if (win.endNoLater != null && clinic.endTime > win.endNoLater) return 'Ends too late for their window';
+  }
+
+  return null;
+}
 
 export default function SlotPopover({ clinic, slotType, currentPersonId, onAssign, onRemove, onClose }) {
   const { data } = useApp();
   const ref = useRef(null);
 
   useEffect(() => {
-    const handler = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) onClose();
-    };
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
     const keyHandler = (e) => { if (e.key === 'Escape') onClose(); };
-    // Use setTimeout to avoid immediately closing on the opening click
     const t = setTimeout(() => {
       document.addEventListener('mousedown', handler);
       document.addEventListener('keydown', keyHandler);
@@ -23,13 +52,25 @@ export default function SlotPopover({ clinic, slotType, currentPersonId, onAssig
     };
   }, [onClose]);
 
-  // Sort: A first, then B, then C, then null grade
-  const gradeOrder = { A: 0, B: 1, C: 2, null: 3 };
-  const available = [...data.people].sort((a, b) => {
-    return (gradeOrder[a.grade] ?? 3) - (gradeOrder[b.grade] ?? 3);
+  const gradeOrder = { A: 0, B: 1, C: 2 };
+  const currentPerson = currentPersonId ? data.people.find(p => p.id === currentPersonId) : null;
+
+  // Classify each person
+  const classified = data.people.map(person => {
+    const reason = ineligibleReason(person, clinic, slotType, data.clinics);
+    return { person, eligible: !reason, reason };
   });
 
-  const currentPerson = currentPersonId ? data.people.find(p => p.id === currentPersonId) : null;
+  // Sort eligible by grade
+  const eligible = classified
+    .filter(c => c.eligible)
+    .sort((a, b) => (gradeOrder[a.person.grade] ?? 3) - (gradeOrder[b.person.grade] ?? 3));
+
+  const ineligible = classified.filter(c => !c.eligible);
+
+  // Top 3 eligible = suggestions (if no current assignment)
+  const suggestions = !currentPersonId ? eligible.slice(0, 3) : [];
+  const rest = !currentPersonId ? eligible.slice(3) : eligible;
 
   return (
     <div ref={ref} className="popover" onClick={e => e.stopPropagation()}>
@@ -49,33 +90,75 @@ export default function SlotPopover({ clinic, slotType, currentPersonId, onAssig
             </button>
           </div>
           <div className="popover-divider" />
+          <div className="popover-section-label">Staff</div>
+          {eligible.map(({ person }) => (
+            <PersonRow key={person.id} person={person} isCurrent={person.id === currentPersonId} clinic={clinic} slotType={slotType} onAssign={onAssign} />
+          ))}
+          {ineligible.length > 0 && (
+            <>
+              <div className="popover-divider" />
+              <div className="popover-section-label">Ineligible</div>
+              {ineligible.map(({ person, reason }) => (
+                <PersonRow key={person.id} person={person} isCurrent={false} dimmed reason={reason} clinic={clinic} slotType={slotType} onAssign={onAssign} />
+              ))}
+            </>
+          )}
         </>
       )}
-      <div className="popover-section-label">Staff</div>
-      {available.map(person => {
-        const isCurrent = person.id === currentPersonId;
-        const hasRoleWarning = !person.roles.map(r => r.toLowerCase()).includes(slotType);
-        const hasLockedWarning = person.lockedTo && person.lockedTo !== clinic.provider;
-        return (
-          <div
-            key={person.id}
-            className={`popover-item ${isCurrent ? 'current-person' : ''}`}
-            onClick={() => onAssign(person.id)}
-          >
-            <div className="dot" style={{ background: person.color }} />
-            <span style={{ flex: 1 }}>{person.name}</span>
-            {person.grade && (
-              <span className={`grade-badge ${person.grade}`}>{person.grade}</span>
-            )}
-            {(hasRoleWarning || hasLockedWarning) && (
-              <span
-                style={{ fontSize: 10, color: 'var(--amber)', marginLeft: 2 }}
-                title={hasLockedWarning ? `Locked to ${person.lockedTo}` : 'Role mismatch'}
-              >⚠</span>
-            )}
-          </div>
-        );
-      })}
+
+      {!currentPerson && (
+        <>
+          {suggestions.length > 0 && (
+            <>
+              <div className="popover-section-label" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <Zap size={10} /> Suggested
+              </div>
+              {suggestions.map(({ person }) => (
+                <PersonRow key={person.id} person={person} isCurrent={false} suggested clinic={clinic} slotType={slotType} onAssign={onAssign} />
+              ))}
+              {(rest.length > 0 || ineligible.length > 0) && <div className="popover-divider" />}
+            </>
+          )}
+          {rest.length > 0 && (
+            <>
+              <div className="popover-section-label">All Staff</div>
+              {rest.map(({ person }) => (
+                <PersonRow key={person.id} person={person} isCurrent={false} clinic={clinic} slotType={slotType} onAssign={onAssign} />
+              ))}
+            </>
+          )}
+          {ineligible.length > 0 && (
+            <>
+              <div className="popover-divider" />
+              <div className="popover-section-label">Ineligible</div>
+              {ineligible.map(({ person, reason }) => (
+                <PersonRow key={person.id} person={person} isCurrent={false} dimmed reason={reason} clinic={clinic} slotType={slotType} onAssign={onAssign} />
+              ))}
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function PersonRow({ person, isCurrent, dimmed, suggested, reason, clinic, slotType, onAssign }) {
+  const hasLockedWarning = person.lockedTo && person.lockedTo !== clinic.provider;
+
+  return (
+    <div
+      className={`popover-item${isCurrent ? ' current-person' : ''}${suggested ? ' suggested-item' : ''}`}
+      style={{ opacity: dimmed ? 0.5 : 1, cursor: dimmed ? 'default' : 'pointer' }}
+      onClick={() => !dimmed && onAssign(person.id)}
+      title={reason ?? undefined}
+    >
+      <div className="dot" style={{ background: person.color }} />
+      <span style={{ flex: 1 }}>{person.name}</span>
+      {person.grade && <span className={`grade-badge ${person.grade}`}>{person.grade}</span>}
+      {hasLockedWarning && !dimmed && (
+        <span style={{ fontSize: 10, color: 'var(--amber)', marginLeft: 2 }} title={`Locked to ${person.lockedTo}`}>⚠</span>
+      )}
+      {reason && <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{reason}</span>}
     </div>
   );
 }
