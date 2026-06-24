@@ -4,18 +4,24 @@ import { Trash2, Zap } from 'lucide-react';
 import { DAYS, getSlotPersonId } from '../data/seed.js';
 
 /** Returns reason why person can't fill this slot, or null if they can */
-function ineligibleReason(person, clinic, slotType, clinics) {
+function ineligibleReason(person, clinic, slotType, clinics, additionalTasks) {
   // Day off
   if ((person.daysOff ?? []).includes(clinic.day)) return 'Off this day';
 
-  // Already assigned elsewhere on this day (different clinic)
-  const alreadyAssigned = clinics.some(c =>
+  // Already assigned to another clinic slot on this day
+  const clinicAssigned = clinics.some(c =>
     c.id !== clinic.id &&
     c.day === clinic.day &&
     c.open &&
     Object.entries(c.slots).some(([, sv]) => getSlotPersonId(sv) === person.id)
   );
-  if (alreadyAssigned) return 'Already assigned this day';
+  if (clinicAssigned) return 'Already assigned today';
+
+  // Already assigned to an additional task on this day
+  const taskAssigned = (additionalTasks ?? []).some(t =>
+    t.day === clinic.day && t.assignedPersonId === person.id
+  );
+  if (taskAssigned) return 'Already assigned today';
 
   // Role check
   if (!person.roles.map(r => r.toLowerCase()).includes(slotType)) return 'Role not in their list';
@@ -57,7 +63,7 @@ export default function SlotPopover({ clinic, slotType, currentPersonId, onAssig
 
   // Classify each person
   const classified = data.people.map(person => {
-    const reason = ineligibleReason(person, clinic, slotType, data.clinics);
+    const reason = ineligibleReason(person, clinic, slotType, data.clinics, data.additionalTasks);
     return { person, eligible: !reason, reason };
   });
 

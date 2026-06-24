@@ -8,7 +8,7 @@ import { getConflictPersonDays } from './ConflictBanner.jsx';
 
 function PatientBadge({ count }) {
   if (count == null) return null;
-  const cls = count > 50 ? 'red' : count >= 30 ? 'amber' : 'neutral';
+  const cls = count >= 68 ? 'red' : count >= 55 ? 'amber' : 'neutral';
   return (
     <div className="patient-badge">
       <div className={`pt-dot ${cls}`} />
@@ -194,7 +194,7 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
 
 export default function ClinicCard({ clinic, onPersonClick, onEditClinic, matchedPersonIds, hasSearch }) {
   const { data, isAdmin, updateClinic } = useApp();
-  const showMiddleHint = isAdmin && clinic.open && (clinic.patientCount ?? 0) > 50 && !getSlotPersonId(clinic.slots.middle);
+  const showMiddleHint = isAdmin && clinic.open && (clinic.patientCount ?? 0) >= 68 && !getSlotPersonId(clinic.slots.middle);
   const conflictSet = isAdmin ? getConflictPersonDays(data.clinics, data.people) : null;
 
   if (!clinic.open && !isAdmin) return null;
@@ -258,7 +258,7 @@ export default function ClinicCard({ clinic, onPersonClick, onEditClinic, matche
       {showMiddleHint && (
         <div className="hint-middle">
           <Users size={12} />
-          Consider adding Middle ({clinic.patientCount} patients)
+          High volume — consider adding a Middle tech
         </div>
       )}
     </div>

@@ -77,7 +77,7 @@ function OverlayInner({ person, onClose }) {
         <div className="dot-lg" style={{ background: person.color }} />
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 20, fontWeight: 500 }}>{person.name}</div>
-          {person.grade && (
+          {isAdmin && person.grade && (
             <span className={`grade-badge ${person.grade}`} style={{ marginTop: 4, display: 'inline-block' }}>
               {person.grade}
             </span>

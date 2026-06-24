@@ -38,7 +38,7 @@ function Toggle({ on, onChange, label }) {
 
 function patientClass(n) {
   if (n == null || isNaN(n)) return 'neutral';
-  return n > 50 ? 'red' : n >= 30 ? 'amber' : 'neutral';
+  return n >= 68 ? 'red' : n >= 55 ? 'amber' : 'neutral';
 }
 
 export default function ClinicConfig({ clinicId, onClose }) {
@@ -126,7 +126,7 @@ export default function ClinicConfig({ clinicId, onClose }) {
           {clinic.patientCount != null && (
             <div className={`patient-indicator ${ptClass}`} style={{ marginTop: 6 }}>
               <div className={`pt-dot ${ptClass}`} />
-              {ptClass === 'neutral' ? 'Light day' : ptClass === 'amber' ? 'Moderate' : 'Busy — consider Middle'}
+              {ptClass === 'neutral' ? 'Light day' : ptClass === 'amber' ? 'Busy' : 'High volume'}
             </div>
           )}
         </div>
