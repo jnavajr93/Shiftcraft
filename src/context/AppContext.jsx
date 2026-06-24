@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { getSeedData, migratePerson, generateId } from '../data/seed.js';
 
 const STORAGE_KEY = 'shiftcraft.v5';         // global clinic/people definitions
@@ -283,6 +283,22 @@ export function AppProvider({ children }) {
     setChangelog(prev => [{ ...entry, timestamp: Date.now() }, ...prev]);
   }, []);
 
+  // ─── Save toast ──────────────────────────────
+  const [savedToast, setSavedToast] = useState(false);
+  const isFirstRender = useRef(true);
+  const saveToastTimer = useRef(null);
+  const dismissTimer = useRef(null);
+
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    clearTimeout(saveToastTimer.current);
+    clearTimeout(dismissTimer.current);
+    saveToastTimer.current = setTimeout(() => {
+      setSavedToast(true);
+      dismissTimer.current = setTimeout(() => setSavedToast(false), 1400);
+    }, 600);
+  }, [globalData]);
+
   // ─── Week navigation ────────────────────────
   const navigateWeek = useCallback((delta) => {
     setCurrentWeek(prev => {
@@ -546,6 +562,7 @@ export function AppProvider({ children }) {
   return (
     <AppContext.Provider value={{
       data,
+      savedToast,
       isAdmin, setIsAdmin,
       theme, setTheme,
       currentWeek, weekLabel,

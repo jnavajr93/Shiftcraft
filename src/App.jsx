@@ -20,7 +20,7 @@ import AdditionalTasks from './components/AdditionalTasks.jsx';
 import ConflictBanner from './components/ConflictBanner.jsx';
 
 function AppContent() {
-  const { data, isAdmin, assignSlot, assignTask } = useApp();
+  const { data, isAdmin, assignSlot, assignTask, savedToast } = useApp();
   const [activeTab, setActiveTab] = useState('schedule');
   const [selectedPersonId, setSelectedPersonId] = useState(null);
   const [configClinicId, setConfigClinicId] = useState(null);
@@ -113,6 +113,10 @@ function AppContent() {
           />
         )}
       </div>
+
+      {savedToast && (
+        <div className="saved-toast">✓ Saved</div>
+      )}
 
       <DragOverlay dropAnimation={null}>
         {activePerson ? (
