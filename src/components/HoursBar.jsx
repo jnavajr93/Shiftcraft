@@ -60,7 +60,7 @@ export default function HoursBar() {
                     className="progress-fill"
                     style={{
                       width: `${pct * 100}%`,
-                      background: isOver ? 'var(--amber)' : person.color,
+                      background: isOver ? 'var(--amber)' : 'var(--accent)',
                     }}
                   />
                 </div>
