@@ -93,7 +93,7 @@ function TaskSlotRow({ task, onPersonClick, onRemove }) {
       ref={setNodeRef}
       className={`task-slot${isOver && isAdmin ? ' drop-target' : ''}`}
       onClick={handleRowClick}
-      style={{ cursor: isAdmin ? 'pointer' : 'default' }}
+      style={{ cursor: isAdmin ? 'pointer' : 'default', zIndex: showPopover ? 10 : undefined }}
     >
       <div className="task-label">{task.label}</div>
       {task.locationTag && (
