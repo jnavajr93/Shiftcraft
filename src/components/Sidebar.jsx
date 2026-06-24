@@ -2,11 +2,21 @@ import { useDraggable } from '@dnd-kit/core';
 import { useApp } from '../context/AppContext.jsx';
 import { calcPersonWeeklyHours } from '../data/seed.js';
 
+const SKILL_ABBR = {
+  'Workup':     'WU',
+  'Treatments': 'Tx',
+  'FAs':        'FA',
+  'Autoclave':  'AC',
+  'Closing':    'CL',
+};
+
 function PersonCard({ person, onPersonClick, clinics }) {
   const hours = calcPersonWeeklyHours(person.id, clinics);
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: person.id,
   });
+
+  const skills = person.skills ?? [];
 
   return (
     <div
@@ -21,6 +31,15 @@ function PersonCard({ person, onPersonClick, clinics }) {
         {person.name}
       </span>
       {person.grade && <span className={`grade-badge ${person.grade}`}>{person.grade}</span>}
+      {skills.length > 0 && (
+        <div className="sidebar-skills">
+          {skills.map(s => (
+            <span key={s} className="skill-badge" title={s}>
+              {SKILL_ABBR[s] ?? s.slice(0, 2)}
+            </span>
+          ))}
+        </div>
+      )}
       <span className="person-sidebar-hours">{hours}h</span>
     </div>
   );

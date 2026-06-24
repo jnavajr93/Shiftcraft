@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { getSeedData, migratePerson } from '../data/seed.js';
+import { getSeedData, migratePerson, generateId } from '../data/seed.js';
 
-const STORAGE_KEY = 'shiftcraft.v3';         // global clinic/people definitions
+const STORAGE_KEY = 'shiftcraft.v5';         // global clinic/people definitions
 const CHANGELOG_KEY = 'shiftcraft.changelog';
 
 const AppContext = createContext(null);
@@ -87,13 +87,116 @@ function migrateData(raw) {
   };
 }
 
+// ─── Idempotent migrations ────────────────────
+// Each migration runs once, guarded by a localStorage flag.
+// Runs synchronously before React state initialises so the
+// corrected data is used from the very first render.
+function runMigrations(data) {
+  let d = data;
+  let dirty = false;
+
+  // ── Migration: avail ─────────────────────────
+  // Wipe all availabilityWindows and re-apply only the known-correct
+  // values for Yadi. Fixes stale 12:30 PM (750 min) defaults.
+  if (!localStorage.getItem('shiftcraft.migration.avail')) {
+    d = {
+      ...d,
+      people: d.people.map(p => {
+        let windows = {};
+        if (p.name === 'Yadi') {
+          windows = {
+            Mon: { startNotBefore: null, endNoLater: 990 },
+            Wed: { startNotBefore: null, endNoLater: 990 },
+            Thu: { startNotBefore: null, endNoLater: 870 },
+            Fri: { startNotBefore: null, endNoLater: 990 },
+          };
+        }
+        return { ...p, availabilityWindows: windows };
+      }),
+    };
+    try { localStorage.setItem('shiftcraft.migration.avail', '1'); } catch { /* ignore */ }
+    dirty = true;
+  }
+
+  // ── Migration: obs ───────────────────────────
+  // Add OBS location and Thu/Fri clinics if missing.
+  if (!localStorage.getItem('shiftcraft.migration.obs')) {
+    let { locations, clinics } = d;
+    if (!locations.includes('OBS')) {
+      locations = [...locations, 'OBS'];
+    }
+    if (!clinics.some(c => c.location === 'OBS' && c.day === 'Thu')) {
+      clinics = [...clinics, {
+        id: 'thu-obs', day: 'Thu', week: 'A', location: 'OBS', provider: '',
+        open: true, startTime: 480, endTime: 1020, patientCount: null,
+        slots: { scribe: null, opener: null, closing: null, middle: null, training: null },
+      }];
+    }
+    if (!clinics.some(c => c.location === 'OBS' && c.day === 'Fri')) {
+      clinics = [...clinics, {
+        id: 'fri-obs', day: 'Fri', week: 'A', location: 'OBS', provider: '',
+        open: true, startTime: 480, endTime: 1020, patientCount: null,
+        slots: { scribe: null, opener: null, closing: null, middle: null, training: null },
+      }];
+    }
+    d = { ...d, locations, clinics };
+    try { localStorage.setItem('shiftcraft.migration.obs', '1'); } catch { /* ignore */ }
+    dirty = true;
+  }
+
+  // ── Migration: skills ────────────────────────
+  // Split any merged 'Autoclave and Closing' / 'Autoclave, Closing'
+  // skill entries into two separate entries.
+  if (!localStorage.getItem('shiftcraft.migration.skills')) {
+    d = {
+      ...d,
+      people: d.people.map(p => {
+        const skills = (p.skills ?? []).flatMap(s => {
+          if (s === 'Autoclave and Closing' || s === 'Autoclave, Closing') {
+            return ['Autoclave', 'Closing'];
+          }
+          return [s];
+        });
+        return { ...p, skills };
+      }),
+    };
+    try { localStorage.setItem('shiftcraft.migration.skills', '1'); } catch { /* ignore */ }
+    dirty = true;
+  }
+
+  // Save corrected data back to localStorage
+  if (dirty) {
+    try {
+      const { clinics, additionalTasks, ...rest } = d;
+      const definitionClinics = clinics.map(({ slots, ...def }) => ({
+        ...def,
+        slots: { scribe: null, opener: null, closing: null, middle: null, training: null },
+      }));
+      const definitionTasks = (additionalTasks ?? []).map(({ assignedPersonId, ...t }) => ({
+        ...t, assignedPersonId: null,
+      }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        ...rest, clinics: definitionClinics, additionalTasks: definitionTasks,
+      }));
+    } catch { /* ignore */ }
+  }
+
+  return d;
+}
+
 // ─── Load global data ─────────────────────────
 function loadGlobal() {
+  let data;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return migrateData(JSON.parse(raw));
+    // Try current key first; fall back to any previous key so migrations
+    // can still run on data that predates the current STORAGE_KEY.
+    const raw = localStorage.getItem(STORAGE_KEY)
+      ?? localStorage.getItem('shiftcraft.v3')
+      ?? localStorage.getItem('shiftcraft.v4');
+    if (raw) data = migrateData(JSON.parse(raw));
   } catch { /* ignore */ }
-  return getSeedData();
+  if (!data) data = getSeedData();
+  return runMigrations(data);
 }
 
 // ─── Change log ───────────────────────────────
@@ -300,6 +403,10 @@ export function AppProvider({ children }) {
     setGlobalData(prev => ({ ...prev, people: [...prev.people, person] }));
   }, []);
 
+  const reorderPeople = useCallback((newOrder) => {
+    setGlobalData(prev => ({ ...prev, people: newOrder }));
+  }, []);
+
   const deletePerson = useCallback((personId) => {
     // Scan ALL stored weeks in localStorage and null out this person
     try {
@@ -398,7 +505,7 @@ export function AppProvider({ children }) {
       navigateWeek, weekIsEmpty, copyFromPreviousWeek,
       updateClinic, assignSlot,
       assignTask, addTask, removeTask,
-      updatePerson, addPerson, deletePerson,
+      updatePerson, addPerson, deletePerson, reorderPeople,
       addClinic, removeClinic, addLocation, removeLocation,
       changelog, clearChangelog, addLog,
     }}>

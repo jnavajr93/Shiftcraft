@@ -2,6 +2,7 @@ export const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 export const ROLES = ['Scribe', 'Opener', 'Middle', 'Closing', 'Training'];
 export const SLOT_TYPES = ['scribe', 'opener', 'closing', 'middle', 'training'];
 export const EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'PRN'];
+export const SKILLS = ['Workup', 'Treatments', 'FAs', 'Autoclave', 'Closing'];
 export const ACCOMMODATION_TYPES = [
   'extended_lunch',
   'early_leave',
@@ -94,6 +95,7 @@ export function migratePerson(p) {
     employmentType: p.employmentType ?? 'Full-time',
     grade: p.grade ?? null,
     roles: p.roles ?? [],
+    skills: p.skills ?? [],
     clearedLocations: p.clearedLocations ?? p.locations ?? [],
     preferredLocations: p.preferredLocations ?? p.preferences?.preferredLocations ?? [],
     lockedTo,
@@ -108,7 +110,7 @@ export function getSeedData() {
   const people = [
     {
       id: 'john', name: 'John', color: '#2563eb', employmentType: 'Full-time',
-      grade: null, roles: ['Scribe'], clearedLocations: [], preferredLocations: [],
+      grade: null, roles: ['Scribe'], skills: [], clearedLocations: [], preferredLocations: [],
       lockedTo: ['Dr. R'], daysOff: ['Tue', 'Wed'],
       availabilityWindows: {},
       accommodations: [],
@@ -116,7 +118,7 @@ export function getSeedData() {
     },
     {
       id: 'jc', name: 'JC', color: '#16a34a', employmentType: 'Full-time',
-      grade: null, roles: ['Scribe'], clearedLocations: [], preferredLocations: [],
+      grade: null, roles: ['Scribe'], skills: [], clearedLocations: [], preferredLocations: [],
       lockedTo: ['Dr. A'], daysOff: ['Mon', 'Wed'],
       availabilityWindows: {},
       accommodations: [],
@@ -124,7 +126,7 @@ export function getSeedData() {
     },
     {
       id: 'nikole', name: 'Nikole', color: '#0891b2', employmentType: 'Full-time',
-      grade: null, roles: ['Scribe'], clearedLocations: [], preferredLocations: [],
+      grade: null, roles: ['Scribe'], skills: [], clearedLocations: [], preferredLocations: [],
       lockedTo: [], daysOff: [],
       availabilityWindows: {},
       accommodations: [],
@@ -132,7 +134,7 @@ export function getSeedData() {
     },
     {
       id: 'yadi', name: 'Yadi', color: '#db2777', employmentType: 'Full-time',
-      grade: null, roles: ['Scribe', 'Opener', 'Middle', 'Closing'], clearedLocations: [], preferredLocations: [],
+      grade: null, roles: ['Scribe', 'Opener', 'Middle', 'Closing'], skills: [], clearedLocations: [], preferredLocations: [],
       lockedTo: ['Dr. B'], daysOff: [],
       availabilityWindows: {
         Mon: { startNotBefore: null, endNoLater: 990 },
@@ -145,7 +147,7 @@ export function getSeedData() {
     },
     {
       id: 'martha', name: 'Martha', color: '#9333ea', employmentType: 'Part-time',
-      grade: null, roles: ['Opener'], clearedLocations: [], preferredLocations: [],
+      grade: null, roles: ['Opener'], skills: [], clearedLocations: [], preferredLocations: [],
       lockedTo: [], daysOff: [],
       availabilityWindows: {},
       accommodations: [
@@ -155,7 +157,7 @@ export function getSeedData() {
     },
     {
       id: 'alondra', name: 'Alondra', color: '#ea580c', employmentType: 'Full-time',
-      grade: null, roles: ['Opener', 'Middle', 'Closing', 'Scribe'], clearedLocations: [], preferredLocations: [],
+      grade: null, roles: ['Opener', 'Middle', 'Closing', 'Scribe'], skills: [], clearedLocations: [], preferredLocations: [],
       lockedTo: [], daysOff: [],
       availabilityWindows: {},
       accommodations: [],
@@ -163,7 +165,7 @@ export function getSeedData() {
     },
     {
       id: 'jaron', name: 'Jaron', color: '#65a30d', employmentType: 'Full-time',
-      grade: null, roles: ['Opener', 'Middle', 'Closing'], clearedLocations: [], preferredLocations: [],
+      grade: null, roles: ['Opener', 'Middle', 'Closing'], skills: [], clearedLocations: [], preferredLocations: [],
       lockedTo: [], daysOff: [],
       availabilityWindows: {},
       accommodations: [],
@@ -171,7 +173,7 @@ export function getSeedData() {
     },
     {
       id: 'jocelyn', name: 'Jocelyn', color: '#0d9488', employmentType: 'Full-time',
-      grade: null, roles: ['Opener', 'Middle', 'Closing'], clearedLocations: [], preferredLocations: [],
+      grade: null, roles: ['Opener', 'Middle', 'Closing'], skills: [], clearedLocations: [], preferredLocations: [],
       lockedTo: [], daysOff: [],
       availabilityWindows: {},
       accommodations: [],
@@ -179,7 +181,7 @@ export function getSeedData() {
     },
     {
       id: 'itzel', name: 'Itzel', color: '#c026d3', employmentType: 'Full-time',
-      grade: null, roles: ['Opener', 'Middle', 'Closing'], clearedLocations: [], preferredLocations: [],
+      grade: null, roles: ['Opener', 'Middle', 'Closing'], skills: [], clearedLocations: [], preferredLocations: [],
       lockedTo: [], daysOff: [],
       availabilityWindows: {},
       accommodations: [],
@@ -187,7 +189,7 @@ export function getSeedData() {
     },
     {
       id: 'katina', name: 'Katina', color: '#0284c7', employmentType: 'Full-time',
-      grade: null, roles: ['Opener', 'Middle', 'Closing', 'Scribe'], clearedLocations: [], preferredLocations: [],
+      grade: null, roles: ['Opener', 'Middle', 'Closing', 'Scribe'], skills: [], clearedLocations: [], preferredLocations: [],
       lockedTo: [], daysOff: [],
       availabilityWindows: {},
       accommodations: [],
@@ -195,7 +197,7 @@ export function getSeedData() {
     },
     {
       id: 'lizbeth', name: 'Lizbeth', color: '#7c3aed', employmentType: 'Full-time',
-      grade: null, roles: ['Opener', 'Middle', 'Closing', 'Scribe'], clearedLocations: [], preferredLocations: [],
+      grade: null, roles: ['Opener', 'Middle', 'Closing', 'Scribe'], skills: [], clearedLocations: [], preferredLocations: [],
       lockedTo: [], daysOff: [],
       availabilityWindows: {},
       accommodations: [],
@@ -203,7 +205,7 @@ export function getSeedData() {
     },
   ];
 
-  const locations = ['Phoenix', 'Chandler', 'Estrella', 'Scottsdale'];
+  const locations = ['Phoenix', 'Chandler', 'Estrella', 'Scottsdale', 'OBS'];
   const providers = ['Dr. R', 'Dr. A', 'Dr. S', 'Dr. B'];
 
   // Note: JC daysOff Mon,Wed and John daysOff Tue,Wed — seed reflects this
@@ -227,6 +229,9 @@ export function getSeedData() {
     { id: 'fri-estrella-drs',   day: 'Fri', week: 'A', location: 'Estrella',   provider: 'Dr. S', open: true, startTime: 540, endTime: 1080, patientCount: 15, slots: { scribe: 'nikole', opener: null,      closing: null,      middle: null,     training: null } },
     { id: 'fri-estrella-drb',   day: 'Fri', week: 'A', location: 'Estrella',   provider: 'Dr. B', open: true, startTime: 480, endTime:  990, patientCount: 20, slots: { scribe: 'yadi',   opener: null,      closing: null,      middle: null,     training: null } },
     { id: 'fri-phoenix-drr',    day: 'Fri', week: 'A', location: 'Phoenix',    provider: 'Dr. R', open: true, startTime: 480, endTime: 1020, patientCount: 38, slots: { scribe: 'john',   opener: 'martha',  closing: 'jaron',   middle: null,     training: null } },
+    // OBS (Surgery Center)
+    { id: 'thu-obs', day: 'Thu', week: 'A', location: 'OBS', provider: '', open: true, startTime: 480, endTime: 1020, patientCount: null, slots: { scribe: null, opener: null, closing: null, middle: null, training: null } },
+    { id: 'fri-obs', day: 'Fri', week: 'A', location: 'OBS', provider: '', open: true, startTime: 480, endTime: 1020, patientCount: null, slots: { scribe: null, opener: null, closing: null, middle: null, training: null } },
   ];
 
   const additionalTasks = [];

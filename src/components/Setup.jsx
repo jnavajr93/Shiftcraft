@@ -1,8 +1,15 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Trash2, Plus, Pencil, GripVertical, X } from 'lucide-react';
+import {
+  DndContext, closestCenter, PointerSensor, useSensor, useSensors,
+} from '@dnd-kit/core';
+import {
+  SortableContext, verticalListSortingStrategy, useSortable, arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useApp } from '../context/AppContext.jsx';
 import {
-  generateId, DAYS, minutesToTime, ROLES, EMPLOYMENT_TYPES,
+  generateId, DAYS, minutesToTime, ROLES, EMPLOYMENT_TYPES, SKILLS,
   ACCOMMODATION_TYPES, EARLY_LEAVE_REASONS, accommodationLabel,
 } from '../data/seed.js';
 import ClinicConfig from './ClinicConfig.jsx';
@@ -18,14 +25,11 @@ function toggleArr(arr, item) {
   return arr.includes(item) ? arr.filter(x => x !== item) : [...arr, item];
 }
 
-// ─── Availability Windows ────────────────────
-function AvailabilityTable({ windows, daysOff, onChange }) {
-  const activeDays = DAYS.filter(d => !daysOff.includes(d));
-  if (activeDays.length === 0) return null;
-
-  const setWindow = (day, field, val) => {
-    onChange({ ...windows, [day]: { ...(windows[day] ?? {}), [field]: val } });
-  };
+// ─── Availability Constraints ─────────────────
+function AvailabilityConstraints({ windows, daysOff, onChange }) {
+  const constrainedDays = Object.keys(windows).filter(
+    d => windows[d] && (windows[d].startNotBefore != null || windows[d].endNoLater != null)
+  );
 
   const parseTime = (str) => {
     if (!str) return null;
@@ -40,33 +44,77 @@ function AvailabilityTable({ windows, daysOff, onChange }) {
     return `${h}:${m}`;
   };
 
+  const addConstraint = () => {
+    const available = DAYS.filter(d => !daysOff.includes(d) && !constrainedDays.includes(d));
+    if (available.length === 0) return;
+    const day = available[0];
+    onChange({ ...windows, [day]: { startNotBefore: null, endNoLater: null } });
+  };
+
+  const removeConstraint = (day) => {
+    const next = { ...windows };
+    delete next[day];
+    onChange(next);
+  };
+
+  const setField = (day, field, val) => {
+    onChange({ ...windows, [day]: { ...(windows[day] ?? {}), [field]: val } });
+  };
+
+  const changeDay = (oldDay, newDay) => {
+    const next = { ...windows };
+    next[newDay] = next[oldDay];
+    delete next[oldDay];
+    onChange(next);
+  };
+
+  const availableDaysForRow = (currentDay) =>
+    DAYS.filter(d => !daysOff.includes(d) && (d === currentDay || !constrainedDays.includes(d)));
+
   return (
-    <div className="avail-table">
-      <div className="avail-header">
-        <span>Day</span><span>Start not before</span><span>End no later</span>
-      </div>
-      {activeDays.map(day => {
-        const w = windows[day] ?? {};
-        return (
-          <div key={day} className="avail-row">
-            <span className="avail-day">{day}</span>
-            <input
-              type="time"
-              className="form-input"
-              style={{ padding: '4px 6px', fontSize: 12 }}
-              value={toInputVal(w.startNotBefore)}
-              onChange={e => setWindow(day, 'startNotBefore', parseTime(e.target.value) || null)}
-            />
-            <input
-              type="time"
-              className="form-input"
-              style={{ padding: '4px 6px', fontSize: 12 }}
-              value={toInputVal(w.endNoLater)}
-              onChange={e => setWindow(day, 'endNoLater', parseTime(e.target.value) || null)}
-            />
-          </div>
-        );
-      })}
+    <div className="avail-constraints">
+      {constrainedDays.map(day => (
+        <div key={day} className="avail-constraint-row">
+          <select
+            className="form-input avail-day-select"
+            value={day}
+            onChange={e => changeDay(day, e.target.value)}
+          >
+            {availableDaysForRow(day).map(d => <option key={d}>{d}</option>)}
+          </select>
+          <input
+            type="time"
+            className="form-input avail-time-input"
+            value={toInputVal(windows[day]?.startNotBefore)}
+            onChange={e => setField(day, 'startNotBefore', parseTime(e.target.value) || null)}
+            title="Start not before"
+          />
+          <span className="avail-sep">–</span>
+          <input
+            type="time"
+            className="form-input avail-time-input"
+            value={toInputVal(windows[day]?.endNoLater)}
+            onChange={e => setField(day, 'endNoLater', parseTime(e.target.value) || null)}
+            title="End no later"
+          />
+          <button
+            className="btn btn-icon"
+            style={{ minHeight: 32, padding: 4 }}
+            onClick={() => removeConstraint(day)}
+          >
+            <X size={13} />
+          </button>
+        </div>
+      ))}
+      {DAYS.filter(d => !daysOff.includes(d) && !constrainedDays.includes(d)).length > 0 && (
+        <button
+          className="btn"
+          style={{ minHeight: 30, fontSize: 12, marginTop: constrainedDays.length > 0 ? 4 : 0 }}
+          onClick={addConstraint}
+        >
+          <Plus size={12} /> Add availability constraint
+        </button>
+      )}
     </div>
   );
 }
@@ -178,11 +226,21 @@ function AddAccommodationForm({ locations, providers, onAdd, onCancel }) {
   );
 }
 
-// ─── Person Card ───────────────────────────────
+// ─── Person Card (sortable) ───────────────────
 function PersonCard({ person, providers, locations }) {
   const { updatePerson, deletePerson } = useApp();
   const [showAccForm, setShowAccForm] = useState(false);
   const up = (field, value) => updatePerson(person.id, { [field]: value });
+
+  const {
+    attributes, listeners, setNodeRef, transform, transition, isDragging,
+  } = useSortable({ id: person.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
 
   const confirmDelete = () => {
     if (confirm(`Remove ${person.name} from all schedules?`)) deletePerson(person.id);
@@ -207,9 +265,18 @@ function PersonCard({ person, providers, locations }) {
   };
 
   return (
-    <div className="person-setup-card">
-      {/* Header: color + name + delete */}
+    <div ref={setNodeRef} style={style} className="person-setup-card">
+      {/* Header: drag handle + color + name + delete */}
       <div className="person-setup-header">
+        <button
+          className="drag-handle"
+          {...listeners}
+          {...attributes}
+          tabIndex={-1}
+          title="Drag to reorder"
+        >
+          <GripVertical size={16} />
+        </button>
         <div style={{ position: 'relative', flexShrink: 0 }}>
           <input
             type="color"
@@ -279,6 +346,20 @@ function PersonCard({ person, providers, locations }) {
         </div>
       </div>
 
+      {/* Skills */}
+      <div className="form-group">
+        <label className="form-label">Skills</label>
+        <div className="pill-group">
+          {SKILLS.map(s => (
+            <button
+              key={s}
+              className={`pill small${(person.skills ?? []).includes(s) ? ' active' : ''}`}
+              onClick={() => up('skills', toggleArr(person.skills ?? [], s))}
+            >{s}</button>
+          ))}
+        </div>
+      </div>
+
       {/* Cleared locations */}
       <div className="form-group">
         <label className="form-label">Cleared Locations <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'none', fontWeight: 400 }}>(none = any)</span></label>
@@ -344,7 +425,7 @@ function PersonCard({ person, providers, locations }) {
       {/* Availability windows */}
       <div className="form-group">
         <label className="form-label">Availability Windows</label>
-        <AvailabilityTable
+        <AvailabilityConstraints
           windows={person.availabilityWindows ?? {}}
           daysOff={person.daysOff ?? []}
           onChange={(w) => up('availabilityWindows', w)}
@@ -407,7 +488,6 @@ function PersonCard({ person, providers, locations }) {
 function AddPersonModal({ onClose, existingNames, providers, locations }) {
   const { addPerson, addLog } = useApp();
 
-  // Pick the first unused color from the palette
   const defaultColor = PRESET_COLORS.find(c => !existingNames.includes(c)) ?? PRESET_COLORS[0];
 
   const [form, setForm] = useState({
@@ -416,6 +496,7 @@ function AddPersonModal({ onClose, existingNames, providers, locations }) {
     employmentType: 'Full-time',
     grade: null,
     roles: [],
+    skills: [],
     clearedLocations: [],
     preferredLocations: [],
     lockedTo: [],
@@ -461,6 +542,7 @@ function AddPersonModal({ onClose, existingNames, providers, locations }) {
       employmentType: form.employmentType,
       grade: form.grade,
       roles: form.roles,
+      skills: form.skills,
       clearedLocations: form.clearedLocations,
       preferredLocations: form.preferredLocations,
       lockedTo: form.lockedTo,
@@ -474,10 +556,8 @@ function AddPersonModal({ onClose, existingNames, providers, locations }) {
     onClose();
   };
 
-  // Close on backdrop click
   const handleBackdrop = (e) => { if (e.target === e.currentTarget) onClose(); };
 
-  // Close on Escape
   useEffect(() => {
     const h = (e) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', h);
@@ -562,6 +642,16 @@ function AddPersonModal({ onClose, existingNames, providers, locations }) {
             </div>
           </div>
 
+          {/* Skills */}
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Skills</label>
+            <div className="pill-group">
+              {SKILLS.map(s => (
+                <button key={s} className={`pill small${form.skills.includes(s) ? ' active' : ''}`} onClick={() => set('skills', toggleArr(form.skills, s))}>{s}</button>
+              ))}
+            </div>
+          </div>
+
           {/* Cleared locations */}
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label className="form-label">Cleared Locations <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'none', fontWeight: 400 }}>(none = any)</span></label>
@@ -633,8 +723,19 @@ function AddPersonModal({ onClose, existingNames, providers, locations }) {
 
 // ─── People Tab ───────────────────────────────
 function PeopleTab() {
-  const { data } = useApp();
+  const { data, reorderPeople } = useApp();
   const [showModal, setShowModal] = useState(false);
+
+  const sensors = useSensors(useSensor(PointerSensor, {
+    activationConstraint: { distance: 5 },
+  }));
+
+  const handleDragEnd = ({ active, over }) => {
+    if (!over || active.id === over.id) return;
+    const oldIndex = data.people.findIndex(p => p.id === active.id);
+    const newIndex = data.people.findIndex(p => p.id === over.id);
+    reorderPeople(arrayMove(data.people, oldIndex, newIndex));
+  };
 
   return (
     <div className="setup-content">
@@ -643,16 +744,20 @@ function PeopleTab() {
           <Plus size={15} /> Add Person
         </button>
       </div>
-      <div className="people-grid">
-        {data.people.map(p => (
-          <PersonCard
-            key={p.id}
-            person={p}
-            providers={data.providers}
-            locations={data.locations}
-          />
-        ))}
-      </div>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={data.people.map(p => p.id)} strategy={verticalListSortingStrategy}>
+          <div className="people-grid">
+            {data.people.map(p => (
+              <PersonCard
+                key={p.id}
+                person={p}
+                providers={data.providers}
+                locations={data.locations}
+              />
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
       {showModal && (
         <AddPersonModal
           onClose={() => setShowModal(false)}
