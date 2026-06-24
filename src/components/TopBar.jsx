@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import {
   Calendar, Sun, Moon, ChevronLeft, ChevronRight,
-  History, Printer, Sparkles, Wand2, Loader2, X,
+  History, Printer, Sparkles, Wand2, Loader2, X, CircleHelp,
 } from 'lucide-react';
 import { useApp, isoWeek } from '../context/AppContext.jsx';
+import { useTour } from './Tour.jsx';
 import ChangeLogDrawer from './ChangeLogDrawer.jsx';
 import ChatPanel from './ChatPanel.jsx';
 
@@ -81,6 +82,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
     weekLabel, currentWeek, navigateWeek, weekIsEmpty, copyFromPreviousWeek,
     data, addLog, applyBulkAssignments, restoreClinicSlots, lastSaved,
   } = useApp();
+  const { showWelcomeCard } = useTour();
 
   // Relative "X ago" label — re-evaluated every 15 s
   const [, forceUpdate] = useState(0);
@@ -300,6 +302,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
             <>
               {/* Generate schedule button */}
               <button
+                data-tour="generate-button"
                 className={`btn btn-pill generate-btn${genState === 'error' ? ' generate-error' : genState === 'done' ? ' generate-done' : ''}`}
                 style={{ fontSize: 12, minHeight: 32, gap: 5 }}
                 onClick={genState === 'idle' || genState === 'error' ? handleGenerateClick : undefined}
@@ -334,6 +337,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
                 <Sparkles size={20} strokeWidth={1.5} />
               </button>
               <button
+                data-tour="setup-tab"
                 className={`btn btn-pill ${activeTab === 'setup' ? 'active' : ''}`}
                 onClick={() => setActiveTab(t => t === 'setup' ? 'schedule' : 'setup')}
               >
@@ -350,12 +354,22 @@ export default function TopBar({ activeTab, setActiveTab }) {
               ? <Sun size={20} strokeWidth={1.5} />
               : <Moon size={20} strokeWidth={1.5} />}
           </button>
+          <button
+            data-tour="help-button"
+            className="btn btn-icon"
+            onClick={showWelcomeCard}
+            aria-label="Help tour"
+            title="Take a tour"
+          >
+            <CircleHelp size={20} strokeWidth={1.5} />
+          </button>
           {savedAgoLabel && (
             <span style={{ fontSize: 11, color: 'var(--text-muted, var(--text-secondary))', opacity: 0.7, whiteSpace: 'nowrap' }}>
               {savedAgoLabel}
             </span>
           )}
           <button
+            data-tour="admin-button"
             className={`btn btn-pill ${isAdmin ? 'active' : ''}`}
             onClick={() => setIsAdmin(a => !a)}
           >

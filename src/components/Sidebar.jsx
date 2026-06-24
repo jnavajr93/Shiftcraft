@@ -46,7 +46,7 @@ export default function Sidebar({ onPersonClick }) {
   );
 
   return (
-    <div className="sidebar">
+    <div data-tour="staff-sidebar" className="sidebar">
       <div className="sidebar-header">
         <span className="sidebar-title">Staff</span>
         <span className="count-badge">{data.people.length}</span>

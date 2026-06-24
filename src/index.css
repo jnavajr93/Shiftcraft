@@ -818,3 +818,106 @@ html, body, #root {
   .config-panel { width: 100%; top: 52px; }
   .overlay-backdrop { display: none; }
 }
+
+/* ─── Onboarding Tour ─────────────────────────── */
+.tour-welcome {
+  position: fixed; bottom: 20px; right: 20px; z-index: 400;
+  background: var(--bg-elevated); border: 0.5px solid var(--border-strong);
+  border-radius: var(--radius-lg); padding: 20px 20px 16px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.14);
+  max-width: 300px; min-width: 260px;
+  animation: tourSlideIn 0.35s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+@keyframes tourSlideIn {
+  from { opacity: 0; transform: translateY(24px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.tour-welcome-icon { color: var(--accent); margin-bottom: 10px; }
+.tour-welcome-title { font-size: 15px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
+.tour-welcome-body  { font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 16px; }
+.tour-welcome-actions { display: flex; flex-direction: column; gap: 6px; }
+.tour-skip-btn { font-size: 12px; color: var(--text-muted); background: none; border: none; }
+.tour-skip-btn:hover { color: var(--text-secondary); background: none; }
+
+.tour-tooltip {
+  position: fixed; z-index: 410;
+  width: 288px;
+  background: var(--bg-elevated); border: 0.5px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.16);
+  overflow: hidden;
+  animation: tourFadeIn 0.2s ease both;
+}
+@keyframes tourFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.tour-progress-bar {
+  height: 3px; background: var(--border); position: relative;
+}
+.tour-progress-fill {
+  height: 100%; background: var(--accent);
+  transition: width 0.3s ease;
+}
+.tour-tooltip-body { padding: 14px 16px 12px; }
+.tour-step-counter { font-size: 10px; color: var(--text-muted); margin-bottom: 6px; letter-spacing: 0.04em; text-transform: uppercase; }
+.tour-tooltip-title { font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px; }
+.tour-tooltip-text  { font-size: 12px; color: var(--text-secondary); line-height: 1.55; margin-bottom: 14px; }
+.tour-tooltip-footer { display: flex; align-items: center; gap: 6px; }
+
+/* Arrow pointing toward target */
+.tour-arrow {
+  position: absolute; width: 0; height: 0;
+}
+.tour-tooltip.arrow-top .tour-arrow {
+  top: -7px;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-bottom: 7px solid var(--border-strong);
+}
+.tour-tooltip.arrow-top .tour-arrow::after {
+  content: ''; position: absolute;
+  top: 1px; left: -6px;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 6px solid var(--bg-elevated);
+}
+.tour-tooltip.arrow-bottom .tour-arrow {
+  bottom: -7px;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-top: 7px solid var(--border-strong);
+}
+.tour-tooltip.arrow-bottom .tour-arrow::after {
+  content: ''; position: absolute;
+  top: -8px; left: -6px;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid var(--bg-elevated);
+}
+.tour-tooltip.arrow-left .tour-arrow {
+  left: -7px; top: 20px;
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+  border-right: 7px solid var(--border-strong);
+}
+.tour-tooltip.arrow-left .tour-arrow::after {
+  content: ''; position: absolute;
+  top: -6px; left: 1px;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-right: 6px solid var(--bg-elevated);
+}
+.tour-tooltip.arrow-right .tour-arrow {
+  right: -7px; top: 20px;
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+  border-left: 7px solid var(--border-strong);
+}
+.tour-tooltip.arrow-right .tour-arrow::after {
+  content: ''; position: absolute;
+  top: -6px; left: -8px;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-left: 6px solid var(--bg-elevated);
+}

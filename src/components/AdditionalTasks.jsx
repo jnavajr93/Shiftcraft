@@ -231,7 +231,7 @@ export default function AdditionalTasks({ onPersonClick }) {
   };
 
   return (
-    <div style={{ padding: '0 16px 16px', flexShrink: 0 }}>
+    <div data-tour="additional-tasks" style={{ padding: '0 16px 16px', flexShrink: 0 }}>
       <div style={{ minWidth: 1000 }}>
         <div className="tasks-section-header" style={{ marginBottom: 8 }}>Additional Tasks</div>
         <div className="tasks-grid">

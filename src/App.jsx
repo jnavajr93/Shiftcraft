@@ -9,6 +9,7 @@ import {
 } from '@dnd-kit/core';
 
 import { AppProvider, useApp } from './context/AppContext.jsx';
+import { TourProvider } from './components/Tour.jsx';
 import TopBar from './components/TopBar.jsx';
 import Board from './components/Board.jsx';
 import Sidebar from './components/Sidebar.jsx';
@@ -140,7 +141,9 @@ function AppContent() {
 export default function App() {
   return (
     <AppProvider>
-      <AppContent />
+      <TourProvider>
+        <AppContent />
+      </TourProvider>
     </AppProvider>
   );
 }

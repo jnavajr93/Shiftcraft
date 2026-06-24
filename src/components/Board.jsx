@@ -18,6 +18,7 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic }
         <div className="search-wrap">
           <span className="search-icon"><Search size={15} /></span>
           <input
+            data-tour="search-bar"
             className="search-input"
             type="search"
             placeholder="Search staff…"
@@ -26,7 +27,7 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic }
           />
         </div>
       </div>
-      <div className="board-scroll">
+      <div data-tour="week-board" className="board-scroll">
         <div className="board-grid">
           {DAYS.map(day => {
             const dayClinics = data.clinics.filter(

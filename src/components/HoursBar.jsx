@@ -30,7 +30,7 @@ export default function HoursBar() {
   const totalHours = assigned.reduce((sum, { hours }) => sum + hours, 0);
 
   return (
-    <div className="hours-bar">
+    <div data-tour="hours-bar" className="hours-bar">
       <div className="hours-bar-header" onClick={() => setCollapsed(c => !c)}>
         <span className="hours-bar-title">Hours This Week</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

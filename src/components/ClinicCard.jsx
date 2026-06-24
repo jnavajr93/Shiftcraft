@@ -105,7 +105,7 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
   };
 
   return (
-    <div>
+    <div data-tour={slotType === 'scribe' ? 'slot-scribe' : slotType === 'middle' ? 'slot-middle' : undefined}>
       <div
         ref={setRef}
         className={[
@@ -200,7 +200,7 @@ export default function ClinicCard({ clinic, onPersonClick, onEditClinic, matche
   if (!clinic.open && !isAdmin) return null;
 
   return (
-    <div className={`clinic-card${!clinic.open ? ' closed' : ''}`}>
+    <div data-tour="clinic-card" className={`clinic-card${!clinic.open ? ' closed' : ''}`}>
       <div className="clinic-card-header">
         <div>
           <div className="clinic-card-title">{clinic.provider}</div>
