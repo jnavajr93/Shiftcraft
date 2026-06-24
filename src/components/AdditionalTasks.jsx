@@ -5,7 +5,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { DAYS, generateId } from '../data/seed.js';
 import SlotPopover from './SlotPopover.jsx';
 
-function TaskSlotRow({ task, onPersonClick }) {
+function TaskSlotRow({ task, onPersonClick, onRemove }) {
   const { data, isAdmin, assignTask } = useApp();
   const [showPopover, setShowPopover] = useState(false);
 
@@ -46,8 +46,16 @@ function TaskSlotRow({ task, onPersonClick }) {
           </div>
         )}
       </div>
+      {onRemove && (
+        <button
+          className="task-remove-btn"
+          onClick={e => { e.stopPropagation(); onRemove(); }}
+          title="Remove task"
+        >
+          <X size={12} />
+        </button>
+      )}
       {showPopover && isAdmin && (
-        // For tasks: no role filtering — show all staff
         <TaskPopover
           task={task}
           currentPersonId={task.assignedPersonId}
@@ -208,19 +216,12 @@ export default function AdditionalTasks({ onPersonClick }) {
                 {dayTasks.length > 0 && (
                   <div className="task-card">
                     {dayTasks.map(task => (
-                      <div key={task.id} style={{ position: 'relative' }}>
-                        <TaskSlotRow task={task} onPersonClick={onPersonClick} />
-                        {isAdmin && (
-                          <button
-                            className="clinic-edit-btn"
-                            style={{ position: 'absolute', top: 6, right: 6, opacity: 0 }}
-                            onClick={() => removeTask(task.id)}
-                            title="Remove task"
-                          >
-                            <X size={11} />
-                          </button>
-                        )}
-                      </div>
+                      <TaskSlotRow
+                        key={task.id}
+                        task={task}
+                        onPersonClick={onPersonClick}
+                        onRemove={isAdmin ? () => removeTask(task.id) : undefined}
+                      />
                     ))}
                   </div>
                 )}

@@ -229,20 +229,7 @@ export function getSeedData() {
     { id: 'fri-phoenix-drr',    day: 'Fri', week: 'A', location: 'Phoenix',    provider: 'Dr. R', open: true, startTime: 480, endTime: 1020, patientCount: 38, slots: { scribe: 'john',   opener: 'martha',  closing: 'jaron',   middle: null,     training: null } },
   ];
 
-  const additionalTasks = [
-    { id: 'triage-mon',        label: 'Triage',        day: 'Mon', locationTag: null,        assignedPersonId: null, isLocationSpecific: false },
-    { id: 'see-matt-jo-mon',   label: 'See Matt/Jo',   day: 'Mon', locationTag: null,        assignedPersonId: null, isLocationSpecific: false },
-    { id: 'img-upload-mon-ph', label: 'Imaging Upload', day: 'Mon', locationTag: 'Phoenix',  assignedPersonId: null, isLocationSpecific: true },
-    { id: 'img-upload-mon-es', label: 'Imaging Upload', day: 'Mon', locationTag: 'Estrella', assignedPersonId: null, isLocationSpecific: true },
-    { id: 'triage-tue',        label: 'Triage',        day: 'Tue', locationTag: null,        assignedPersonId: null, isLocationSpecific: false },
-    { id: 'see-matt-jo-tue',   label: 'See Matt/Jo',   day: 'Tue', locationTag: null,        assignedPersonId: null, isLocationSpecific: false },
-    { id: 'triage-wed',        label: 'Triage',        day: 'Wed', locationTag: null,        assignedPersonId: null, isLocationSpecific: false },
-    { id: 'see-matt-jo-wed',   label: 'See Matt/Jo',   day: 'Wed', locationTag: null,        assignedPersonId: null, isLocationSpecific: false },
-    { id: 'triage-thu',        label: 'Triage',        day: 'Thu', locationTag: null,        assignedPersonId: null, isLocationSpecific: false },
-    { id: 'see-matt-jo-thu',   label: 'See Matt/Jo',   day: 'Thu', locationTag: null,        assignedPersonId: null, isLocationSpecific: false },
-    { id: 'triage-fri',        label: 'Triage',        day: 'Fri', locationTag: null,        assignedPersonId: null, isLocationSpecific: false },
-    { id: 'see-matt-jo-fri',   label: 'See Matt/Jo',   day: 'Fri', locationTag: null,        assignedPersonId: null, isLocationSpecific: false },
-  ];
+  const additionalTasks = [];
 
   const taskTypes = ['Triage', 'See Matt/Jo', 'Imaging Upload'];
 

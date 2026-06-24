@@ -67,12 +67,22 @@ function blankSlotMap(clinics, tasks) {
   return map;
 }
 
+// IDs that were pre-seeded and should be stripped on migration
+const SEEDED_TASK_IDS = new Set([
+  'triage-mon','see-matt-jo-mon','img-upload-mon-ph','img-upload-mon-es',
+  'triage-tue','see-matt-jo-tue',
+  'triage-wed','see-matt-jo-wed',
+  'triage-thu','see-matt-jo-thu',
+  'triage-fri','see-matt-jo-fri',
+]);
+
 // ─── Migration ────────────────────────────────
 function migrateData(raw) {
   return {
     ...raw,
     people: (raw.people ?? []).map(migratePerson),
-    additionalTasks: raw.additionalTasks ?? getSeedData().additionalTasks,
+    // Strip pre-seeded tasks; keep only admin-created ones
+    additionalTasks: (raw.additionalTasks ?? []).filter(t => !SEEDED_TASK_IDS.has(t.id)),
     taskTypes: raw.taskTypes ?? getSeedData().taskTypes,
   };
 }
