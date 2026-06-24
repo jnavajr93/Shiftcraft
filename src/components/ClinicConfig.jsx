@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { X } from 'lucide-react';
+import { X, Trash2 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { minutesToTime } from '../data/seed.js';
 
@@ -42,9 +42,10 @@ function patientClass(n) {
 }
 
 export default function ClinicConfig({ clinicId, onClose }) {
-  const { data, updateClinic } = useApp();
+  const { data, updateClinic, removeClinic, addLog } = useApp();
   const clinic = data.clinics.find(c => c.id === clinicId);
   const [open, setIsOpen] = useState(true);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
     if (!clinic) return;
@@ -126,6 +127,40 @@ export default function ClinicConfig({ clinicId, onClose }) {
             </div>
           )}
         </div>
+      </div>
+
+      <div style={{ padding: 16, borderTop: '0.5px solid var(--border)', flexShrink: 0 }}>
+        {confirmDelete ? (
+          <div style={{ background: 'var(--red-bg)', border: '0.5px solid var(--red)', borderRadius: 'var(--radius)', padding: '10px 12px' }}>
+            <div style={{ fontSize: 13, color: 'var(--text-primary)', marginBottom: 8 }}>
+              Delete <strong>{clinic.provider} · {clinic.location}</strong> on <strong>{clinic.day}</strong>?
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                className="btn btn-danger"
+                style={{ minHeight: 34, fontSize: 13 }}
+                onClick={() => {
+                  addLog({ action: `${clinic.provider} · ${clinic.location} on ${clinic.day} removed`, personName: '', day: clinic.day, detail: '' });
+                  removeClinic(clinic.id);
+                  onClose();
+                }}
+              >
+                Yes, delete
+              </button>
+              <button className="btn" style={{ minHeight: 34, fontSize: 13 }} onClick={() => setConfirmDelete(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            className="btn btn-danger"
+            style={{ width: '100%', minHeight: 38, fontSize: 13 }}
+            onClick={() => setConfirmDelete(true)}
+          >
+            <Trash2 size={14} /> Delete clinic
+          </button>
+        )}
       </div>
     </div>
   );

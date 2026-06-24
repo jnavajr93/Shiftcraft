@@ -337,6 +337,25 @@ export function AppProvider({ children }) {
     setGlobalData(prev => ({ ...prev, clinics: [...prev.clinics, clinic] }));
   }, []);
 
+  const removeClinic = useCallback((clinicId) => {
+    setGlobalData(prev => ({
+      ...prev,
+      clinics: prev.clinics.filter(c => c.id !== clinicId),
+    }));
+    // Remove from every stored week in localStorage
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key?.startsWith('shiftcraft.week.')) continue;
+        const map = JSON.parse(localStorage.getItem(key) ?? '{}');
+        if (clinicId in map) {
+          delete map[clinicId];
+          localStorage.setItem(key, JSON.stringify(map));
+        }
+      }
+    } catch { /* ignore */ }
+  }, []);
+
   const addLocation = useCallback((loc) => {
     setGlobalData(prev => ({ ...prev, locations: [...prev.locations, loc] }));
   }, []);
@@ -370,7 +389,7 @@ export function AppProvider({ children }) {
       updateClinic, assignSlot,
       assignTask, addTask, removeTask,
       updatePerson, addPerson, deletePerson,
-      addClinic, addLocation, removeLocation,
+      addClinic, removeClinic, addLocation, removeLocation,
       changelog, clearChangelog, addLog,
     }}>
       {children}

@@ -665,6 +665,71 @@ function PeopleTab() {
   );
 }
 
+// ─── Clinic Row (with inline delete confirm) ──
+function ClinicRow({ c, onEdit, onDeleted }) {
+  const { removeClinic, addLog } = useApp();
+  const [confirming, setConfirming] = useState(false);
+
+  const handleDelete = () => {
+    addLog({ action: `${c.provider} · ${c.location} on ${c.day} removed`, personName: '', day: c.day, detail: '' });
+    removeClinic(c.id);
+    onDeleted?.();
+  };
+
+  if (confirming) {
+    return (
+      <div className="clinic-setup-row" style={{ background: 'var(--red-bg)', borderRadius: 'var(--radius)', padding: '8px 12px', gap: 8 }}>
+        <div style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)' }}>
+          Delete <strong>{c.provider} · {c.location}</strong>?
+        </div>
+        <button
+          className="btn btn-danger"
+          style={{ minHeight: 32, fontSize: 12, padding: '4px 10px' }}
+          onClick={handleDelete}
+        >
+          Yes, delete
+        </button>
+        <button
+          className="btn"
+          style={{ minHeight: 32, fontSize: 12, padding: '4px 10px' }}
+          onClick={() => setConfirming(false)}
+        >
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="clinic-setup-row">
+      <div className="clinic-setup-info">
+        <div className="clinic-setup-primary">{c.provider} · {c.location}</div>
+        <div className="clinic-setup-secondary">
+          {minutesToTime(c.startTime)} – {minutesToTime(c.endTime)}
+          {c.patientCount != null ? ` · ${c.patientCount} pts` : ''}
+          {!c.open ? ' · Closed' : ''}
+        </div>
+      </div>
+      <button
+        className="btn btn-icon"
+        style={{ minHeight: 36 }}
+        onClick={() => onEdit(c.id)}
+        title="Edit clinic"
+      >
+        <Pencil size={14} />
+      </button>
+      <button
+        className="btn btn-icon clinic-delete-btn"
+        style={{ minHeight: 36 }}
+        onClick={() => setConfirming(true)}
+        title="Delete clinic"
+      >
+        <Trash2 size={14} />
+      </button>
+    </div>
+  );
+}
+
 // ─── Clinics Tab ──────────────────────────────
 function ClinicsTab() {
   const { data, addClinic } = useApp();
@@ -691,23 +756,12 @@ function ClinicsTab() {
             <div key={day} className="day-group">
               <div className="day-group-header">{day}</div>
               {dayClinics.map(c => (
-                <div key={c.id} className="clinic-setup-row">
-                  <div className="clinic-setup-info">
-                    <div className="clinic-setup-primary">{c.provider} · {c.location}</div>
-                    <div className="clinic-setup-secondary">
-                      {minutesToTime(c.startTime)} – {minutesToTime(c.endTime)}
-                      {c.patientCount != null ? ` · ${c.patientCount} pts` : ''}
-                      {!c.open ? ' · Closed' : ''}
-                    </div>
-                  </div>
-                  <button
-                    className="btn btn-icon"
-                    style={{ minHeight: 36 }}
-                    onClick={() => setEditId(c.id)}
-                  >
-                    <Pencil size={14} />
-                  </button>
-                </div>
+                <ClinicRow
+                  key={c.id}
+                  c={c}
+                  onEdit={setEditId}
+                  onDeleted={() => { if (editId === c.id) setEditId(null); }}
+                />
               ))}
               <div className="section-add">
                 <button className="btn" style={{ minHeight: 36, fontSize: 13 }} onClick={() => handleAdd(day)}>
