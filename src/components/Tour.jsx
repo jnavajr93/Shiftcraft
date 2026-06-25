@@ -10,7 +10,6 @@ const STAFF_STEPS = [
   { target: 'clinic-card',      title: 'Or tap your name directly',         body: 'Tap your name on any shift chip to open your personal weekly view — every assignment listed in one place.' },
   { target: 'slot-scribe',      title: 'Role slots',                        body: 'Every clinic has a Scribe, Opener, and Closing tech. Middle and Training appear when extra coverage is needed.' },
   { target: 'additional-tasks', title: 'Additional tasks',                  body: 'Off-clinic assignments like Triage or Imaging Upload appear here with their shift time. Check if you have been assigned to any.' },
-  { target: 'admin-button',     title: 'View only — changes need Admin access', body: 'This view is read-only. If you need to make a change, speak to your schedule administrator.' },
   { target: 'help-button',      title: 'Replay this tour anytime',          body: 'Click the ? icon whenever you want to walk through the tour again.', done: true },
 ];
 

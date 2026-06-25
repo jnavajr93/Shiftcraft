@@ -55,6 +55,137 @@ function GenerateModal({ weekLabel, keepExisting, onKeepChange, onConfirm, onCan
   );
 }
 
+// ─── PIN gate modal ──────────────────────────────
+const ADMIN_PIN = '0000';
+
+function PinModal({ onSuccess, onCancel }) {
+  const [digits, setDigits] = useState(['', '', '', '']);
+  const [error, setError] = useState(false);
+  const [shake, setShake] = useState(false);
+  const refs = [useRef(), useRef(), useRef(), useRef()];
+
+  useEffect(() => {
+    refs[0].current?.focus();
+    const onKey = (e) => { if (e.key === 'Escape') onCancel(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const submit = (ds) => {
+    if (ds.join('') === ADMIN_PIN) {
+      onSuccess();
+    } else {
+      setShake(true);
+      setError(true);
+      setDigits(['', '', '', '']);
+      setTimeout(() => {
+        setShake(false);
+        refs[0].current?.focus();
+      }, 500);
+    }
+  };
+
+  const handleChange = (i, val) => {
+    const d = val.replace(/\D/g, '');
+    if (!d) return;
+    const next = [...digits];
+    next[i] = d[d.length - 1];
+    setDigits(next);
+    setError(false);
+    if (i < 3) refs[i + 1].current?.focus();
+    else submit(next);
+  };
+
+  const handlePaste = (e) => {
+    e.preventDefault();
+    const raw = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 4);
+    if (!raw) return;
+    const next = ['', '', '', ''].map((_, i) => raw[i] ?? '');
+    setDigits(next);
+    setError(false);
+    if (raw.length === 4) {
+      refs[3].current?.focus();
+      submit(next);
+    } else {
+      refs[Math.min(raw.length, 3)].current?.focus();
+    }
+  };
+
+  const handleKeyDown = (i, e) => {
+    if (e.key === 'Backspace') {
+      e.preventDefault();
+      const next = [...digits];
+      if (next[i]) {
+        next[i] = '';
+        setDigits(next);
+      } else if (i > 0) {
+        next[i - 1] = '';
+        setDigits(next);
+        refs[i - 1].current?.focus();
+      }
+      setError(false);
+    }
+  };
+
+  return (
+    <div
+      className="overlay-backdrop"
+      style={{ zIndex: 300, backdropFilter: 'blur(4px)' }}
+      onClick={e => { if (e.target === e.currentTarget) onCancel(); }}
+    >
+      <div
+        className="overlay-modal"
+        style={{ maxWidth: 320, textAlign: 'center', padding: '32px 24px' }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div style={{ fontWeight: 600, fontSize: 17, marginBottom: 6 }}>Admin access</div>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>Enter PIN to continue</div>
+        <div
+          style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 16 }}
+          className={shake ? 'pin-shake' : ''}
+        >
+          {digits.map((d, i) => (
+            <input
+              key={i}
+              ref={refs[i]}
+              type="password"
+              inputMode="numeric"
+              maxLength={1}
+              value={d}
+              onChange={e => handleChange(i, e.target.value)}
+              onKeyDown={e => handleKeyDown(i, e)}
+              onPaste={handlePaste}
+              style={{
+                width: 48, height: 56, textAlign: 'center', fontSize: 24,
+                fontWeight: 700, borderRadius: 8,
+                border: `1.5px solid ${error ? '#dc2626' : 'var(--border-strong)'}`,
+                background: 'var(--bg-elevated)',
+                color: 'var(--text-primary)',
+                outline: 'none',
+                caretColor: 'transparent',
+              }}
+            />
+          ))}
+        </div>
+        {error && (
+          <div style={{ fontSize: 12, color: '#dc2626', marginBottom: 12 }}>Incorrect PIN</div>
+        )}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+          <button className="btn" onClick={onCancel}>Cancel</button>
+          <button
+            className="btn btn-primary"
+            onClick={() => submit(digits)}
+            disabled={digits.some(d => d === '')}
+          >
+            Unlock
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const SYSTEM_PROMPT = `You are a scheduling engine for a medical eye clinic. You will receive the complete clinic configuration and staff roster for a week. Fill every clinic slot with appropriate staff.
 
 HARD RULES (never violate):
@@ -148,6 +279,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
   } = useApp();
   const weekLabelRef = useRef(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
   const { showWelcomeCard } = useTour();
 
   // Relative "X ago" label — re-evaluated every 15 s
@@ -452,7 +584,13 @@ export default function TopBar({ activeTab, setActiveTab }) {
           <button
             data-tour="admin-button"
             className={`btn btn-pill btn-admin ${isAdmin ? 'active' : ''}`}
-            onClick={() => setIsAdmin(a => !a)}
+            onClick={() => {
+              if (isAdmin) {
+                setIsAdmin(false);
+              } else {
+                setShowPinModal(true);
+              }
+            }}
           >
             Admin
           </button>
@@ -512,6 +650,12 @@ export default function TopBar({ activeTab, setActiveTab }) {
 
       {showLog && <ChangeLogDrawer onClose={() => setShowLog(false)} />}
       {showChat && <ChatPanel onClose={() => setShowChat(false)} />}
+      {showPinModal && (
+        <PinModal
+          onSuccess={() => { setShowPinModal(false); setIsAdmin(true); }}
+          onCancel={() => setShowPinModal(false)}
+        />
+      )}
     </>
   );
 }

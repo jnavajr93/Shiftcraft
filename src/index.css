@@ -827,6 +827,7 @@ html, body, #root {
   80%       { transform: translateX(4px); }
 }
 .shake { animation: shake 400ms ease; border-color: var(--red) !important; }
+.pin-shake { animation: shake 400ms ease; }
 
 /* ─── Generate Button ────────────────── */
 .generate-btn { font-weight: 500; }
