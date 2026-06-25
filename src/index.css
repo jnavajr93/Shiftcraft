@@ -698,9 +698,15 @@ html, body, #root {
   letter-spacing: 0.06em; color: var(--text-secondary); margin-bottom: 12px;
 }
 .task-slot {
-  display: flex; align-items: center;
-  padding: 6px 12px; border-bottom: 0.5px solid var(--border);
-  gap: 8px; min-height: 36px; position: relative;
+  position: relative;
+  overflow: visible;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 6px 12px;
+  padding-right: 32px;
+  border-bottom: 0.5px solid var(--border);
+  min-height: 36px;
 }
 .task-slot:last-child { border-bottom: none; }
 .task-slot.drop-target { background: var(--accent-subtle); }
@@ -715,6 +721,10 @@ html, body, #root {
 }
 .task-content { flex: 1; display: flex; align-items: center; gap: 6px; }
 .task-remove-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -725,9 +735,6 @@ html, body, #root {
   color: #dc2626;
   cursor: pointer;
   border-radius: 4px;
-  opacity: 1 !important;
-  visibility: visible !important;
-  flex-shrink: 0;
 }
 
 .task-remove-btn:hover {
