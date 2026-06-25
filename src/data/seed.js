@@ -109,7 +109,7 @@ export function calcSlotHours(clinic, slotType) {
   }
 }
 
-export function calcPersonWeeklyHours(personId, clinics) {
+export function calcPersonWeeklyHours(personId, clinics, additionalTasks) {
   let total = 0;
   for (const clinic of clinics) {
     if (!clinic.open) continue;
@@ -118,6 +118,19 @@ export function calcPersonWeeklyHours(personId, clinics) {
         total += calcSlotHours(clinic, slotType);
       }
     }
+  }
+  for (const task of (additionalTasks ?? [])) {
+    if (task.assignedPersonId !== personId) continue;
+    if (task.start == null || task.end == null) continue;
+    let endMin;
+    if (task.end === 'close') {
+      const dayClinics = clinics.filter(c => c.day === task.day && c.open);
+      endMin = dayClinics.length > 0 ? Math.max(...dayClinics.map(c => c.endTime)) : null;
+      if (endMin == null) continue;
+    } else {
+      endMin = task.end;
+    }
+    total += (endMin - task.start) / 60;
   }
   return Math.round(total * 100) / 100;
 }

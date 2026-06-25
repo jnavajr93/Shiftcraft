@@ -63,7 +63,7 @@ function WeekRows({ person, clinics }) {
 function OverlayInner({ person, onClose }) {
   const { data, isAdmin, deletePerson, addLog } = useApp();
   const [confirming, setConfirming] = useState(false);
-  const hours = calcPersonWeeklyHours(person.id, data.clinics);
+  const hours = calcPersonWeeklyHours(person.id, data.clinics, data.additionalTasks);
 
   const handleRemove = () => {
     addLog({ action: `${person.name} removed from roster by admin`, personName: person.name, day: '', detail: '' });

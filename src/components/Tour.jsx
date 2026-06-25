@@ -5,24 +5,32 @@ import { useApp } from '../context/AppContext.jsx';
 // ─── Tour step definitions ─────────────────────────────────────────────────
 
 const STAFF_STEPS = [
-  { target: 'week-board',       title: 'Your weekly schedule',   body: 'Each column is a day. Each card is a clinic running that day at a specific location. Scroll down to see all clinics.' },
-  { target: 'clinic-card',      title: 'Clinic cards',           body: 'Each card shows the provider, location, patient volume, and who is assigned to each role that day.' },
-  { target: 'slot-scribe',      title: 'Role slots',             body: 'Every clinic has a Scribe, Opener, and Closing tech. Middle and Training appear when the clinic needs extra coverage.' },
-  { target: 'search-bar',       title: 'Find your shift fast',   body: 'Type your name here. Your assignments highlight instantly across the whole week — everything else dims.' },
-  { target: 'additional-tasks', title: 'Additional tasks',       body: 'Off-clinic assignments like Triage or Imaging Upload appear here. Check if you have been assigned to any.' },
-  { target: 'admin-button',     title: 'Need to make changes?',  body: 'Staff view is read-only. Click Admin to unlock editing if you have admin access.', done: true },
+  { target: 'week-board',       title: 'Your weekly schedule',              body: 'Each column is a day. Each card is a clinic running at a specific location. Scroll down to see all clinics.' },
+  { target: 'search-bar',       title: 'Two ways to find your shift',       body: 'Type your name in the search bar to highlight all your shifts across the week. Everything else dims.' },
+  { target: 'clinic-card',      title: 'Or tap your name directly',         body: 'Tap your name on any shift chip to open your personal weekly view — every assignment listed in one place.' },
+  { target: 'slot-scribe',      title: 'Role slots',                        body: 'Every clinic has a Scribe, Opener, and Closing tech. Middle and Training appear when extra coverage is needed.' },
+  { target: 'additional-tasks', title: 'Additional tasks',                  body: 'Off-clinic assignments like Triage or Imaging Upload appear here with their shift time. Check if you have been assigned to any.' },
+  { target: 'admin-button',     title: 'View only — changes need Admin access', body: 'This view is read-only. If you need to make a change, speak to your schedule administrator.' },
+  { target: 'help-button',      title: 'Replay this tour anytime',          body: 'Click the ? icon whenever you want to walk through the tour again.', done: true },
 ];
 
 const ADMIN_STEPS = [
-  { target: 'week-board',       title: 'The weekly schedule board', body: 'Your full week at a glance — every location, every provider, every slot. This is where you build the schedule.' },
-  { target: 'staff-sidebar',    title: 'Your staff panel',          body: 'All staff listed here with their grade badge and current hours. Drag any name directly onto a clinic slot to assign them.' },
-  { target: 'clinic-card',      title: 'Clinic cards',              body: 'Each card is one clinic. The badge shows patient count — amber means busy, red means high volume.' },
-  { target: 'slot-scribe',      title: 'Click any slot to assign',  body: 'Click an empty slot to open a staff picker. Your best-fit staff appear at the top sorted by grade and skills.' },
-  { target: 'slot-middle',      title: 'Optional slots',            body: 'Middle and Training slots are optional. Add them when the clinic needs extra coverage — each gets its own custom time.' },
-  { target: 'hours-bar',        title: 'Live hours tracker',        body: 'Updates instantly as you assign staff. Anyone approaching their weekly limit is flagged in amber. No payroll surprises.' },
-  { target: 'generate-button',  title: 'Let AI build the schedule', body: 'Click Generate and Claude fills the entire week based on every staff member\'s skills, availability, and constraints.' },
-  { target: 'additional-tasks', title: 'Additional tasks',          body: 'Assign off-clinic work like Triage or Imaging Upload here. Works the same as clinic slots — drag or click to assign.' },
-  { target: 'setup-tab',        title: 'Configure everything in Setup', body: 'Add staff, set skills and grades, configure clinics, and define availability rules. Set it once — it applies every week.', done: true },
+  { target: 'week-board',       title: 'The weekly schedule board',           body: 'Your full week at a glance — every location, every provider, every slot. This is where you build the schedule.' },
+  { target: 'staff-sidebar',    title: 'Your staff panel',                    body: 'All staff listed by grade with their current hours. Drag any name directly onto a clinic slot to assign them.' },
+  { target: 'clinic-card',      title: 'Clinic cards',                        body: 'Each card is one clinic. The badge shows patient count — amber is busy, red is high volume (68+ patients).' },
+  { target: 'clinic-card',      title: 'Turn off an unscheduled clinic',      body: 'See the power icon on the clinic card header? Click it to mark a clinic closed for the week. It dims in admin view and disappears entirely in staff view.' },
+  { target: 'slot-scribe',      title: 'Click any slot to assign',            body: 'Click an empty slot to open a staff picker. Your best-fit staff appear at the top — sorted by grade and skills, already-assigned staff are excluded.' },
+  { target: 'staff-sidebar',    title: 'Or drag to assign',                   body: 'Drag any staff card from this sidebar and drop it onto any open slot. Works on touch screens too.' },
+  { target: 'slot-middle',      title: 'Optional slots — Middle and Training', body: 'Add a Middle or Training tech when the clinic needs extra coverage. Each gets its own custom start and end time.' },
+  { target: 'hours-bar',        title: 'Live hours tracker',                  body: 'Updates instantly with every assignment. Anyone approaching their weekly limit is flagged in amber. No payroll surprises.' },
+  { target: 'additional-tasks', title: 'Additional tasks',                    body: 'Assign off-clinic work like Triage or Imaging Upload here. Click the task slot to assign someone, then set the shift time for that task.' },
+  { target: 'generate-button',  title: 'Let AI build the schedule',           body: 'Click Generate and Claude fills the entire week based on every staff member\'s skills, availability, constraints, and provider locks.' },
+  { target: 'print-button',     title: 'Print the schedule',                  body: 'Generates a clean one-page schedule ready to print or save as PDF. No UI chrome — just the week your team needs to see.' },
+  { target: 'log-button',       title: 'Change log',                          body: 'Every schedule change is recorded here with a timestamp — who moved where and when. Full accountability without the paperwork.' },
+  { target: 'setup-tab',        title: 'Setup — configure everything',        body: 'Three sections: People, Clinics, and Locations. Set it up once and it applies every week.' },
+  { target: 'setup-tab',        title: 'Setup — People',                      body: 'Add staff, set grades (A/B/C), assign skills, lock to providers, set days off and availability windows. The AI uses all of this when generating the schedule.' },
+  { target: 'setup-tab',        title: 'Setup — Clinics',                     body: 'Configure each clinic\'s start time, end time, and patient count. Toggle clinics open or closed. Add new clinics per day as your schedule grows.' },
+  { target: 'setup-tab',        title: 'Setup — Locations',                   body: 'Add or rename your clinic locations here. Any new location becomes available across all clinics and staff cleared-location settings.', done: true },
 ];
 
 // ─── Tooltip positioning ───────────────────────────────────────────────────

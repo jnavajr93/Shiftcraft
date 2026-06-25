@@ -313,6 +313,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
               </button>
 
               <button
+                data-tour="print-button"
                 className="btn btn-icon"
                 onClick={() => window.print()}
                 aria-label="Print schedule"
@@ -321,6 +322,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
                 <Printer size={20} strokeWidth={1.5} />
               </button>
               <button
+                data-tour="log-button"
                 className="btn btn-icon"
                 onClick={() => setShowLog(s => !s)}
                 aria-label="Change log"

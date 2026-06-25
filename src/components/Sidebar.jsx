@@ -10,7 +10,8 @@ const SKILL_ABBR = {
 };
 
 function PersonCard({ person, onPersonClick, clinics }) {
-  const hours = calcPersonWeeklyHours(person.id, clinics);
+  const { data } = useApp();
+  const hours = calcPersonWeeklyHours(person.id, clinics, data.additionalTasks);
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: person.id,
   });

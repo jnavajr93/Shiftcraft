@@ -1,8 +1,55 @@
 import { useState, useRef, useEffect } from 'react';
 import { useDroppable } from '@dnd-kit/core';
-import { Plus, X, Trash2 } from 'lucide-react';
+import { Plus, X, Trash2, Pencil, Check } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { DAYS, generateId } from '../data/seed.js';
+import { DAYS, generateId, minutesToTime, minutesToTimeInput, timeInputToMinutes } from '../data/seed.js';
+
+function formatTaskTime(task) {
+  const { start, end } = task;
+  if (start == null && end == null) return null;
+  const startStr = start != null ? minutesToTime(start) : '?';
+  const endStr = end === 'close' ? 'Close' : end != null ? minutesToTime(end) : '?';
+  return `${startStr} – ${endStr}`;
+}
+
+function TaskTimeEditor({ task, onSave, onClose }) {
+  const [startVal, setStartVal] = useState(task.start != null ? minutesToTimeInput(task.start) : '');
+  const [endVal, setEndVal] = useState(task.end != null && task.end !== 'close' ? minutesToTimeInput(task.end) : '');
+  const [endIsClose, setEndIsClose] = useState(task.end === 'close');
+
+  const handleSave = () => {
+    const s = startVal ? timeInputToMinutes(startVal) : null;
+    const e = endIsClose ? 'close' : endVal ? timeInputToMinutes(endVal) : null;
+    onSave(s, e);
+  };
+
+  return (
+    <div className="variable-time-editor" onClick={e => e.stopPropagation()}>
+      <div className="variable-time-fields">
+        <label className="vte-label">Start</label>
+        <input type="time" className="vte-input" value={startVal} onChange={e => setStartVal(e.target.value)} autoFocus />
+        <label className="vte-label">End</label>
+        {endIsClose ? (
+          <span className="vte-close-badge">Close</span>
+        ) : (
+          <input type="time" className="vte-input" value={endVal} onChange={e => setEndVal(e.target.value)} />
+        )}
+        <label className="vte-close-toggle">
+          <input type="checkbox" checked={endIsClose} onChange={e => setEndIsClose(e.target.checked)} />
+          <span>Close</span>
+        </label>
+      </div>
+      <div className="variable-time-actions">
+        <button className="btn btn-primary" style={{ minHeight: 26, fontSize: 11, padding: '3px 10px' }} onClick={handleSave}>
+          <Check size={11} /> Save
+        </button>
+        <button className="btn" style={{ minHeight: 26, fontSize: 11, padding: '3px 8px' }} onClick={onClose}>
+          <X size={11} />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // ─── Task Slot Popover ───────────────────────
 // No role filtering — any staff can be assigned to any task.
@@ -74,8 +121,9 @@ function TaskPopover({ task, currentPersonId, onAssign, onRemove, onClose }) {
 
 // ─── Task Slot Row ───────────────────────────
 function TaskSlotRow({ task, onPersonClick, onRemove }) {
-  const { data, isAdmin, assignTask } = useApp();
+  const { data, isAdmin, assignTask, updateTaskTime } = useApp();
   const [showPopover, setShowPopover] = useState(false);
+  const [editingTime, setEditingTime] = useState(false);
 
   const droppableId = `task:${task.id}`;
   const { setNodeRef, isOver } = useDroppable({ id: droppableId });
@@ -88,49 +136,70 @@ function TaskSlotRow({ task, onPersonClick, onRemove }) {
     if (isAdmin) setShowPopover(s => !s);
   };
 
+  const timeDisplay = formatTaskTime(task);
+
   return (
-    <div
-      ref={setNodeRef}
-      className={`task-slot${isOver && isAdmin ? ' drop-target' : ''}`}
-      onClick={handleRowClick}
-      style={{ cursor: isAdmin ? 'pointer' : 'default', zIndex: showPopover ? 10 : undefined }}
-    >
-      <div className="task-label">{task.label}</div>
-      {task.locationTag && (
-        <div className="task-location-tag">{task.locationTag}</div>
-      )}
-      <div className="task-content">
-        {person ? (
-          <div
-            className="person-chip"
-            onClick={e => { e.stopPropagation(); onPersonClick(person.id); }}
+    <div style={{ position: 'relative', zIndex: showPopover ? 10 : undefined }}>
+      <div
+        ref={setNodeRef}
+        className={`task-slot${isOver && isAdmin ? ' drop-target' : ''}`}
+        onClick={handleRowClick}
+        style={{ cursor: isAdmin ? 'pointer' : 'default' }}
+      >
+        <div className="task-label">{task.label}</div>
+        {task.locationTag && (
+          <div className="task-location-tag">{task.locationTag}</div>
+        )}
+        <div className="task-content">
+          {person ? (
+            <div
+              className="person-chip"
+              onClick={e => { e.stopPropagation(); onPersonClick(person.id); }}
+            >
+              <div className="dot" style={{ background: person.color }} />
+              {person.name}
+            </div>
+          ) : (
+            <div className={`slot-empty${isOver && isAdmin ? ' droppable' : ''}`}>
+              {isAdmin ? 'Assign…' : '—'}
+            </div>
+          )}
+        </div>
+        {onRemove && isAdmin && (
+          <button
+            className="task-remove-btn"
+            onClick={e => { e.stopPropagation(); onRemove(); }}
+            title="Remove task"
           >
-            <div className="dot" style={{ background: person.color }} />
-            {person.name}
-          </div>
-        ) : (
-          <div className={`slot-empty${isOver && isAdmin ? ' droppable' : ''}`}>
-            {isAdmin ? 'Assign…' : '—'}
-          </div>
+            <X size={12} />
+          </button>
+        )}
+        {showPopover && isAdmin && (
+          <TaskPopover
+            task={task}
+            currentPersonId={task.assignedPersonId}
+            onAssign={(pid) => { assignTask(task.id, pid); setShowPopover(false); }}
+            onRemove={() => { assignTask(task.id, null); setShowPopover(false); }}
+            onClose={() => setShowPopover(false)}
+          />
         )}
       </div>
-      {onRemove && isAdmin && (
-        <button
-          className="task-remove-btn"
-          onClick={e => { e.stopPropagation(); onRemove(); }}
-          title="Remove task"
-        >
-          <X size={12} />
-        </button>
-      )}
-      {showPopover && isAdmin && (
-        <TaskPopover
-          task={task}
-          currentPersonId={task.assignedPersonId}
-          onAssign={(pid) => { assignTask(task.id, pid); setShowPopover(false); }}
-          onRemove={() => { assignTask(task.id, null); setShowPopover(false); }}
-          onClose={() => setShowPopover(false)}
-        />
+      {(isAdmin || timeDisplay) && (
+        editingTime ? (
+          <TaskTimeEditor
+            task={task}
+            onSave={(s, e) => { updateTaskTime(task.id, s, e); setEditingTime(false); }}
+            onClose={() => setEditingTime(false)}
+          />
+        ) : (
+          <div
+            className={`variable-time-row${isAdmin ? ' editable' : ''}`}
+            onClick={isAdmin ? (e) => { e.stopPropagation(); setEditingTime(true); } : undefined}
+          >
+            <span>{timeDisplay ?? (isAdmin ? 'Set time…' : '')}</span>
+            {isAdmin && <Pencil size={9} style={{ opacity: 0.5 }} />}
+          </div>
+        )
       )}
     </div>
   );
@@ -154,6 +223,8 @@ function AddTaskForm({ day, onAdd, onCancel }) {
       locationTag: locationTag || null,
       assignedPersonId: null,
       isLocationSpecific: !!locationTag,
+      start: null,
+      end: null,
     });
   };
 

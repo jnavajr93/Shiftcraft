@@ -253,6 +253,19 @@ function runMigrations(data) {
     dirty = true;
   }
 
+  // ── Migration: tasktimes ─────────────────────
+  // Add start/end time fields to existing additional tasks that don't have them.
+  if (!localStorage.getItem('shiftcraft.migration.tasktimes')) {
+    d = {
+      ...d,
+      additionalTasks: (d.additionalTasks ?? []).map(t => ({
+        start: null, end: null, ...t,
+      })),
+    };
+    try { localStorage.setItem('shiftcraft.migration.tasktimes', '1'); } catch { /* ignore */ }
+    dirty = true;
+  }
+
   // ── Migration: removelastpatient ─────────────
   // Strip lastPatientTime from all clinic objects — endTime now is the last patient time.
   if (!localStorage.getItem('shiftcraft.migration.removelastpatient')) {
@@ -564,6 +577,15 @@ export function AppProvider({ children }) {
     }));
   }, []);
 
+  const updateTaskTime = useCallback((taskId, start, end) => {
+    setGlobalData(prev => ({
+      ...prev,
+      additionalTasks: (prev.additionalTasks ?? []).map(t =>
+        t.id === taskId ? { ...t, start, end } : t
+      ),
+    }));
+  }, []);
+
   // ─── Person mutations ───────────────────────
   const updatePerson = useCallback((personId, changes) => {
     setGlobalData(prev => ({
@@ -727,7 +749,7 @@ export function AppProvider({ children }) {
       currentWeek, weekLabel,
       navigateWeek, weekIsEmpty, copyFromPreviousWeek,
       updateClinic, assignSlot, updateSlotTime,
-      assignTask, addTask, removeTask,
+      assignTask, addTask, removeTask, updateTaskTime,
       updatePerson, addPerson, deletePerson, reorderPeople,
       applyBulkAssignments, restoreClinicSlots,
       addClinic, removeClinic, addLocation, removeLocation,

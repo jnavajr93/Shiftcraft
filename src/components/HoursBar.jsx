@@ -24,7 +24,7 @@ export default function HoursBar() {
   const [collapsed, setCollapsed] = useState(false);
 
   const assigned = data.people
-    .map(p => ({ person: p, hours: calcPersonWeeklyHours(p.id, data.clinics) }))
+    .map(p => ({ person: p, hours: calcPersonWeeklyHours(p.id, data.clinics, data.additionalTasks) }))
     .filter(({ hours }) => hours > 0);
 
   const totalHours = assigned.reduce((sum, { hours }) => sum + hours, 0);
