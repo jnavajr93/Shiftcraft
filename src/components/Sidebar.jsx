@@ -41,7 +41,7 @@ function PersonCard({ person, onPersonClick, clinics }) {
   );
 }
 
-const GRADE_ORDER = { A: 0, B: 1, C: 2 };
+const GRADE_ORDER = { A: 0, B: 1, C: 2, T: 3 };
 
 export default function Sidebar({ onPersonClick }) {
   const { data } = useApp();

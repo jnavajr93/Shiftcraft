@@ -66,7 +66,7 @@ HARD RULES (never violate):
 
 SOFT RULES (follow when possible, in order of priority):
 6. Known locks: Yadi → always Scribe at any Dr. B clinic. John → always Scribe at any Dr. R clinic. JC → always Scribe at any Dr. A clinic.
-7. Grade priority: prefer grade A over B over C when multiple staff are eligible.
+7. Grade priority: prefer grade A over B over C over T when multiple staff are eligible. T-grade staff are in training — use as last resort, below C, above ungraded.
 8. Prefer staff at their preferredLocations.
 9. Distribute hours fairly — try to keep everyone near their targetHours for the week.
 10. Skills: prefer 'Autoclave & Closing' skill for closing slots; 'Treatments' skill for middle slots.
@@ -373,7 +373,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
 
         <div className="topbar-right">
           {isAdmin && weekIsEmpty() && (
-            <button className="btn btn-pill" style={{ fontSize: 12, minHeight: 32 }} onClick={handleCopy}>
+            <button className="btn btn-pill topbar-mobile-hidden" style={{ fontSize: 12, minHeight: 32 }} onClick={handleCopy}>
               Copy from last week
             </button>
           )}
@@ -382,7 +382,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
               {/* Generate schedule button */}
               <button
                 data-tour="generate-button"
-                className={`btn btn-pill generate-btn${genState === 'error' ? ' generate-error' : genState === 'done' ? ' generate-done' : ''}`}
+                className={`btn btn-pill generate-btn topbar-mobile-hidden${genState === 'error' ? ' generate-error' : genState === 'done' ? ' generate-done' : ''}`}
                 style={{ fontSize: 12, minHeight: 32, gap: 5 }}
                 onClick={genState === 'idle' || genState === 'error' ? handleGenerateClick : undefined}
                 disabled={genState === 'loading'}
@@ -393,7 +393,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
 
               <button
                 data-tour="print-button"
-                className="btn btn-icon"
+                className="btn btn-icon topbar-mobile-hidden"
                 onClick={() => window.print()}
                 aria-label="Print schedule"
                 title="Print"
@@ -402,7 +402,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
               </button>
               <button
                 data-tour="log-button"
-                className="btn btn-icon"
+                className="btn btn-icon topbar-mobile-hidden"
                 onClick={() => setShowLog(s => !s)}
                 aria-label="Change log"
                 title="Change log"
@@ -410,7 +410,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
                 <History size={20} strokeWidth={1.5} />
               </button>
               <button
-                className={`btn btn-icon${showChat ? ' active' : ''}`}
+                className={`btn btn-icon topbar-mobile-hidden${showChat ? ' active' : ''}`}
                 onClick={() => setShowChat(s => !s)}
                 aria-label="Schedule assistant"
                 title="AI Schedule Assistant"
@@ -419,7 +419,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
               </button>
               <button
                 data-tour="setup-tab"
-                className={`btn btn-pill ${activeTab === 'setup' ? 'active' : ''}`}
+                className={`btn btn-pill topbar-mobile-hidden ${activeTab === 'setup' ? 'active' : ''}`}
                 onClick={() => setActiveTab(t => t === 'setup' ? 'schedule' : 'setup')}
               >
                 Setup
@@ -427,7 +427,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
             </>
           )}
           <button
-            className="btn btn-icon"
+            className="btn btn-icon topbar-mobile-hidden"
             onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
             aria-label="Toggle theme"
           >
@@ -437,7 +437,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
           </button>
           <button
             data-tour="help-button"
-            className="btn btn-icon"
+            className="btn btn-icon topbar-mobile-hidden"
             onClick={showWelcomeCard}
             aria-label="Help tour"
             title="Take a tour"
@@ -445,7 +445,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
             <CircleHelp size={20} strokeWidth={1.5} />
           </button>
           {savedAgoLabel && (
-            <span style={{ fontSize: 11, color: 'var(--text-muted, var(--text-secondary))', opacity: 0.7, whiteSpace: 'nowrap' }}>
+            <span className="topbar-mobile-hidden" style={{ fontSize: 11, color: 'var(--text-muted, var(--text-secondary))', opacity: 0.7, whiteSpace: 'nowrap' }}>
               {savedAgoLabel}
             </span>
           )}
@@ -454,9 +454,25 @@ export default function TopBar({ activeTab, setActiveTab }) {
             className={`btn btn-pill ${isAdmin ? 'active' : ''}`}
             onClick={() => setIsAdmin(a => !a)}
           >
-            Admin
+            {isAdmin ? '← Staff' : 'Admin'}
           </button>
         </div>
+      </div>
+
+      {/* Mobile-only week navigation bar */}
+      <div className="topbar-mobile-week">
+        <button className="btn btn-icon topbar-nav-btn" onClick={() => navigateWeek(-1)} aria-label="Previous week">
+          <ChevronLeft size={16} />
+        </button>
+        {!isCurrentWeek && (
+          <button className="btn topbar-today-btn" onClick={() => jumpToWeek(isoWeek(new Date()))} title="Go to current week">
+            Today
+          </button>
+        )}
+        <span style={{ fontSize: 14, fontWeight: 500 }}>Week of {weekLabel}</span>
+        <button className="btn btn-icon topbar-nav-btn" onClick={() => navigateWeek(1)} aria-label="Next week">
+          <ChevronRight size={16} />
+        </button>
       </div>
 
       {copyToast && (

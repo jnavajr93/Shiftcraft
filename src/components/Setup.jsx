@@ -14,7 +14,7 @@ import {
 } from '../data/seed.js';
 import ClinicConfig from './ClinicConfig.jsx';
 
-const GRADE_OPTIONS = ['A', 'B', 'C'];
+const GRADE_OPTIONS = ['A', 'B', 'C', 'T'];
 const PRESET_COLORS = [
   '#2563eb','#16a34a','#0891b2','#db2777','#9333ea',
   '#ea580c','#65a30d','#0d9488','#c026d3','#0284c7','#7c3aed',

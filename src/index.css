@@ -179,6 +179,7 @@ html, body, #root {
 .grade-badge.A { background: var(--grade-a-bg); }
 .grade-badge.B { background: var(--grade-b-bg); }
 .grade-badge.C { background: var(--grade-c-bg); }
+.grade-badge.T { background: #7c3aed; color: #fff; }
 
 /* ─── Count Badge ─────────────────────────── */
 .count-badge {
@@ -644,6 +645,7 @@ html, body, #root {
 .grade-pill.A.active { background: var(--grade-a-bg); color: var(--grade-text); border-color: var(--grade-a-bg); }
 .grade-pill.B.active { background: var(--grade-b-bg); color: var(--grade-text); border-color: var(--grade-b-bg); }
 .grade-pill.C.active { background: var(--grade-c-bg); color: var(--grade-text); border-color: var(--grade-c-bg); }
+.grade-pill.T.active { background: #7c3aed; color: #fff; border-color: #7c3aed; }
 
 /* ─── Color Swatch ─────────────────────────── */
 .color-swatch {
@@ -902,9 +904,23 @@ html, body, #root {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
 
+/* ─── Mobile week bar (hidden on desktop) ─── */
+.topbar-mobile-week {
+  display: none;
+}
+
 /* ─── Mobile ─────────────────────────── */
 @media (max-width: 640px) {
   .topbar-week { display: none; }
+  .topbar-mobile-hidden { display: none !important; }
+  .topbar-mobile-week {
+    display: flex; align-items: center; justify-content: center;
+    gap: 8px; padding: 8px 16px;
+    background: var(--bg-base); border-bottom: 0.5px solid var(--border);
+  }
+  [data-tour="admin-button"], .btn[data-tour="admin-button"] {
+    min-height: 44px !important; padding: 0 18px !important;
+  }
   .sidebar { display: none; position: fixed; top: 52px; bottom: 0; left: 0; z-index: 90; }
   .sidebar.mobile-open { display: flex; }
   .config-panel { width: 100%; top: 52px; }
