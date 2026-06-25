@@ -177,6 +177,105 @@ html, body, #root {
 .sidebar-grade-empty { font-size: 12px; color: var(--text-muted); }
 .sidebar-hours { text-align: right; font-size: 12px; color: var(--ink-soft, #5a6577); white-space: nowrap; }
 
+/* ─── Staff Hover Card ───────────────────────── */
+.staff-hovercard {
+  position: fixed;
+  z-index: 180;
+  width: 272px;
+  max-width: calc(100vw - 24px);
+  background: var(--bg-elevated);
+  border: 0.5px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06);
+  padding: 12px 14px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: auto;
+  animation: hovercard-in 120ms ease;
+}
+@keyframes hovercard-in {
+  from { opacity: 0; transform: translateX(-4px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.staff-hovercard-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 2px;
+}
+.staff-hovercard-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.staff-hovercard-section {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.staff-hovercard-hours-row {
+  border-top: 0.5px solid var(--border);
+  padding-top: 8px;
+  margin-top: 2px;
+}
+.staff-hovercard-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+}
+.staff-hovercard-value {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.staff-hovercard-skills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.hovercard-skill-pill {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
+  background: transparent;
+}
+.hovercard-skill-pill.trained {
+  background: var(--bg-surface);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.staff-hovercard-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.hovercard-day-pill {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-surface);
+  border: 0.5px solid var(--border-strong);
+  color: var(--text-secondary);
+}
+/* Hide hover card on touch devices */
+@media (pointer: coarse) {
+  .staff-hovercard { display: none !important; }
+}
+
 /* ─── Dot ─────────────────────────── */
 .dot    { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 .dot-lg { width: 48px; height: 48px; border-radius: 50%; flex-shrink: 0; }
