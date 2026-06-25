@@ -4,7 +4,6 @@ import { DAYS } from '../data/seed.js';
 import ClinicCard from './ClinicCard.jsx';
 
 const LOCATION_ORDER = ['Phoenix', 'Chandler', 'Estrella', 'Scottsdale', 'OBS'];
-const locationRank = (loc) => { const i = LOCATION_ORDER.indexOf(loc); return i === -1 ? 999 : i; };
 
 export default function Board({ search, setSearch, onPersonClick, onEditClinic }) {
   const { data, isAdmin, currentWeek } = useApp();
@@ -15,6 +14,13 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic }
         .filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
         .map(p => p.id)
     : [];
+
+  // Collect all locations that appear anywhere in the data (for "other" locations)
+  const allLocations = [...new Set(data.clinics.map(c => c.location))];
+  const extraLocations = allLocations
+    .filter(loc => !LOCATION_ORDER.includes(loc))
+    .sort();
+  const orderedLocations = [...LOCATION_ORDER, ...extraLocations];
 
   return (
     <div className="board-wrapper">
@@ -34,9 +40,6 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic }
       <div data-tour="week-board" className="board-scroll">
         <div className="board-grid">
           {DAYS.map((day, idx) => {
-            const dayClinics = data.clinics
-              .filter(c => c.day === day && (isAdmin || c.open))
-              .sort((a, b) => locationRank(a.location) - locationRank(b.location));
             const d = new Date(monday);
             d.setUTCDate(monday.getUTCDate() + idx);
             const dateLabel = `${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
@@ -46,19 +49,34 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic }
                   <div className="col-header-day">{day}</div>
                   <div className="col-header-date">{dateLabel}</div>
                 </div>
-                {dayClinics.length === 0 && (
-                  <div className="empty-col-msg">No clinics</div>
-                )}
-                {dayClinics.map(clinic => (
-                  <ClinicCard
-                    key={clinic.id}
-                    clinic={clinic}
-                    onPersonClick={onPersonClick}
-                    onEditClinic={onEditClinic}
-                    matchedPersonIds={matchedPersonIds}
-                    hasSearch={search.trim().length > 0}
-                  />
-                ))}
+                {orderedLocations.map(loc => {
+                  const clinic = data.clinics.find(
+                    c => c.day === day && c.location === loc && (isAdmin || c.open)
+                  );
+                  if (clinic) {
+                    return (
+                      <ClinicCard
+                        key={clinic.id}
+                        clinic={clinic}
+                        onPersonClick={onPersonClick}
+                        onEditClinic={onEditClinic}
+                        matchedPersonIds={matchedPersonIds}
+                        hasSearch={search.trim().length > 0}
+                      />
+                    );
+                  }
+                  // No clinic for this location on this day
+                  if (isAdmin) {
+                    return (
+                      <div key={`empty-${day}-${loc}`} className="clinic-row-placeholder">
+                        {loc}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={`empty-${day}-${loc}`} className="clinic-row-placeholder clinic-row-placeholder--staff" />
+                  );
+                })}
               </div>
             );
           })}
