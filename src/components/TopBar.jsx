@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Calendar, Sun, Moon, ChevronLeft, ChevronRight,
   History, Printer, Sparkles, Wand2, Loader2, X, CircleHelp,
 } from 'lucide-react';
-import { useApp, isoWeek } from '../context/AppContext.jsx';
+import { useApp, isoWeek, mondayOfWeek } from '../context/AppContext.jsx';
 import { useTour } from './Tour.jsx';
 import ChangeLogDrawer from './ChangeLogDrawer.jsx';
 import ChatPanel from './ChatPanel.jsx';
@@ -76,12 +76,78 @@ OUTPUT: respond ONLY with valid JSON, no explanation, no markdown, no code fence
 
 Only include slots that should be filled. Omit middle/training unless needed. If a slot cannot be filled, omit it entirely.`;
 
+// ─── Week Date Picker ──────────────────────────
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const DAY_HDRS = ['Mo','Tu','We','Th','Fr','Sa','Su'];
+
+function WeekDatePicker({ currentWeek, onSelectWeek, onClose, triggerRef }) {
+  const ref = useRef(null);
+  const monday = mondayOfWeek(currentWeek);
+  const [viewYear, setViewYear] = useState(monday.getUTCFullYear());
+  const [viewMonth, setViewMonth] = useState(monday.getUTCMonth());
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target) &&
+          !(triggerRef?.current && triggerRef.current.contains(e.target))) onClose();
+    };
+    const keyH = (e) => { if (e.key === 'Escape') onClose(); };
+    const t = setTimeout(() => {
+      document.addEventListener('mousedown', handler);
+      document.addEventListener('keydown', keyH);
+    }, 0);
+    return () => { clearTimeout(t); document.removeEventListener('mousedown', handler); document.removeEventListener('keydown', keyH); };
+  }, [onClose, triggerRef]);
+
+  const today = new Date();
+  const prevMonth = () => { if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y-1); } else setViewMonth(m => m-1); };
+  const nextMonth = () => { if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y+1); } else setViewMonth(m => m+1); };
+
+  // Build grid, Mon-start
+  const firstDow = new Date(viewYear, viewMonth, 1).getDay();
+  const startOffset = firstDow === 0 ? 6 : firstDow - 1;
+  const cells = Array.from({ length: 42 }, (_, i) => new Date(viewYear, viewMonth, 1 - startOffset + i));
+  const showSix = cells.slice(35).some(d => d.getMonth() === viewMonth);
+  const grid = showSix ? cells : cells.slice(0, 35);
+
+  return (
+    <div ref={ref} className="week-date-picker" onClick={e => e.stopPropagation()}>
+      <div className="wdp-header">
+        <button className="btn btn-icon" style={{ minHeight: 28, padding: '3px 6px' }} onClick={prevMonth}><ChevronLeft size={14} /></button>
+        <span className="wdp-month-label">{MONTHS[viewMonth]} {viewYear}</span>
+        <button className="btn btn-icon" style={{ minHeight: 28, padding: '3px 6px' }} onClick={nextMonth}><ChevronRight size={14} /></button>
+      </div>
+      <div className="wdp-grid">
+        {DAY_HDRS.map(d => <div key={d} className="wdp-day-header">{d}</div>)}
+        {grid.map((d, i) => {
+          const wk = isoWeek(d);
+          const otherMonth = d.getMonth() !== viewMonth;
+          const isToday = d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
+          const isSel = wk === currentWeek;
+          const dow = d.getDay();
+          return (
+            <div
+              key={i}
+              className={['wdp-day', otherMonth?'wdp-other-month':'', isSel?'wdp-sel-week':'', isSel&&dow===1?'wdp-week-start':'', isSel&&dow===0?'wdp-week-end':'', isToday?'wdp-today':''].filter(Boolean).join(' ')}
+              onClick={() => { onSelectWeek(wk); onClose(); }}
+            >
+              {d.getDate()}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function TopBar({ activeTab, setActiveTab }) {
   const {
     isAdmin, setIsAdmin, theme, setTheme,
-    weekLabel, currentWeek, navigateWeek, weekIsEmpty, copyFromPreviousWeek,
+    weekLabel, currentWeek, navigateWeek, jumpToWeek, weekIsEmpty, copyFromPreviousWeek,
     data, addLog, applyBulkAssignments, restoreClinicSlots, lastSaved,
   } = useApp();
+  const weekLabelRef = useRef(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const { showWelcomeCard } = useTour();
 
   // Relative "X ago" label — re-evaluated every 15 s
@@ -270,26 +336,30 @@ export default function TopBar({ activeTab, setActiveTab }) {
         </div>
 
         <div className="topbar-week">
-          <button
-            className="btn btn-icon"
-            onClick={() => navigateWeek(-1)}
-            aria-label="Previous week"
-            style={{ minHeight: 32, padding: 4 }}
-          >
-            <ChevronLeft size={18} />
+          <button className="btn btn-icon topbar-nav-btn" onClick={() => navigateWeek(-1)} aria-label="Previous week">
+            <ChevronLeft size={16} />
           </button>
-          <span style={{ padding: '0 10px', fontWeight: 500, fontSize: 14, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}>
+          <button
+            ref={weekLabelRef}
+            className="topbar-week-label"
+            onClick={() => setShowDatePicker(s => !s)}
+            aria-label="Jump to week"
+          >
+            <Calendar size={13} style={{ opacity: 0.45, flexShrink: 0 }} />
             {isCurrentWeek && <span className="topbar-week-dot" title="Current week" />}
             Week of {weekLabel}
-          </span>
-          <button
-            className="btn btn-icon"
-            onClick={() => navigateWeek(1)}
-            aria-label="Next week"
-            style={{ minHeight: 32, padding: 4 }}
-          >
-            <ChevronRight size={18} />
           </button>
+          <button className="btn btn-icon topbar-nav-btn" onClick={() => navigateWeek(1)} aria-label="Next week">
+            <ChevronRight size={16} />
+          </button>
+          {showDatePicker && (
+            <WeekDatePicker
+              currentWeek={currentWeek}
+              onSelectWeek={jumpToWeek}
+              onClose={() => setShowDatePicker(false)}
+              triggerRef={weekLabelRef}
+            />
+          )}
         </div>
 
         <div className="topbar-right">

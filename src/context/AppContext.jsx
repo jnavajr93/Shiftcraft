@@ -493,6 +493,22 @@ export function AppProvider({ children }) {
     });
   }, [globalData.clinics, globalData.additionalTasks]);
 
+  const jumpToWeek = useCallback((targetWeek) => {
+    setCurrentWeek(prev => {
+      if (prev === targetWeek) return prev;
+      const currentMap = extractSlotMap(globalData.clinics, globalData.additionalTasks);
+      saveWeekSlotMap(prev, currentMap);
+      const stored = loadWeekSlotMap(targetWeek);
+      const map = stored ?? blankSlotMap(globalData.clinics, globalData.additionalTasks);
+      if (!stored) saveWeekSlotMap(targetWeek, map);
+      setGlobalData(g => {
+        const applied = applySlotMap(g.clinics, g.additionalTasks, map);
+        return { ...g, ...applied };
+      });
+      return targetWeek;
+    });
+  }, [globalData.clinics, globalData.additionalTasks]);
+
   const weekIsEmpty = useCallback(() => {
     const allSlotPersonIds = globalData.clinics.flatMap(c => Object.values(c.slots).map(sv => getSlotPersonId(sv)));
     const allTasks = globalData.additionalTasks.map(t => t.assignedPersonId);
@@ -787,7 +803,7 @@ export function AppProvider({ children }) {
       isAdmin, setIsAdmin,
       theme, setTheme,
       currentWeek, weekLabel,
-      navigateWeek, weekIsEmpty, copyFromPreviousWeek,
+      navigateWeek, jumpToWeek, weekIsEmpty, copyFromPreviousWeek,
       updateClinic, assignSlot, updateSlotTime,
       assignTask, addTask, removeTask, updateTaskTime,
       updatePerson, addPerson, deletePerson, reorderPeople,
