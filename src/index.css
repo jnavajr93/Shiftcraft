@@ -119,6 +119,8 @@ html, body, #root {
   font-size: 13px; min-height: 32px;
 }
 .btn-pill.active { background: var(--accent); border-color: var(--accent); color: var(--btn-text); }
+.btn-admin.active { background: #dc2626; border-color: #dc2626; color: #ffffff; }
+.btn-admin.active:hover { background: #b91c1c; border-color: #b91c1c; }
 .btn-danger { color: var(--red); border-color: var(--red); background: transparent; }
 .btn-danger:hover { background: var(--red-bg); }
 

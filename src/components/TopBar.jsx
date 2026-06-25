@@ -451,10 +451,10 @@ export default function TopBar({ activeTab, setActiveTab }) {
           )}
           <button
             data-tour="admin-button"
-            className={`btn btn-pill ${isAdmin ? 'active' : ''}`}
+            className={`btn btn-pill btn-admin ${isAdmin ? 'active' : ''}`}
             onClick={() => setIsAdmin(a => !a)}
           >
-            {isAdmin ? '← Staff' : 'Admin'}
+            Admin
           </button>
         </div>
       </div>
