@@ -87,6 +87,13 @@ export function getSlotLabel(slotType, location) {
   return `${label} @ ${location}`;
 }
 
+export function formatOpenerTimeDisplay(clinic, slotVal) {
+  const obj = (slotVal && typeof slotVal === 'object') ? slotVal : {};
+  const startStr = obj.start != null ? minutesToTime(obj.start) : 'Open';
+  const endStr   = obj.end   != null ? minutesToTime(obj.end)   : '5:00 PM';
+  return `${startStr} – ${endStr}`;
+}
+
 export function formatScribeTimeDisplay(slotVal) {
   if (!slotVal || typeof slotVal !== 'object') return null; // null/null = use default labels
   const { start, end } = slotVal;
@@ -113,8 +120,20 @@ export function calcSlotHours(clinic, slotType) {
       const endMin = scriberEnd ?? (endTime + 75);
       return (endMin - startMin) / 60;
     }
-    case 'opener':   return (endTime - startTime) / 60;
-    case 'closing':  return (endTime + 75 - 540) / 60;
+    case 'opener': {
+      const sv = clinic.slots?.opener;
+      const obj = (sv && typeof sv === 'object') ? sv : {};
+      const s = obj.start != null ? obj.start : (startTime - 15);
+      const e = obj.end   != null ? obj.end   : 1020;
+      return (e - s) / 60;
+    }
+    case 'closing': {
+      const sv = clinic.slots?.closing;
+      const obj = (sv && typeof sv === 'object') ? sv : {};
+      const s = obj.start != null ? obj.start : 540;
+      const e = obj.end   != null ? obj.end   : (endTime + 75);
+      return (e - s) / 60;
+    }
     case 'middle': {
       const sv = clinic.slots?.middle;
       if (!sv || typeof sv !== 'object' || sv.start == null || sv.end == null) return 0;

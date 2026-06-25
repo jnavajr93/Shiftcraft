@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { Pencil, AlertTriangle, Users, Power, Check, X as XIcon } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { getSlotLabel, getSlotTimeLabel, getSlotPersonId, getSlotTimeObj, formatVariableSlotTime, formatScribeTimeDisplay, minutesToTimeInput, timeInputToMinutes, SLOT_TYPES } from '../data/seed.js';
+import { getSlotLabel, getSlotTimeLabel, getSlotPersonId, getSlotTimeObj, formatVariableSlotTime, formatOpenerTimeDisplay, formatScribeTimeDisplay, minutesToTime, minutesToTimeInput, timeInputToMinutes, SLOT_TYPES } from '../data/seed.js';
 import SlotPopover from './SlotPopover.jsx';
 import { getConflictPersonDays } from './ConflictBanner.jsx';
 
@@ -121,6 +121,110 @@ function ScribeTimeEditor({ slotVal, clinicId, onClose }) {
   );
 }
 
+function OpenerTimeEditor({ slotVal, clinicId, onClose }) {
+  const { updateSlotTime } = useApp();
+  const obj = (slotVal && typeof slotVal === 'object') ? slotVal : {};
+  const [startVal, setStartVal] = useState(obj.start != null ? minutesToTimeInput(obj.start) : '');
+  const [endVal, setEndVal] = useState(obj.end != null ? minutesToTimeInput(obj.end) : '17:00');
+
+  const handleSave = () => {
+    const s = startVal ? timeInputToMinutes(startVal) : null;
+    const e = endVal ? timeInputToMinutes(endVal) : 1020;
+    updateSlotTime(clinicId, 'opener', s, e);
+    onClose();
+  };
+
+  return (
+    <div className="variable-time-editor" onClick={e => e.stopPropagation()}>
+      <div className="variable-time-fields">
+        <label className="vte-label">Start</label>
+        <input
+          type="time"
+          className="vte-input"
+          value={startVal}
+          onChange={e => setStartVal(e.target.value)}
+          autoFocus
+        />
+        <label className="vte-label">End</label>
+        <input
+          type="time"
+          className="vte-input"
+          value={endVal}
+          onChange={e => setEndVal(e.target.value)}
+        />
+      </div>
+      <div style={{ fontSize: 10, color: 'var(--text-muted)', padding: '2px 0 4px' }}>
+        Leave Start blank for 'Open' (15 min before 1st patient)
+      </div>
+      <div className="variable-time-actions">
+        <button className="btn btn-primary" style={{ minHeight: 26, fontSize: 11, padding: '3px 10px' }} onClick={handleSave}>
+          <Check size={11} /> Save
+        </button>
+        <button className="btn" style={{ minHeight: 26, fontSize: 11, padding: '3px 8px' }} onClick={onClose}>
+          <XIcon size={11} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ClosingTimeEditor({ slotVal, clinicId, onClose }) {
+  const { updateSlotTime } = useApp();
+  const obj = (slotVal && typeof slotVal === 'object') ? slotVal : {};
+  const [startVal, setStartVal] = useState(obj.start != null ? minutesToTimeInput(obj.start) : '09:00');
+  const [endVal, setEndVal] = useState(obj.end != null ? minutesToTimeInput(obj.end) : '');
+  const [endIsClose, setEndIsClose] = useState(obj.end == null);
+
+  const handleSave = () => {
+    const s = startVal ? timeInputToMinutes(startVal) : 540;
+    const e = endIsClose ? null : endVal ? timeInputToMinutes(endVal) : null;
+    updateSlotTime(clinicId, 'closing', s, e);
+    onClose();
+  };
+
+  return (
+    <div className="variable-time-editor" onClick={e => e.stopPropagation()}>
+      <div className="variable-time-fields">
+        <label className="vte-label">Start</label>
+        <input
+          type="time"
+          className="vte-input"
+          value={startVal}
+          onChange={e => setStartVal(e.target.value)}
+          autoFocus
+        />
+        <label className="vte-label">End</label>
+        {endIsClose ? (
+          <span className="vte-close-badge">~Close</span>
+        ) : (
+          <input
+            type="time"
+            className="vte-input"
+            value={endVal}
+            onChange={e => setEndVal(e.target.value)}
+          />
+        )}
+        <label className="vte-close-toggle">
+          <input
+            type="checkbox"
+            checked={endIsClose}
+            onChange={e => setEndIsClose(e.target.checked)}
+          />
+          <span>~Close</span>
+        </label>
+      </div>
+      <div className="variable-time-actions">
+        <button className="btn btn-primary" style={{ minHeight: 26, fontSize: 11, padding: '3px 10px' }} onClick={handleSave}>
+          <Check size={11} /> Save
+        </button>
+        <button className="btn" style={{ minHeight: 26, fontSize: 11, padding: '3px 8px' }} onClick={onClose}>
+          <XIcon size={11} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch, conflictSet, clinicOpen }) {
   const { data, isAdmin, assignSlot } = useApp();
   const slotVal = clinic.slots[slotType];
@@ -135,6 +239,8 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
 
   const isVariable = slotType === 'middle' || slotType === 'training';
   const isScribe = slotType === 'scribe';
+  const isOpener = slotType === 'opener';
+  const isClosing = slotType === 'closing';
   const hasRoleWarning = person && !person.roles.map(r => r.toLowerCase()).includes(slotType);
   const hasLockedWarning = person && person.lockedTo?.length > 0 && !person.lockedTo.includes(clinic.provider);
   const showWarning = hasRoleWarning || hasLockedWarning;
@@ -146,6 +252,12 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
   const scribeTimeDisplay = isScribe ? formatScribeTimeDisplay(slotVal) : null;
   const scribeHasOverride = isScribe && slotVal && typeof slotVal === 'object' && (slotVal.start != null || slotVal.end != null);
   const showScribeTimeRow = isScribe && ((isAdmin && clinicOpen) || scribeHasOverride);
+  // Opener display
+  const openerDisplay = isOpener ? formatOpenerTimeDisplay(clinic, slotVal) : null;
+  // Closing display pieces
+  const closingObj = (isClosing && slotVal && typeof slotVal === 'object') ? slotVal : {};
+  const closingStartStr = isClosing ? (closingObj.start != null ? minutesToTime(closingObj.start) : '9:00 AM') : null;
+  const closingEndStr   = isClosing ? (closingObj.end   != null ? minutesToTime(closingObj.end)   : null) : null; // null = ~Close
 
   const isHighlighted = hasSearch && person && matchedPersonIds.includes(personId);
   const isDimmed = hasSearch && person && !matchedPersonIds.includes(personId);
@@ -169,10 +281,8 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
       >
         <div className="slot-label-col">
           <div className="slot-label">{slotType}</div>
-          {slotType === 'closing' ? (
-            <div className="slot-time">9:00 AM – <em>~Close</em></div>
-          ) : (
-            slotTime && <div className="slot-time">{slotTime}</div>
+          {!isOpener && !isClosing && slotTime && (
+            <div className="slot-time">{slotTime}</div>
           )}
         </div>
         <div className="slot-content">
@@ -255,6 +365,46 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
           >
             <span>{scribeTimeDisplay ?? (isAdmin && clinicOpen ? '1st Patient – Close' : '—')}</span>
             {isAdmin && clinicOpen && <Pencil size={9} style={{ opacity: 0.5 }} />}
+          </div>
+        )
+      )}
+
+      {/* Opener time row */}
+      {isOpener && clinicOpen && (
+        editingTime && interactive ? (
+          <OpenerTimeEditor
+            slotVal={slotVal}
+            clinicId={clinic.id}
+            onClose={() => setEditingTime(false)}
+          />
+        ) : (
+          <div
+            className={`variable-time-row${interactive ? ' editable' : ''}`}
+            onClick={interactive ? (e) => { e.stopPropagation(); setEditingTime(true); } : undefined}
+          >
+            <span>{openerDisplay}</span>
+            {interactive && <Pencil size={9} style={{ opacity: 0.5 }} />}
+          </div>
+        )
+      )}
+
+      {/* Closing time row */}
+      {isClosing && clinicOpen && (
+        editingTime && interactive ? (
+          <ClosingTimeEditor
+            slotVal={slotVal}
+            clinicId={clinic.id}
+            onClose={() => setEditingTime(false)}
+          />
+        ) : (
+          <div
+            className={`variable-time-row${interactive ? ' editable' : ''}`}
+            onClick={interactive ? (e) => { e.stopPropagation(); setEditingTime(true); } : undefined}
+          >
+            <span>
+              {closingStartStr} – {closingEndStr != null ? closingEndStr : <em>~Close</em>}
+            </span>
+            {interactive && <Pencil size={9} style={{ opacity: 0.5 }} />}
           </div>
         )
       )}

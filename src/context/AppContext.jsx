@@ -320,6 +320,44 @@ function runMigrations(data) {
     dirty = true;
   }
 
+  // ── Migration: openeropen ────────────────────
+  // Preemptive: clear any opener slot start values that equal clinic startTime
+  // (they were stored as defaults, not intentional overrides).
+  if (!localStorage.getItem('shiftcraft.migration.openeropen')) {
+    d = {
+      ...d,
+      clinics: d.clinics.map(c => {
+        const opener = c.slots?.opener;
+        if (opener && typeof opener === 'object' && opener.start === c.startTime) {
+          return { ...c, slots: { ...c.slots, opener: { ...opener, start: null } } };
+        }
+        return c;
+      }),
+    };
+    // Also scan week stores
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key?.startsWith('shiftcraft.week.')) continue;
+      try {
+        const weekMap = JSON.parse(localStorage.getItem(key));
+        let changed = false;
+        for (const clinicId of Object.keys(weekMap)) {
+          if (clinicId.startsWith('task:')) continue;
+          const slots = weekMap[clinicId];
+          const opener = slots?.opener;
+          const clinic = d.clinics.find(c => c.id === clinicId);
+          if (opener && typeof opener === 'object' && clinic && opener.start === clinic.startTime) {
+            weekMap[clinicId] = { ...slots, opener: { ...opener, start: null } };
+            changed = true;
+          }
+        }
+        if (changed) localStorage.setItem(key, JSON.stringify(weekMap));
+      } catch { /* ignore */ }
+    }
+    try { localStorage.setItem('shiftcraft.migration.openeropen', '1'); } catch { /* ignore */ }
+    dirty = true;
+  }
+
   // Save corrected data back to localStorage
   if (dirty) {
     try {
@@ -564,14 +602,12 @@ export function AppProvider({ children }) {
       const clinics = prev.clinics.map(c => {
         if (c.id !== clinicId) return c;
         let newSlotVal;
-        if (slotType === 'middle' || slotType === 'training' || slotType === 'scribe') {
+        {
           const existing = c.slots[slotType];
           const times = (existing && typeof existing === 'object')
             ? { start: existing.start, end: existing.end }
             : { start: null, end: null };
-          newSlotVal = { personId, ...times };
-        } else {
-          newSlotVal = personId;
+          newSlotVal = { personId: personId ?? null, ...times };
         }
         return { ...c, slots: { ...c.slots, [slotType]: newSlotVal } };
       });
@@ -597,7 +633,9 @@ export function AppProvider({ children }) {
       const clinics = prev.clinics.map(c => {
         if (c.id !== clinicId) return c;
         const existing = c.slots[slotType];
-        const personId = (existing && typeof existing === 'object') ? existing.personId : null;
+        const personId = (existing && typeof existing === 'object')
+          ? existing.personId
+          : (typeof existing === 'string' ? existing : null);
         return { ...c, slots: { ...c.slots, [slotType]: { personId, start, end } } };
       });
       const map = extractSlotMap(clinics, prev.additionalTasks);
