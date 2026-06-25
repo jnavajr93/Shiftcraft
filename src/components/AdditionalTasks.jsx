@@ -120,8 +120,8 @@ function TaskPopover({ task, currentPersonId, onAssign, onRemove, onClose }) {
 }
 
 // ─── Task Slot Row ───────────────────────────
-function TaskSlotRow({ task, onPersonClick, onRemove }) {
-  const { data, isAdmin, assignTask, updateTaskTime } = useApp();
+function TaskSlotRow({ task, onPersonClick }) {
+  const { data, isAdmin, assignTask, updateTaskTime, removeTask } = useApp();
   const [showPopover, setShowPopover] = useState(false);
   const [editingTime, setEditingTime] = useState(false);
 
@@ -165,15 +165,13 @@ function TaskSlotRow({ task, onPersonClick, onRemove }) {
             </div>
           )}
         </div>
-        {onRemove && isAdmin && (
-          <button
-            className="task-remove-btn"
-            onClick={e => { e.stopPropagation(); onRemove(); }}
-            title="Remove task"
-          >
-            <X size={12} />
-          </button>
-        )}
+        <button
+          className="task-remove-btn"
+          onClick={e => { e.stopPropagation(); removeTask(task.id); }}
+          title="Remove task"
+        >
+          <X size={12} />
+        </button>
         {showPopover && isAdmin && (
           <TaskPopover
             task={task}
@@ -317,7 +315,6 @@ export default function AdditionalTasks({ onPersonClick }) {
                         key={task.id}
                         task={task}
                         onPersonClick={onPersonClick}
-                        onRemove={isAdmin ? () => handleRemove(task) : undefined}
                       />
                     ))}
                   </div>

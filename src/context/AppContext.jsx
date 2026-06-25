@@ -485,41 +485,36 @@ export function AppProvider({ children }) {
 
   // ─── Week navigation ────────────────────────
   const navigateWeek = useCallback((delta) => {
-    setCurrentWeek(prev => {
-      // Save current week's slots
-      const currentMap = extractSlotMap(globalData.clinics, globalData.additionalTasks);
-      saveWeekSlotMap(prev, currentMap);
+    // Save current week's slots
+    const currentMap = extractSlotMap(globalData.clinics, globalData.additionalTasks);
+    saveWeekSlotMap(currentWeek, currentMap);
 
-      // Compute next/prev week using only UTC arithmetic so no local timezone
-      // methods can shift us onto the wrong day (isoWeek() uses local getters
-      // which fail on UTC-midnight dates in western timezones).
-      const monday = mondayOfWeek(prev);
-      const targetMonday = new Date(Date.UTC(
-        monday.getUTCFullYear(),
-        monday.getUTCMonth(),
-        monday.getUTCDate() + delta * 7,
-      ));
-      // ISO week from UTC parts only — no local date methods
-      const tmp = new Date(targetMonday);
-      const dow = tmp.getUTCDay() || 7;
-      tmp.setUTCDate(tmp.getUTCDate() + 4 - dow); // Thursday of the week
-      const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
-      const weekNum = Math.ceil(((tmp - yearStart) / 86400000 + 1) / 7);
-      const next = `${tmp.getUTCFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+    // Compute target week using UTC arithmetic only — no local date methods
+    const monday = mondayOfWeek(currentWeek);
+    const targetMonday = new Date(Date.UTC(
+      monday.getUTCFullYear(),
+      monday.getUTCMonth(),
+      monday.getUTCDate() + delta * 7,
+    ));
+    const tmp = new Date(targetMonday);
+    const dow = tmp.getUTCDay() || 7;
+    tmp.setUTCDate(tmp.getUTCDate() + 4 - dow);
+    const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
+    const weekNum = Math.ceil(((tmp - yearStart) / 86400000 + 1) / 7);
+    const next = `${tmp.getUTCFullYear()}-W${String(weekNum).padStart(2, '0')}`;
 
-      // Load or blank next week
-      const stored = loadWeekSlotMap(next);
-      const map = stored ?? blankSlotMap(globalData.clinics, globalData.additionalTasks);
-      if (!stored) saveWeekSlotMap(next, map);
+    // Load or blank target week
+    const stored = loadWeekSlotMap(next);
+    const map = stored ?? blankSlotMap(globalData.clinics, globalData.additionalTasks);
+    if (!stored) saveWeekSlotMap(next, map);
 
-      setGlobalData(g => {
-        const applied = applySlotMap(g.clinics, g.additionalTasks, map);
-        return { ...g, ...applied };
-      });
-
-      return next;
+    // Apply both state updates directly (not nested inside updater)
+    setCurrentWeek(next);
+    setGlobalData(g => {
+      const applied = applySlotMap(g.clinics, g.additionalTasks, map);
+      return { ...g, ...applied };
     });
-  }, [globalData.clinics, globalData.additionalTasks]);
+  }, [currentWeek, globalData.clinics, globalData.additionalTasks]);
 
   const jumpToWeek = useCallback((targetWeek) => {
     setCurrentWeek(prev => {
