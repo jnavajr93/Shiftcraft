@@ -139,7 +139,7 @@ function TaskSlotRow({ task, onPersonClick, onRemove }) {
   const timeDisplay = formatTaskTime(task);
 
   return (
-    <div style={{ position: 'relative', zIndex: showPopover ? 10 : undefined }}>
+    <div className="task-slot-wrapper" style={{ position: 'relative', zIndex: showPopover ? 10 : undefined }}>
       <div
         ref={setNodeRef}
         className={`task-slot${isOver && isAdmin ? ' drop-target' : ''}`}

@@ -352,7 +352,17 @@ function loadGlobal() {
     if (raw) data = migrateData(JSON.parse(raw));
   } catch { /* ignore */ }
   if (!data) data = getSeedData();
-  return runMigrations(data);
+  data = runMigrations(data);
+  // Log all stored week keys for debugging
+  try {
+    const weekKeys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k?.startsWith('shiftcraft.week.')) weekKeys.push(k);
+    }
+    if (weekKeys.length) console.log('[Shiftcraft] Stored week keys:', weekKeys.sort().join(', '));
+  } catch { /* ignore */ }
+  return data;
 }
 
 // ─── Change log ───────────────────────────────
@@ -474,10 +484,22 @@ export function AppProvider({ children }) {
       const currentMap = extractSlotMap(globalData.clinics, globalData.additionalTasks);
       saveWeekSlotMap(prev, currentMap);
 
-      // Compute next week
+      // Compute next/prev week using only UTC arithmetic so no local timezone
+      // methods can shift us onto the wrong day (isoWeek() uses local getters
+      // which fail on UTC-midnight dates in western timezones).
       const monday = mondayOfWeek(prev);
-      monday.setUTCDate(monday.getUTCDate() + delta * 7);
-      const next = isoWeek(monday);
+      const targetMonday = new Date(Date.UTC(
+        monday.getUTCFullYear(),
+        monday.getUTCMonth(),
+        monday.getUTCDate() + delta * 7,
+      ));
+      // ISO week from UTC parts only — no local date methods
+      const tmp = new Date(targetMonday);
+      const dow = tmp.getUTCDay() || 7;
+      tmp.setUTCDate(tmp.getUTCDate() + 4 - dow); // Thursday of the week
+      const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
+      const weekNum = Math.ceil(((tmp - yearStart) / 86400000 + 1) / 7);
+      const next = `${tmp.getUTCFullYear()}-W${String(weekNum).padStart(2, '0')}`;
 
       // Load or blank next week
       const stored = loadWeekSlotMap(next);

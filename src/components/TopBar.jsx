@@ -339,6 +339,15 @@ export default function TopBar({ activeTab, setActiveTab }) {
           <button className="btn btn-icon topbar-nav-btn" onClick={() => navigateWeek(-1)} aria-label="Previous week">
             <ChevronLeft size={16} />
           </button>
+          {!isCurrentWeek && (
+            <button
+              className="btn topbar-today-btn"
+              onClick={() => jumpToWeek(isoWeek(new Date()))}
+              title="Go to current week"
+            >
+              Today
+            </button>
+          )}
           <button
             ref={weekLabelRef}
             className="topbar-week-label"

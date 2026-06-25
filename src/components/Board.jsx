@@ -1,10 +1,11 @@
 import { Search } from 'lucide-react';
-import { useApp } from '../context/AppContext.jsx';
+import { useApp, mondayOfWeek } from '../context/AppContext.jsx';
 import { DAYS } from '../data/seed.js';
 import ClinicCard from './ClinicCard.jsx';
 
 export default function Board({ search, setSearch, onPersonClick, onEditClinic }) {
-  const { data, isAdmin } = useApp();
+  const { data, isAdmin, currentWeek } = useApp();
+  const monday = mondayOfWeek(currentWeek);
 
   const matchedPersonIds = search.trim()
     ? data.people
@@ -29,14 +30,18 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic }
       </div>
       <div data-tour="week-board" className="board-scroll">
         <div className="board-grid">
-          {DAYS.map(day => {
+          {DAYS.map((day, idx) => {
             const dayClinics = data.clinics.filter(
               c => c.day === day && (isAdmin || c.open)
             );
+            const d = new Date(monday);
+            d.setUTCDate(monday.getUTCDate() + idx);
+            const dateLabel = `${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
             return (
               <div key={day} className="board-col">
                 <div className="col-header">
                   <div className="col-header-day">{day}</div>
+                  <div className="col-header-date">{dateLabel}</div>
                 </div>
                 {dayClinics.length === 0 && (
                   <div className="empty-col-msg">No clinics</div>

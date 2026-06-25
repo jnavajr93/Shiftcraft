@@ -87,6 +87,7 @@ html, body, #root {
   gap: 4px; position: relative;
 }
 .topbar-nav-btn { min-height: 32px !important; padding: 4px 6px !important; flex-shrink: 0; }
+.topbar-today-btn { min-height: 26px !important; padding: 2px 9px !important; font-size: 11px !important; flex-shrink: 0; color: var(--text-muted) !important; border-radius: 99px !important; }
 .topbar-week-label {
   display: flex; align-items: center; gap: 5px;
   padding: 4px 10px; font-size: 14px; font-weight: 500;
@@ -211,6 +212,9 @@ html, body, #root {
 .col-header-day {
   font-size: 12px; font-weight: 500; text-transform: uppercase;
   letter-spacing: 0.06em; color: var(--text-secondary);
+}
+.col-header-date {
+  font-size: 11px; color: var(--text-muted); margin-top: 1px;
 }
 
 /* ─── Clinic Card ─────────────────────────── */
@@ -714,10 +718,9 @@ html, body, #root {
   display: flex; align-items: center; justify-content: center;
   width: 22px; height: 22px; border-radius: var(--radius); flex-shrink: 0;
   border: none; background: transparent; cursor: pointer;
-  color: var(--text-muted); transition: color 100ms, background 100ms, opacity 120ms;
-  opacity: 0;
+  color: var(--text-muted); transition: color 100ms, background 100ms;
+  opacity: 1;
 }
-.task-slot:hover .task-remove-btn { opacity: 1; }
 .task-remove-btn:hover { color: var(--red); background: var(--red-bg); }
 .task-card {
   background: var(--bg-elevated); border: 0.5px solid var(--border);
