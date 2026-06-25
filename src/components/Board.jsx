@@ -3,6 +3,9 @@ import { useApp, mondayOfWeek } from '../context/AppContext.jsx';
 import { DAYS } from '../data/seed.js';
 import ClinicCard from './ClinicCard.jsx';
 
+const LOCATION_ORDER = ['Phoenix', 'Chandler', 'Estrella', 'Scottsdale', 'OBS'];
+const locationRank = (loc) => { const i = LOCATION_ORDER.indexOf(loc); return i === -1 ? 999 : i; };
+
 export default function Board({ search, setSearch, onPersonClick, onEditClinic }) {
   const { data, isAdmin, currentWeek } = useApp();
   const monday = mondayOfWeek(currentWeek);
@@ -31,9 +34,9 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic }
       <div data-tour="week-board" className="board-scroll">
         <div className="board-grid">
           {DAYS.map((day, idx) => {
-            const dayClinics = data.clinics.filter(
-              c => c.day === day && (isAdmin || c.open)
-            );
+            const dayClinics = data.clinics
+              .filter(c => c.day === day && (isAdmin || c.open))
+              .sort((a, b) => locationRank(a.location) - locationRank(b.location));
             const d = new Date(monday);
             d.setUTCDate(monday.getUTCDate() + idx);
             const dateLabel = `${d.getUTCMonth() + 1}/${d.getUTCDate()}`;

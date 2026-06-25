@@ -30,6 +30,11 @@ function PersonCard({ person, onPersonClick, clinics }) {
       <span className="person-sidebar-name" onClick={(e) => { e.stopPropagation(); onPersonClick(person.id); }}>
         {person.name}
       </span>
+      {person.employmentType && (
+        <span className="employment-badge">
+          {person.employmentType === 'Full-time' ? 'FT' : person.employmentType === 'Part-time' ? 'PT' : person.employmentType}
+        </span>
+      )}
       {person.grade && <span className={`grade-badge ${person.grade}`}>{person.grade}</span>}
       <span className="person-sidebar-hours">{hours}h</span>
     </div>
