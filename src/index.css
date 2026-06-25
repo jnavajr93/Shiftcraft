@@ -735,7 +735,8 @@ html, body, #root {
 }
 .task-card {
   background: var(--bg-elevated); border: 0.5px solid var(--border);
-  border-radius: var(--radius); overflow: hidden; margin-bottom: 8px;
+  border-radius: var(--radius); overflow: visible; margin-bottom: 8px;
+  width: 100%;
 }
 .task-card-header {
   padding: 6px 12px; background: var(--bg-surface);
@@ -744,7 +745,7 @@ html, body, #root {
 }
 .tasks-grid {
   display: grid; grid-template-columns: repeat(5, minmax(200px, 1fr));
-  gap: 12px; min-width: 1000px; margin-top: 12px;
+  gap: 12px; min-width: 1000px; margin-top: 12px; width: 100%;
 }
 
 /* ─── Conflict Banner ─────────────────────────── */
