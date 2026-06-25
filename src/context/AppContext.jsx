@@ -383,7 +383,9 @@ export function AppProvider({ children }) {
     localStorage.getItem('shiftcraft.theme') ||
     (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
   );
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(() => {
+    try { return localStorage.getItem('shiftcraft.isAdmin') === 'true'; } catch { return false; }
+  });
 
   const [lastSaved, setLastSaved] = useState(null);
 
@@ -427,6 +429,10 @@ export function AppProvider({ children }) {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('shiftcraft.theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    try { localStorage.setItem('shiftcraft.isAdmin', String(isAdmin)); } catch { /* ignore */ }
+  }, [isAdmin]);
 
   // Belt-and-suspenders: flush both stores synchronously before the page unloads.
   // The useEffect above already saves on every change, but beforeunload catches
