@@ -35,36 +35,52 @@ const ADMIN_STEPS = [
 
 // ─── Tooltip positioning ───────────────────────────────────────────────────
 
+const CENTERED = () => ({
+  top: Math.max(8, Math.round(window.innerHeight / 2) - 100),
+  left: Math.max(8, Math.round(window.innerWidth / 2) - 144),
+  arrow: null,
+  centered: true,
+});
+
 function getTooltipPosition(targetEl) {
+  if (!targetEl) return CENTERED();
+
   const rect = targetEl.getBoundingClientRect();
+  if (rect.width === 0 && rect.height === 0) return CENTERED();
+
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   const TW = 288;
   const TH = 180;
   const GAP = 12;
 
+  // Clamp rect into visible range (element may be partially off-screen after scroll)
+  const top    = Math.max(0, Math.min(rect.top,    vh));
+  const bottom = Math.max(0, Math.min(rect.bottom, vh));
+  const left   = Math.max(0, Math.min(rect.left,   vw));
+
   // Prefer below
-  if (rect.bottom + TH + GAP < vh) {
+  if (bottom + TH + GAP < vh) {
     return {
-      top: rect.bottom + GAP,
-      left: Math.max(8, Math.min(rect.left, vw - TW - 8)),
+      top: bottom + GAP,
+      left: Math.max(8, Math.min(left, vw - TW - 8)),
       arrow: 'top',
-      arrowLeft: Math.min(Math.max(rect.left + rect.width / 2 - Math.max(8, Math.min(rect.left, vw - TW - 8)), 20), TW - 20),
+      arrowLeft: Math.min(Math.max(left + rect.width / 2 - Math.max(8, Math.min(left, vw - TW - 8)), 20), TW - 20),
     };
   }
   // Try above
-  if (rect.top - TH - GAP > 0) {
+  if (top - TH - GAP > 0) {
     return {
-      top: rect.top - TH - GAP,
-      left: Math.max(8, Math.min(rect.left, vw - TW - 8)),
+      top: top - TH - GAP,
+      left: Math.max(8, Math.min(left, vw - TW - 8)),
       arrow: 'bottom',
-      arrowLeft: Math.min(Math.max(rect.left + rect.width / 2 - Math.max(8, Math.min(rect.left, vw - TW - 8)), 20), TW - 20),
+      arrowLeft: Math.min(Math.max(left + rect.width / 2 - Math.max(8, Math.min(left, vw - TW - 8)), 20), TW - 20),
     };
   }
   // Try right
   if (rect.right + TW + GAP < vw) {
     return {
-      top: Math.max(8, Math.min(rect.top, vh - TH - 8)),
+      top: Math.max(8, Math.min(top, vh - TH - 8)),
       left: rect.right + GAP,
       arrow: 'left',
       arrowLeft: 0,
@@ -72,8 +88,8 @@ function getTooltipPosition(targetEl) {
   }
   // Fallback left
   return {
-    top: Math.max(8, Math.min(rect.top, vh - TH - 8)),
-    left: Math.max(8, rect.left - TW - GAP),
+    top: Math.max(8, Math.min(top, vh - TH - 8)),
+    left: Math.max(8, left - TW - GAP),
     arrow: 'right',
     arrowLeft: 0,
   };
@@ -135,18 +151,38 @@ export function TourProvider({ children }) {
     const currentStep = steps[step];
     if (!currentStep) return;
 
-    const updatePos = () => {
+    let outerT, innerT;
+
+    const positionTooltip = () => {
       const el = document.querySelector(`[data-tour="${currentStep.target}"]`);
-      if (el) {
+      if (!el) {
+        setTooltipPos(CENTERED());
+        return;
+      }
+      const rect = el.getBoundingClientRect();
+      const inView =
+        rect.width > 0 &&
+        rect.top >= 0 &&
+        rect.bottom <= window.innerHeight;
+      if (inView) {
         setTooltipPos(getTooltipPosition(el));
+      } else {
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        innerT = setTimeout(() => setTooltipPos(getTooltipPosition(el)), 350);
       }
     };
 
-    const t = setTimeout(updatePos, 50);
-    window.addEventListener('resize', updatePos);
+    const onResize = () => {
+      const el = document.querySelector(`[data-tour="${currentStep.target}"]`);
+      setTooltipPos(getTooltipPosition(el));
+    };
+
+    outerT = setTimeout(positionTooltip, 80);
+    window.addEventListener('resize', onResize);
     return () => {
-      clearTimeout(t);
-      window.removeEventListener('resize', updatePos);
+      clearTimeout(outerT);
+      clearTimeout(innerT);
+      window.removeEventListener('resize', onResize);
     };
   }, [activeTour, step]);
 
@@ -195,10 +231,11 @@ export function TourProvider({ children }) {
         const current = steps[step];
         const pct = ((step + 1) / total) * 100;
         const isLast = step === total - 1;
+        const arrowClass = tooltipPos.arrow ? `arrow-${tooltipPos.arrow}` : '';
 
         return (
           <div
-            className={`tour-tooltip arrow-${tooltipPos.arrow}`}
+            className={`tour-tooltip ${arrowClass}`}
             style={{ top: tooltipPos.top, left: tooltipPos.left }}
             onClick={e => e.stopPropagation()}
           >
@@ -209,6 +246,11 @@ export function TourProvider({ children }) {
               <div className="tour-step-counter">Step {step + 1} of {total}</div>
               <div className="tour-tooltip-title">{current.title}</div>
               <div className="tour-tooltip-text">{current.body}</div>
+              {tooltipPos.centered && (
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                  Scroll to see this element
+                </div>
+              )}
               <div className="tour-tooltip-footer">
                 {step > 0 && (
                   <button className="btn" style={{ minHeight: 30, fontSize: 12 }} onClick={() => setStep(s => s - 1)}>
