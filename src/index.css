@@ -211,7 +211,8 @@ html, body, #root {
 .board-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(200px, 1fr));
-  gap: 12px; min-width: 1000px;
+  gap: 10px; min-width: 1000px;
+  align-items: stretch;
 }
 .board-col { display: flex; flex-direction: column; gap: 12px; }
 .col-header {
@@ -233,6 +234,8 @@ html, body, #root {
   background: var(--bg-elevated); border: 0.5px solid var(--border);
   border-radius: var(--radius-lg); overflow: hidden;
   transition: border-color 120ms;
+  height: 100%;
+  display: flex; flex-direction: column;
 }
 .clinic-card:hover { border-color: var(--border-strong); }
 .clinic-card.closed { opacity: 0.5; }
@@ -779,11 +782,12 @@ html, body, #root {
 .section-add { margin-top: 8px; }
 .empty-col-msg { color: var(--text-muted); font-size: 12px; text-align: center; padding: 16px 0; }
 .clinic-row-placeholder {
-  min-height: 80px; border-radius: var(--radius);
-  border: 1px dashed var(--border); opacity: 0.2;
+  height: 100%; min-height: 120px; border-radius: var(--radius);
+  border: 1px dashed rgba(0,0,0,0.08);
   display: flex; align-items: center; justify-content: center;
   font-size: 10px; color: var(--text-muted); letter-spacing: 0.04em;
-  pointer-events: none; user-select: none;
+  opacity: 0.4; pointer-events: none; user-select: none;
+  background: transparent;
 }
 .clinic-row-placeholder--staff {
   border: none; opacity: 1;
