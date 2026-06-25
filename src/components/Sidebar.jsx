@@ -23,20 +23,29 @@ function PersonCard({ person, onPersonClick, clinics }) {
       ref={setNodeRef}
       {...listeners}
       {...attributes}
-      className={`person-sidebar-card${isDragging ? ' dragging' : ''}`}
+      className={`sidebar-staff-row${isDragging ? ' dragging' : ''}`}
       style={{ touchAction: 'none' }}
     >
-      <div className="dot" style={{ background: person.color }} />
-      <span className="person-sidebar-name" onClick={(e) => { e.stopPropagation(); onPersonClick(person.id); }}>
-        {person.name}
-      </span>
-      {person.employmentType && (
-        <span className="employment-badge">
-          {person.employmentType === 'Full-time' ? 'FT' : person.employmentType === 'Part-time' ? 'PT' : person.employmentType}
+      <div className="sidebar-name">
+        <div className="dot" style={{ background: person.color }} />
+        <span onClick={(e) => { e.stopPropagation(); onPersonClick(person.id); }}>
+          {person.name}
         </span>
-      )}
-      {person.grade && <span className={`grade-badge ${person.grade}`}>{person.grade}</span>}
-      <span className="person-sidebar-hours">{hours}h</span>
+      </div>
+      <div className="sidebar-employment">
+        {person.employmentType && (
+          <span className="employment-badge">
+            {person.employmentType === 'Full-time' ? 'FT' : person.employmentType === 'Part-time' ? 'PT' : person.employmentType}
+          </span>
+        )}
+      </div>
+      <div className="sidebar-grade">
+        {person.grade
+          ? <span className={`grade-badge ${person.grade}`}>{person.grade}</span>
+          : <span className="sidebar-grade-empty">—</span>
+        }
+      </div>
+      <span className="sidebar-hours">{hours}h</span>
     </div>
   );
 }
