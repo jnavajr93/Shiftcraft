@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { DAYS, calcPersonWeeklyHours, getSlotLabel, getSlotPersonId, formatVariableSlotTime, minutesToTime } from '../data/seed.js';
+import { DAYS, calcPersonWeeklyHours, getSlotLabel, getSlotPersonId, formatVariableSlotTime, minutesToTime, formatScribeTimeDisplay, formatTaskTime } from '../data/seed.js';
 import ArcChart from './ArcChart.jsx';
 
 function useIsMobile() {
   return window.matchMedia('(max-width: 640px)').matches;
 }
 
-function WeekRows({ person, clinics }) {
+function WeekRows({ person, clinics, additionalTasks }) {
   return (
     <div>
       {DAYS.map(day => {
@@ -21,9 +21,9 @@ function WeekRows({ person, clinics }) {
               if (pid === person.id) {
                 let time;
                 if (slotType === 'scribe') {
-                  time = `${minutesToTime(c.startTime)} – ${minutesToTime(c.endTime)}`;
+                  time = formatScribeTimeDisplay(slotVal) ?? '1st Patient – Close';
                 } else if (slotType === 'opener') {
-                  time = `${minutesToTime(c.startTime)} – 5:00 PM`;
+                  time = `${minutesToTime(c.startTime)} – ${minutesToTime(c.endTime)}`;
                 } else if (slotType === 'closing') {
                   time = '9:00 AM – ~Close';
                 } else if (slotType === 'middle' || slotType === 'training') {
@@ -32,13 +32,20 @@ function WeekRows({ person, clinics }) {
                   time = '';
                 }
                 assignments.push({
-                  clinic: c,
-                  slotType,
                   label: getSlotLabel(slotType, c.location),
                   time,
                 });
               }
             });
+          });
+
+        // Add task assignments for this day
+        (additionalTasks ?? [])
+          .filter(t => t.day === day && t.assignedPersonId === person.id)
+          .forEach(t => {
+            const label = `${t.label}${t.locationTag ? ' @ ' + t.locationTag : ''}`;
+            const time = formatTaskTime(t) ?? '';
+            assignments.push({ label, time });
           });
 
         return (
@@ -86,7 +93,7 @@ function OverlayInner({ person, onClose }) {
         <button className="overlay-close" onClick={onClose}><X size={16} /></button>
       </div>
       <div className="overlay-body">
-        <WeekRows person={person} clinics={data.clinics} />
+        <WeekRows person={person} clinics={data.clinics} additionalTasks={data.additionalTasks} />
         {isAdmin && (
           <ArcChart
             hours={hours}

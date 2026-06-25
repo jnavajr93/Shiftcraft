@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { Pencil, AlertTriangle, Users, Power, Check, X as XIcon } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { getSlotLabel, getSlotTimeLabel, getSlotPersonId, getSlotTimeObj, formatVariableSlotTime, minutesToTimeInput, timeInputToMinutes, SLOT_TYPES } from '../data/seed.js';
+import { getSlotLabel, getSlotTimeLabel, getSlotPersonId, getSlotTimeObj, formatVariableSlotTime, formatScribeTimeDisplay, minutesToTimeInput, timeInputToMinutes, SLOT_TYPES } from '../data/seed.js';
 import SlotPopover from './SlotPopover.jsx';
 import { getConflictPersonDays } from './ConflictBanner.jsx';
 
@@ -74,6 +74,53 @@ function VariableTimeEditor({ slotType, slotVal, clinicId, onClose }) {
   );
 }
 
+function ScribeTimeEditor({ slotVal, clinicId, onClose }) {
+  const { updateSlotTime } = useApp();
+  const timeObj = getSlotTimeObj(slotVal);
+  const [startVal, setStartVal] = useState(timeObj.start != null ? minutesToTimeInput(timeObj.start) : '');
+  const [endVal, setEndVal] = useState(timeObj.end != null ? minutesToTimeInput(timeObj.end) : '');
+
+  const handleSave = () => {
+    const s = startVal ? timeInputToMinutes(startVal) : null;
+    const e = endVal ? timeInputToMinutes(endVal) : null;
+    updateSlotTime(clinicId, 'scribe', s, e);
+    onClose();
+  };
+
+  return (
+    <div className="variable-time-editor" onClick={e => e.stopPropagation()}>
+      <div className="variable-time-fields">
+        <label className="vte-label">Start</label>
+        <input
+          type="time"
+          className="vte-input"
+          value={startVal}
+          onChange={e => setStartVal(e.target.value)}
+          autoFocus
+        />
+        <label className="vte-label">End</label>
+        <input
+          type="time"
+          className="vte-input"
+          value={endVal}
+          onChange={e => setEndVal(e.target.value)}
+        />
+      </div>
+      <div style={{ fontSize: 10, color: 'var(--text-muted)', padding: '2px 0 4px' }}>
+        Leave blank for defaults (1st Patient / Close)
+      </div>
+      <div className="variable-time-actions">
+        <button className="btn btn-primary" style={{ minHeight: 26, fontSize: 11, padding: '3px 10px' }} onClick={handleSave}>
+          <Check size={11} /> Save
+        </button>
+        <button className="btn" style={{ minHeight: 26, fontSize: 11, padding: '3px 8px' }} onClick={onClose}>
+          <XIcon size={11} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch, conflictSet, clinicOpen }) {
   const { data, isAdmin, assignSlot } = useApp();
   const slotVal = clinic.slots[slotType];
@@ -87,6 +134,7 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
   const setRef = useCallback((el) => { setDropRef(el); }, [setDropRef]);
 
   const isVariable = slotType === 'middle' || slotType === 'training';
+  const isScribe = slotType === 'scribe';
   const hasRoleWarning = person && !person.roles.map(r => r.toLowerCase()).includes(slotType);
   const hasLockedWarning = person && person.lockedTo?.length > 0 && !person.lockedTo.includes(clinic.provider);
   const showWarning = hasRoleWarning || hasLockedWarning;
@@ -95,6 +143,9 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
   const slotLabel = getSlotLabel(slotType, clinic.location);
   const slotTime = getSlotTimeLabel(clinic, slotType);
   const variableTimeDisplay = isVariable ? formatVariableSlotTime(slotVal) : null;
+  const scribeTimeDisplay = isScribe ? formatScribeTimeDisplay(slotVal) : null;
+  const scribeHasOverride = isScribe && slotVal && typeof slotVal === 'object' && (slotVal.start != null || slotVal.end != null);
+  const showScribeTimeRow = isScribe && ((isAdmin && clinicOpen) || scribeHasOverride);
 
   const isHighlighted = hasSearch && person && matchedPersonIds.includes(personId);
   const isDimmed = hasSearch && person && !matchedPersonIds.includes(personId);
@@ -184,6 +235,25 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
             onClick={isAdmin && clinicOpen ? (e) => { e.stopPropagation(); setEditingTime(true); } : undefined}
           >
             <span>{variableTimeDisplay ?? (isAdmin && clinicOpen ? 'Set time…' : '—')}</span>
+            {isAdmin && clinicOpen && <Pencil size={9} style={{ opacity: 0.5 }} />}
+          </div>
+        )
+      )}
+
+      {/* Scribe time row */}
+      {showScribeTimeRow && (
+        editingTime ? (
+          <ScribeTimeEditor
+            slotVal={slotVal}
+            clinicId={clinic.id}
+            onClose={() => setEditingTime(false)}
+          />
+        ) : (
+          <div
+            className={`variable-time-row${isAdmin && clinicOpen ? ' editable' : ''}`}
+            onClick={isAdmin && clinicOpen ? (e) => { e.stopPropagation(); setEditingTime(true); } : undefined}
+          >
+            <span>{scribeTimeDisplay ?? (isAdmin && clinicOpen ? '1st Patient – Close' : '—')}</span>
             {isAdmin && clinicOpen && <Pencil size={9} style={{ opacity: 0.5 }} />}
           </div>
         )

@@ -58,7 +58,8 @@ function applySlotMap(clinics, tasks, map) {
   const newClinics = clinics.map(c => ({
     ...c,
     slots: map[c.id] ?? {
-      scribe: null, opener: null, closing: null,
+      scribe: { personId: null, start: null, end: null },
+      opener: null, closing: null,
       middle: { personId: null, start: null, end: null },
       training: { personId: null, start: null, end: null },
     },
@@ -73,7 +74,8 @@ function applySlotMap(clinics, tasks, map) {
 function blankSlotMap(clinics, tasks) {
   const map = {};
   for (const c of clinics) map[c.id] = {
-    scribe: null, opener: null, closing: null,
+    scribe: { personId: null, start: null, end: null },
+    opener: null, closing: null,
     middle: { personId: null, start: null, end: null },
     training: { personId: null, start: null, end: null },
   };
@@ -107,6 +109,7 @@ function migrateData(raw) {
         ...rest,
         slots: {
           ...(rest.slots ?? {}),
+          scribe: migrateVariableSlot((rest.slots ?? {}).scribe),
           middle: migrateVariableSlot((rest.slots ?? {}).middle),
           training: migrateVariableSlot((rest.slots ?? {}).training),
         },
@@ -160,14 +163,14 @@ function runMigrations(data) {
       clinics = [...clinics, {
         id: 'thu-obs', day: 'Thu', week: 'A', location: 'OBS', provider: '',
         open: true, startTime: 480, endTime: 1020, patientCount: null,
-        slots: { scribe: null, opener: null, closing: null, middle: { personId: null, start: null, end: null }, training: { personId: null, start: null, end: null } },
+        slots: { scribe: { personId: null, start: null, end: null }, opener: null, closing: null, middle: { personId: null, start: null, end: null }, training: { personId: null, start: null, end: null } },
       }];
     }
     if (!clinics.some(c => c.location === 'OBS' && c.day === 'Fri')) {
       clinics = [...clinics, {
         id: 'fri-obs', day: 'Fri', week: 'A', location: 'OBS', provider: '',
         open: true, startTime: 480, endTime: 1020, patientCount: null,
-        slots: { scribe: null, opener: null, closing: null, middle: { personId: null, start: null, end: null }, training: { personId: null, start: null, end: null } },
+        slots: { scribe: { personId: null, start: null, end: null }, opener: null, closing: null, middle: { personId: null, start: null, end: null }, training: { personId: null, start: null, end: null } },
       }];
     }
     d = { ...d, locations, clinics };
@@ -253,6 +256,43 @@ function runMigrations(data) {
     dirty = true;
   }
 
+  // ── Migration: scribetimes ─────────────────────────
+  // Convert scribe slot values from string/null to { personId, start: null, end: null } objects.
+  if (!localStorage.getItem('shiftcraft.migration.scribetimes')) {
+    // Migrate all week slot stores
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key?.startsWith('shiftcraft.week.')) continue;
+      try {
+        const weekMap = JSON.parse(localStorage.getItem(key) ?? '{}');
+        let changed = false;
+        for (const clinicId of Object.keys(weekMap)) {
+          const slots = weekMap[clinicId];
+          if (slots && typeof slots === 'object') {
+            if ('scribe' in slots && (slots.scribe === null || typeof slots.scribe === 'string')) {
+              slots.scribe = migrateVariableSlot(slots.scribe);
+              changed = true;
+            }
+          }
+        }
+        if (changed) localStorage.setItem(key, JSON.stringify(weekMap));
+      } catch { /* ignore */ }
+    }
+    // Update in-memory
+    d = {
+      ...d,
+      clinics: d.clinics.map(c => ({
+        ...c,
+        slots: {
+          ...c.slots,
+          scribe: migrateVariableSlot(c.slots?.scribe),
+        },
+      })),
+    };
+    try { localStorage.setItem('shiftcraft.migration.scribetimes', '1'); } catch { /* ignore */ }
+    dirty = true;
+  }
+
   // ── Migration: tasktimes ─────────────────────
   // Add start/end time fields to existing additional tasks that don't have them.
   if (!localStorage.getItem('shiftcraft.migration.tasktimes')) {
@@ -286,7 +326,7 @@ function runMigrations(data) {
       const { clinics, additionalTasks, ...rest } = d;
       const definitionClinics = clinics.map(({ slots, ...def }) => ({
         ...def,
-        slots: { scribe: null, opener: null, closing: null, middle: { personId: null, start: null, end: null }, training: { personId: null, start: null, end: null } },
+        slots: { scribe: { personId: null, start: null, end: null }, opener: null, closing: null, middle: { personId: null, start: null, end: null }, training: { personId: null, start: null, end: null } },
       }));
       const definitionTasks = (additionalTasks ?? []).map(({ assignedPersonId, ...t }) => ({
         ...t, assignedPersonId: null,
@@ -387,7 +427,7 @@ export function AppProvider({ children }) {
         const { clinics, additionalTasks, ...rest } = globalData;
         const definitionClinics = clinics.map(({ slots, ...def }) => ({
           ...def,
-          slots: { scribe: null, opener: null, closing: null, middle: { personId: null, start: null, end: null }, training: { personId: null, start: null, end: null } },
+          slots: { scribe: { personId: null, start: null, end: null }, opener: null, closing: null, middle: { personId: null, start: null, end: null }, training: { personId: null, start: null, end: null } },
         }));
         const definitionTasks = additionalTasks.map(({ assignedPersonId, ...t }) => ({
           ...t, assignedPersonId: null,
@@ -491,7 +531,7 @@ export function AppProvider({ children }) {
       const clinics = prev.clinics.map(c => {
         if (c.id !== clinicId) return c;
         let newSlotVal;
-        if (slotType === 'middle' || slotType === 'training') {
+        if (slotType === 'middle' || slotType === 'training' || slotType === 'scribe') {
           const existing = c.slots[slotType];
           const times = (existing && typeof existing === 'object')
             ? { start: existing.start, end: existing.end }
@@ -610,7 +650,7 @@ export function AppProvider({ children }) {
         clinics = clinics.map(c => {
           if (c.id !== clinicId) return c;
           let newSlotVal;
-          if (slot === 'middle' || slot === 'training') {
+          if (slot === 'middle' || slot === 'training' || slot === 'scribe') {
             const existing = c.slots[slot];
             const times = (existing && typeof existing === 'object')
               ? { start: existing.start, end: existing.end }

@@ -11,7 +11,7 @@ function runHoursTest() {
     slots: { scribe: 'test-person', opener: null, closing: null, middle: null, training: null },
   };
   const result = calcPersonWeeklyHours('test-person', [mockClinic]);
-  if (result === 9) {
+  if (result === 10.25) {
     console.log('Hours calc: PASS');
   } else {
     console.error(`Hours calc: FAIL [got ${result}]`);

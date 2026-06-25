@@ -83,16 +83,38 @@ export function getSlotTimeLabel(clinic, slotType) {
 }
 
 export function getSlotLabel(slotType, location) {
-  if (slotType === 'scribe') return `Scribe @ ${location}`;
-  return slotType.charAt(0).toUpperCase() + slotType.slice(1);
+  const label = slotType.charAt(0).toUpperCase() + slotType.slice(1);
+  return `${label} @ ${location}`;
+}
+
+export function formatScribeTimeDisplay(slotVal) {
+  if (!slotVal || typeof slotVal !== 'object') return null; // null/null = use default labels
+  const { start, end } = slotVal;
+  if (start == null && end == null) return null; // show nothing (clinic card) or default label (overlay)
+  const startStr = start != null ? minutesToTime(start) : '1st Patient';
+  const endStr = end != null ? minutesToTime(end) : 'Close';
+  return `${startStr} – ${endStr}`;
+}
+
+export function formatTaskTime(task) {
+  if (!task || task.start == null) return null;
+  const endStr = task.end === 'close' ? 'Close' : task.end != null ? minutesToTime(task.end) : '?';
+  return `${minutesToTime(task.start)} – ${endStr}`;
 }
 
 export function calcSlotHours(clinic, slotType) {
   const { startTime, endTime } = clinic;
   switch (slotType) {
-    case 'scribe':   return (endTime - startTime) / 60;
-    case 'opener':   return (17 * 60 - startTime) / 60;
-    case 'closing':  return (endTime - 9 * 60) / 60;
+    case 'scribe': {
+      const sv = clinic.slots?.scribe;
+      const scriberStart = (sv && typeof sv === 'object') ? (sv.start ?? null) : null;
+      const scriberEnd = (sv && typeof sv === 'object') ? (sv.end ?? null) : null;
+      const startMin = scriberStart ?? startTime;
+      const endMin = scriberEnd ?? (endTime + 75);
+      return (endMin - startMin) / 60;
+    }
+    case 'opener':   return (endTime - startTime) / 60;
+    case 'closing':  return (endTime + 75 - 540) / 60;
     case 'middle': {
       const sv = clinic.slots?.middle;
       if (!sv || typeof sv !== 'object' || sv.start == null || sv.end == null) return 0;
