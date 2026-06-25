@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { DAYS, calcPersonWeeklyHours, getSlotLabel, getSlotPersonId, formatVariableSlotTime, minutesToTime, formatScribeTimeDisplay, formatTaskTime } from '../data/seed.js';
+import { DAYS, calcPersonWeeklyHours, getSlotLabel, getSlotPersonId, formatVariableSlotTime, formatOpenerTimeDisplay, formatClosingOverlayDisplay, formatScribeTimeDisplay, formatTaskTime } from '../data/seed.js';
 import ArcChart from './ArcChart.jsx';
 
 function useIsMobile() {
@@ -23,9 +23,9 @@ function WeekRows({ person, clinics, additionalTasks }) {
                 if (slotType === 'scribe') {
                   time = formatScribeTimeDisplay(slotVal) ?? '1st Patient – Close';
                 } else if (slotType === 'opener') {
-                  time = `${minutesToTime(c.startTime)} – ${minutesToTime(c.endTime)}`;
+                  time = formatOpenerTimeDisplay(c, slotVal);
                 } else if (slotType === 'closing') {
-                  time = '9:00 AM – ~Close';
+                  time = formatClosingOverlayDisplay(slotVal);
                 } else if (slotType === 'middle' || slotType === 'training') {
                   time = formatVariableSlotTime(slotVal) ?? 'Time not set';
                 } else {

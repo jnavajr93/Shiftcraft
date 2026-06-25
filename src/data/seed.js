@@ -94,6 +94,13 @@ export function formatOpenerTimeDisplay(clinic, slotVal) {
   return `${startStr} – ${endStr}`;
 }
 
+// Plain-text closing display for overlays/text contexts (no ~, no JSX)
+export function formatClosingOverlayDisplay(slotVal) {
+  const obj = (slotVal && typeof slotVal === 'object') ? slotVal : {};
+  const startStr = obj.start != null ? minutesToTime(obj.start) : '9:00 AM';
+  return `${startStr} – Close`;
+}
+
 export function formatScribeTimeDisplay(slotVal) {
   if (!slotVal || typeof slotVal !== 'object') return null; // null/null = use default labels
   const { start, end } = slotVal;
