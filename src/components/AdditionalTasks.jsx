@@ -165,13 +165,15 @@ function TaskSlotRow({ task, onPersonClick }) {
             </div>
           )}
         </div>
-        <button
-          className="task-remove-btn"
-          onClick={e => { e.stopPropagation(); removeTask(task.id); }}
-          title="Remove task"
-        >
-          <X size={12} />
-        </button>
+        {isAdmin && (
+          <button
+            className="task-remove-btn"
+            onClick={e => { e.stopPropagation(); removeTask(task.id); }}
+            title="Remove task"
+          >
+            <X size={12} />
+          </button>
+        )}
         {showPopover && isAdmin && (
           <TaskPopover
             task={task}
