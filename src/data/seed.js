@@ -1,5 +1,5 @@
 export const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
-export const ROLES = ['Scribe', 'Opener', 'Middle', 'Closing', 'Training'];
+export const ROLES = ['Scribe', 'Opener', 'Middle', 'Closing', 'Training', 'Pre-Op/PACU', 'Sterile Processing', 'Circulator', 'Scrub Tech'];
 export const SLOT_TYPES = ['scribe', 'opener', 'closing', 'middle', 'training'];
 export const OBS_SLOT_TYPES = ['preop', 'sterile', 'circulator', 'scrub'];
 export const EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'PRN'];
