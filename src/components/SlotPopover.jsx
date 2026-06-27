@@ -3,6 +3,13 @@ import { useApp } from '../context/AppContext.jsx';
 import { Trash2, Zap } from 'lucide-react';
 import { DAYS, getSlotPersonId, OBS_SLOT_TYPES } from '../data/seed.js';
 
+const OBS_ROLE_FOR_SLOT = {
+  preop: 'Pre-Op/PACU',
+  sterile: 'Sterile Processing',
+  circulator: 'Circulator',
+  scrub: 'Scrub Tech',
+};
+
 /** Returns reason why person can't fill this slot, or null if they can */
 function ineligibleReason(person, clinic, slotType, clinics, additionalTasks) {
   // Day off
@@ -25,8 +32,13 @@ function ineligibleReason(person, clinic, slotType, clinics, additionalTasks) {
   );
   if (taskAssigned) return 'Already assigned today';
 
-  // Role check (OBS slot types are not in the standard roles list — skip)
-  if (!OBS_SLOT_TYPES.includes(slotType) && !person.roles.map(r => r.toLowerCase()).includes(slotType)) return 'Role not in their list';
+  // Role check
+  if (OBS_SLOT_TYPES.includes(slotType)) {
+    const required = OBS_ROLE_FOR_SLOT[slotType];
+    if (required && !person.roles.includes(required)) return 'Role not in their list';
+  } else {
+    if (!person.roles.map(r => r.toLowerCase()).includes(slotType)) return 'Role not in their list';
+  }
 
   // Location check
   const cleared = person.clearedLocations ?? [];
