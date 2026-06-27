@@ -8,12 +8,14 @@ function ineligibleReason(person, clinic, slotType, clinics, additionalTasks) {
   // Day off
   if ((person.daysOff ?? []).includes(clinic.day)) return 'Off this day';
 
-  // Already assigned to another clinic slot on this day
+  // Already assigned to any slot on this day, except the exact slot this popover is for
   const clinicAssigned = clinics.some(c =>
-    c.id !== clinic.id &&
     c.day === clinic.day &&
     c.open &&
-    Object.entries(c.slots).some(([, sv]) => getSlotPersonId(sv) === person.id)
+    Object.entries(c.slots).some(([st, sv]) =>
+      getSlotPersonId(sv) === person.id &&
+      !(c.id === clinic.id && st === slotType)
+    )
   );
   if (clinicAssigned) return 'Already assigned today';
 
