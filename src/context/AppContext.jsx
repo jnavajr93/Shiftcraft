@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { getSeedData, migratePerson, generateId, getSlotPersonId } from '../data/seed.js';
+import { getSeedData, migratePerson, generateId, getSlotPersonId, OBS_SLOT_TYPES } from '../data/seed.js';
 import { supabase } from '../supabase.js';
 import {
   saveSchedule as saveScheduleDB,
@@ -58,12 +58,7 @@ function readLocalWeekSlotMap(weekStr) {
 function applySlotMap(clinics, tasks, map) {
   const newClinics = clinics.map(c => ({
     ...c,
-    slots: map[c.id] ?? {
-      scribe: { personId: null, start: null, end: null },
-      opener: null, closing: null,
-      middle: { personId: null, start: null, end: null },
-      training: { personId: null, start: null, end: null },
-    },
+    slots: map[c.id] ?? (c.location === 'OBS' ? blankObsSlots() : blankStandardSlots()),
   }));
   const newTasks = (tasks ?? []).map(t => ({
     ...t,
@@ -72,14 +67,22 @@ function applySlotMap(clinics, tasks, map) {
   return { clinics: newClinics, additionalTasks: newTasks };
 }
 
-function blankSlotMap(clinics, tasks) {
-  const map = {};
-  for (const c of clinics) map[c.id] = {
+function blankObsSlots() {
+  return { preop: { personId: null }, sterile: { personId: null }, circulator: { personId: null }, scrub: { personId: null } };
+}
+
+function blankStandardSlots() {
+  return {
     scribe: { personId: null, start: null, end: null },
     opener: null, closing: null,
     middle: { personId: null, start: null, end: null },
     training: { personId: null, start: null, end: null },
   };
+}
+
+function blankSlotMap(clinics, tasks) {
+  const map = {};
+  for (const c of clinics) map[c.id] = c.location === 'OBS' ? blankObsSlots() : blankStandardSlots();
   for (const t of (tasks ?? [])) map[`task:${t.id}`] = null;
   return map;
 }
@@ -106,6 +109,8 @@ function migrateData(raw) {
     people: (raw.people ?? []).map(migratePerson),
     clinics: (raw.clinics ?? []).map(c => {
       const { lastPatientTime: _lpt, ...rest } = c;
+      // OBS clinics have their own slot shape — don't apply standard slot migration
+      if (c.location === 'OBS') return rest;
       return {
         ...rest,
         slots: {
@@ -157,18 +162,32 @@ function runMigrations(data) {
       clinics = [...clinics, {
         id: 'thu-obs', day: 'Thu', week: 'A', location: 'OBS', provider: '',
         open: true, startTime: 480, endTime: 1020, patientCount: null,
-        slots: { scribe: { personId: null, start: null, end: null }, opener: null, closing: null, middle: { personId: null, start: null, end: null }, training: { personId: null, start: null, end: null } },
+        slots: blankObsSlots(),
       }];
     }
     if (!clinics.some(c => c.location === 'OBS' && c.day === 'Fri')) {
       clinics = [...clinics, {
         id: 'fri-obs', day: 'Fri', week: 'A', location: 'OBS', provider: '',
         open: true, startTime: 480, endTime: 1020, patientCount: null,
-        slots: { scribe: { personId: null, start: null, end: null }, opener: null, closing: null, middle: { personId: null, start: null, end: null }, training: { personId: null, start: null, end: null } },
+        slots: blankObsSlots(),
       }];
     }
     d = { ...d, locations, clinics };
     try { localStorage.setItem('shiftcraft.migration.obs', '1'); } catch { /* ignore */ }
+    dirty = true;
+  }
+
+  // ── Migration: obsslots ──────────────────────
+  // Convert OBS clinics that previously used standard slot types to OBS slot types.
+  if (!localStorage.getItem('shiftcraft.migration.obsslots')) {
+    d = {
+      ...d,
+      clinics: d.clinics.map(c => {
+        if (c.location !== 'OBS') return c;
+        return { ...c, slots: blankObsSlots() };
+      }),
+    };
+    try { localStorage.setItem('shiftcraft.migration.obsslots', '1'); } catch { /* ignore */ }
     dirty = true;
   }
 
@@ -340,7 +359,7 @@ function toDefinitionData(globalData) {
   const { clinics, additionalTasks, ...rest } = globalData;
   const definitionClinics = clinics.map(({ slots, ...def }) => ({
     ...def,
-    slots: { scribe: { personId: null, start: null, end: null }, opener: null, closing: null, middle: { personId: null, start: null, end: null }, training: { personId: null, start: null, end: null } },
+    slots: def.location === 'OBS' ? blankObsSlots() : blankStandardSlots(),
   }));
   const definitionTasks = (additionalTasks ?? []).map(({ assignedPersonId, ...t }) => ({
     ...t, assignedPersonId: null,

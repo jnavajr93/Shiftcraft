@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { Pencil, AlertTriangle, Users, Power, Check, X as XIcon } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { getSlotLabel, getSlotTimeLabel, getSlotPersonId, getSlotTimeObj, formatVariableSlotTime, formatOpenerTimeDisplay, formatScribeTimeDisplay, minutesToTime, minutesToTimeInput, timeInputToMinutes, SLOT_TYPES } from '../data/seed.js';
+import { getSlotLabel, getSlotTimeLabel, getSlotPersonId, getSlotTimeObj, formatVariableSlotTime, formatOpenerTimeDisplay, formatScribeTimeDisplay, minutesToTime, minutesToTimeInput, timeInputToMinutes, SLOT_TYPES, OBS_SLOT_TYPES } from '../data/seed.js';
 import SlotPopover from './SlotPopover.jsx';
 import { getConflictPersonDays } from './ConflictBanner.jsx';
 
@@ -412,6 +412,62 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
   );
 }
 
+function ObsSlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch, conflictSet, clinicOpen }) {
+  const { data, isAdmin, assignSlot } = useApp();
+  const slotVal = clinic.slots[slotType];
+  const personId = getSlotPersonId(slotVal);
+  const person = personId ? data.people.find(p => p.id === personId) : null;
+  const [showPopover, setShowPopover] = useState(false);
+
+  const droppableId = `slot:${clinic.id}:${slotType}`;
+  const { setNodeRef: setDropRef, isOver } = useDroppable({ id: droppableId });
+  const setRef = useCallback((el) => { setDropRef(el); }, [setDropRef]);
+
+  const hasConflict = person && conflictSet && conflictSet.has(`${person.id}:${clinic.day}`);
+  const isHighlighted = hasSearch && person && matchedPersonIds.includes(personId);
+  const isDimmed = hasSearch && person && !matchedPersonIds.includes(personId);
+  const interactive = isAdmin && clinicOpen;
+
+  return (
+    <div
+      ref={setRef}
+      className={['slot-row', isOver && interactive ? 'drop-target' : ''].filter(Boolean).join(' ')}
+      onClick={interactive ? () => setShowPopover(s => !s) : undefined}
+      style={{ cursor: interactive ? 'pointer' : 'default' }}
+    >
+      <div className="slot-label-col">
+        <div className="slot-label">{slotType}</div>
+      </div>
+      <div className="slot-content">
+        {person ? (
+          <div
+            className={['person-chip', isHighlighted ? 'highlighted' : '', isDimmed ? 'dimmed' : '', hasConflict ? 'conflict-ring' : ''].filter(Boolean).join(' ')}
+            onClick={e => { e.stopPropagation(); onPersonClick(personId); }}
+          >
+            <div className="dot" style={{ background: person.color }} />
+            {person.name}
+            {hasConflict && <AlertTriangle size={11} style={{ color: 'var(--red)', flexShrink: 0 }} />}
+          </div>
+        ) : (
+          <div className={['slot-empty', isOver && interactive ? 'droppable' : ''].filter(Boolean).join(' ')}>
+            {slotType}
+          </div>
+        )}
+      </div>
+      {showPopover && interactive && (
+        <SlotPopover
+          clinic={clinic}
+          slotType={slotType}
+          currentPersonId={personId}
+          onAssign={(pid) => { assignSlot(clinic.id, slotType, pid); setShowPopover(false); }}
+          onRemove={() => { assignSlot(clinic.id, slotType, null); setShowPopover(false); }}
+          onClose={() => setShowPopover(false)}
+        />
+      )}
+    </div>
+  );
+}
+
 export default function ClinicCard({ clinic, onPersonClick, onEditClinic, matchedPersonIds, hasSearch }) {
   const { data, isAdmin, updateClinic } = useApp();
   const showMiddleHint = isAdmin && clinic.open && (clinic.patientCount ?? 0) >= 68 && !getSlotPersonId(clinic.slots.middle);
@@ -461,18 +517,32 @@ export default function ClinicCard({ clinic, onPersonClick, onEditClinic, matche
         </div>
       ) : (
         <div>
-          {SLOT_TYPES.map(slotType => (
-            <SlotRow
-              key={slotType}
-              clinic={clinic}
-              slotType={slotType}
-              onPersonClick={onPersonClick}
-              matchedPersonIds={matchedPersonIds}
-              hasSearch={hasSearch}
-              conflictSet={conflictSet}
-              clinicOpen={clinic.open}
-            />
-          ))}
+          {clinic.location === 'OBS'
+            ? OBS_SLOT_TYPES.map(slotType => (
+                <ObsSlotRow
+                  key={slotType}
+                  clinic={clinic}
+                  slotType={slotType}
+                  onPersonClick={onPersonClick}
+                  matchedPersonIds={matchedPersonIds}
+                  hasSearch={hasSearch}
+                  conflictSet={conflictSet}
+                  clinicOpen={clinic.open}
+                />
+              ))
+            : SLOT_TYPES.map(slotType => (
+                <SlotRow
+                  key={slotType}
+                  clinic={clinic}
+                  slotType={slotType}
+                  onPersonClick={onPersonClick}
+                  matchedPersonIds={matchedPersonIds}
+                  hasSearch={hasSearch}
+                  conflictSet={conflictSet}
+                  clinicOpen={clinic.open}
+                />
+              ))
+          }
         </div>
       )}
       {showMiddleHint && (

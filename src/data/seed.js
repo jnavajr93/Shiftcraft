@@ -1,6 +1,7 @@
 export const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 export const ROLES = ['Scribe', 'Opener', 'Middle', 'Closing', 'Training'];
 export const SLOT_TYPES = ['scribe', 'opener', 'closing', 'middle', 'training'];
+export const OBS_SLOT_TYPES = ['preop', 'sterile', 'circulator', 'scrub'];
 export const EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'PRN'];
 export const SKILLS = ['Workup', 'Treatments', 'FAs', 'Autoclave & Closing'];
 export const ACCOMMODATION_TYPES = [
@@ -330,8 +331,8 @@ export function getSeedData() {
     { id: 'fri-estrella-drb',   day: 'Fri', week: 'A', location: 'Estrella',   provider: 'Dr. B', open: true, startTime: 480, endTime:  990, patientCount: 20, slots: { scribe: 'yadi',   opener: null,      closing: null,      middle: { personId: null, start: null, end: null },     training: { personId: null, start: null, end: null } } },
     { id: 'fri-phoenix-drr',    day: 'Fri', week: 'A', location: 'Phoenix',    provider: 'Dr. R', open: true, startTime: 480, endTime: 1020, patientCount: 38, slots: { scribe: 'john',   opener: 'martha',  closing: 'jaron',   middle: { personId: null, start: null, end: null },     training: { personId: null, start: null, end: null } } },
     // OBS (Surgery Center)
-    { id: 'thu-obs', day: 'Thu', week: 'A', location: 'OBS', provider: '', open: true, startTime: 480, endTime: 1020, patientCount: null, slots: { scribe: null, opener: null, closing: null, middle: { personId: null, start: null, end: null }, training: { personId: null, start: null, end: null } } },
-    { id: 'fri-obs', day: 'Fri', week: 'A', location: 'OBS', provider: '', open: true, startTime: 480, endTime: 1020, patientCount: null, slots: { scribe: null, opener: null, closing: null, middle: { personId: null, start: null, end: null }, training: { personId: null, start: null, end: null } } },
+    { id: 'thu-obs', day: 'Thu', week: 'A', location: 'OBS', provider: '', open: true, startTime: 480, endTime: 1020, patientCount: null, slots: { preop: { personId: null }, sterile: { personId: null }, circulator: { personId: null }, scrub: { personId: null } } },
+    { id: 'fri-obs', day: 'Fri', week: 'A', location: 'OBS', provider: '', open: true, startTime: 480, endTime: 1020, patientCount: null, slots: { preop: { personId: null }, sterile: { personId: null }, circulator: { personId: null }, scrub: { personId: null } } },
   ];
 
   const additionalTasks = [];
