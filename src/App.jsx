@@ -21,7 +21,26 @@ import AdditionalTasks from './components/AdditionalTasks.jsx';
 import ConflictBanner from './components/ConflictBanner.jsx';
 
 function AppContent() {
-  const { data, isAdmin, assignSlot, assignTask, savedToast } = useApp();
+  const { data, isAdmin, isLoading, assignSlot, assignTask, savedToast } = useApp();
+
+  if (isLoading) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        gap: 16,
+        color: 'var(--text-secondary)',
+      }}>
+        <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.5px', color: 'var(--text-primary)' }}>
+          Shiftcraft
+        </div>
+        <div style={{ fontSize: 14 }}>Loading schedule…</div>
+      </div>
+    );
+  }
   const [activeTab, setActiveTab] = useState('schedule');
   const [selectedPersonId, setSelectedPersonId] = useState(null);
   const [configClinicId, setConfigClinicId] = useState(null);
