@@ -412,6 +412,13 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
   );
 }
 
+const OBS_LABELS = {
+  preop: 'Pre-Op/PACU',
+  sterile: 'Sterile Processing',
+  circulator: 'Circulator',
+  scrub: 'Scrub Tech',
+};
+
 function ObsSlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch, conflictSet, clinicOpen }) {
   const { data, isAdmin, assignSlot } = useApp();
   const slotVal = clinic.slots[slotType];
@@ -427,6 +434,7 @@ function ObsSlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSear
   const isHighlighted = hasSearch && person && matchedPersonIds.includes(personId);
   const isDimmed = hasSearch && person && !matchedPersonIds.includes(personId);
   const interactive = isAdmin && clinicOpen;
+  const label = OBS_LABELS[slotType] ?? slotType;
 
   return (
     <div
@@ -435,8 +443,8 @@ function ObsSlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSear
       onClick={interactive ? () => setShowPopover(s => !s) : undefined}
       style={{ cursor: interactive ? 'pointer' : 'default' }}
     >
-      <div className="slot-label-col">
-        <div className="slot-label">{slotType}</div>
+      <div className="slot-label-col" style={{ whiteSpace: 'normal', minWidth: 80 }}>
+        <div className="slot-label">{label}</div>
       </div>
       <div className="slot-content">
         {person ? (
@@ -450,7 +458,7 @@ function ObsSlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSear
           </div>
         ) : (
           <div className={['slot-empty', isOver && interactive ? 'droppable' : ''].filter(Boolean).join(' ')}>
-            {slotType}
+            {label}
           </div>
         )}
       </div>
