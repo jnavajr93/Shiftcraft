@@ -243,7 +243,7 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
   const isClosing = slotType === 'closing';
   const hasRoleWarning = person && !person.roles.map(r => r.toLowerCase()).includes(slotType);
   const hasLockedWarning = person && person.lockedTo?.length > 0 && !person.lockedTo.includes(clinic.provider);
-  const showWarning = hasRoleWarning || hasLockedWarning;
+  const showWarning = isAdmin && (hasRoleWarning || hasLockedWarning);
   const hasConflict = person && conflictSet && conflictSet.has(`${person.id}:${clinic.day}`);
 
   const slotLabel = getSlotLabel(slotType, clinic.location);
