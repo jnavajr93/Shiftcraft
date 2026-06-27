@@ -18,6 +18,7 @@ import ClinicConfig from './components/ClinicConfig.jsx';
 import Setup from './components/Setup.jsx';
 import PersonOverlay from './components/PersonOverlay.jsx';
 import AdditionalTasks from './components/AdditionalTasks.jsx';
+import UnassignedStaff from './components/UnassignedStaff.jsx';
 import ConflictBanner from './components/ConflictBanner.jsx';
 
 function AppContent() {
@@ -104,6 +105,7 @@ function AppContent() {
                     onEditClinic={isAdmin ? setConfigClinicId : () => {}}
                   />
                   <AdditionalTasks onPersonClick={openPerson} />
+                  <UnassignedStaff onPersonClick={openPerson} />
                 </div>
                 {isAdmin && <HoursBar />}
               </div>
