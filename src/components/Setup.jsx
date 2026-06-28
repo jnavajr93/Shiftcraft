@@ -386,10 +386,10 @@ function PersonCard({ person, providers, locations }) {
         <div className="pill-group">
           {providers.map(p => (
             <button
-              key={p}
-              className={`pill small${(person.lockedTo ?? []).includes(p) ? ' active' : ''}`}
-              onClick={() => up('lockedTo', toggleArr(person.lockedTo ?? [], p))}
-            >{p}</button>
+              key={p.name}
+              className={`pill small${(person.lockedTo ?? []).includes(p.name) ? ' active' : ''}`}
+              onClick={() => up('lockedTo', toggleArr(person.lockedTo ?? [], p.name))}
+            >{p.name}</button>
           ))}
         </div>
       </div>
@@ -659,7 +659,7 @@ function AddPersonModal({ onClose, existingNames, providers, locations }) {
             <label className="form-label">Locked to Provider <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'none', fontWeight: 400 }}>(none = flexible)</span></label>
             <div className="pill-group">
               {providers.map(p => (
-                <button key={p} className={`pill small${form.lockedTo.includes(p) ? ' active' : ''}`} onClick={() => set('lockedTo', toggleArr(form.lockedTo, p))}>{p}</button>
+                <button key={p.name} className={`pill small${form.lockedTo.includes(p.name) ? ' active' : ''}`} onClick={() => set('lockedTo', toggleArr(form.lockedTo, p.name))}>{p.name}</button>
               ))}
             </div>
           </div>
@@ -821,7 +821,7 @@ function ClinicsTab() {
     addClinic({
       id, day, week: 'A',
       location: data.locations[0] ?? 'Phoenix',
-      provider: data.providers[0] ?? 'Dr. R',
+      provider: data.providers[0]?.name ?? 'Dr. R',
       open: true, startTime: 480, endTime: 1020, patientCount: null,
       slots: { scribe: null, opener: null, closing: null, middle: null, training: null },
     });

@@ -21,6 +21,17 @@ function toLocationId(name) {
   return name.toLowerCase().replace(/\s+/g, '_');
 }
 
+// Returns the slot keys that are required (not conditional) for a clinic.
+// OBS clinics: every slot key present is required.
+// Standard clinics: look up provider.requiredSlots; fall back to all slot keys.
+function getRequiredSlots(clinic, providers) {
+  const allSlotKeys = Object.keys(clinic.slots ?? {});
+  if (clinic.location === 'OBS') return allSlotKeys;
+  const provider = providers.find(p => p.name === clinic.provider);
+  if (provider?.requiredSlots?.length) return provider.requiredSlots.filter(s => allSlotKeys.includes(s));
+  return allSlotKeys; // fallback: treat everything as required
+}
+
 // Main export.
 // globalData  — full AppContext data object (people, locations, clinics, etc.)
 // Returns { assignments: [{clinicId, slot, personId}], issues: string[] }
@@ -70,12 +81,13 @@ export function generateSchedule(globalData) {
   // ── 5. Constraints ────────────────────────────────────────────────────────
   const constraints = [];
 
-  // MIN_STAFF: one per unique location+role combination derived from open clinics.
-  // Grouped to avoid redundant constraints for the same location on different days.
+  // MIN_STAFF: only for required slots per clinic (not conditional ones).
+  // For OBS clinics every slot is required; for standard clinics use provider.requiredSlots.
   const minStaffSeen = new Set();
   for (const clinic of openClinics) {
     const locId = toLocationId(clinic.location);
-    for (const slotKey of Object.keys(clinic.slots ?? {})) {
+    const requiredSlots = getRequiredSlots(clinic, globalData.providers ?? []);
+    for (const slotKey of requiredSlots) {
       const key = `${locId}__${slotKey}`;
       if (!minStaffSeen.has(key)) {
         minStaffSeen.add(key);

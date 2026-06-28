@@ -307,7 +307,12 @@ export function getSeedData() {
   ];
 
   const locations = ['Phoenix', 'Chandler', 'Estrella', 'Scottsdale', 'OBS'];
-  const providers = ['Dr. R', 'Dr. A', 'Dr. S', 'Dr. B'];
+  const providers = [
+    { name: 'Dr. R', requiredSlots: ['scribe', 'opener', 'closing'], conditionalSlots: ['middle', 'training'] },
+    { name: 'Dr. A', requiredSlots: ['scribe', 'opener', 'closing'], conditionalSlots: ['middle', 'training'] },
+    { name: 'Dr. S', requiredSlots: ['scribe', 'opener', 'closing'], conditionalSlots: ['middle', 'training'] },
+    { name: 'Dr. B', requiredSlots: ['scribe', 'opener', 'closing'], conditionalSlots: ['middle', 'training'] },
+  ];
 
   // Note: JC daysOff Mon,Wed and John daysOff Tue,Wed — seed reflects this
   // Yadi is locked to Dr. B (Skibell) as Scribe on all Dr. B Estrella clinics

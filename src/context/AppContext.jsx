@@ -348,6 +348,23 @@ function runMigrations(data) {
     dirty = true;
   }
 
+  // ── Migration: providerconfig ─────────────────
+  // Upgrade providers from plain string array to object array with slot rules.
+  if (!localStorage.getItem('shiftcraft.migration.providerconfig')) {
+    if (Array.isArray(d.providers) && d.providers.length > 0 && typeof d.providers[0] === 'string') {
+      d = {
+        ...d,
+        providers: d.providers.map(name => ({
+          name,
+          requiredSlots: ['scribe', 'opener', 'closing'],
+          conditionalSlots: ['middle', 'training'],
+        })),
+      };
+      dirty = true;
+    }
+    try { localStorage.setItem('shiftcraft.migration.providerconfig', '1'); } catch { /* ignore */ }
+  }
+
   // Note: no localStorage save here — caller saves to Supabase
   void dirty;
 
