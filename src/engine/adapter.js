@@ -21,15 +21,29 @@ function toLocationId(name) {
   return name.toLowerCase().replace(/\s+/g, '_');
 }
 
-// Returns the slot keys that are required (not conditional) for a clinic.
+// Returns the slot keys that are required for a clinic (required + evaluated conditionals).
 // OBS clinics: every slot key present is required.
-// Standard clinics: look up provider.requiredSlots; fall back to all slot keys.
+// Standard clinics: requiredSlots + any conditionalSlots whose condition is met.
+// training is never generated — manual only; falls through naturally since it's not in any requiredSlots.
 function getRequiredSlots(clinic, providers) {
   const allSlotKeys = Object.keys(clinic.slots ?? {});
   if (clinic.location === 'OBS') return allSlotKeys;
+
   const provider = providers.find(p => p.name === clinic.provider);
-  if (provider?.requiredSlots?.length) return provider.requiredSlots.filter(s => allSlotKeys.includes(s));
-  return allSlotKeys; // fallback: treat everything as required
+  if (!provider?.requiredSlots?.length) return allSlotKeys; // fallback: treat everything as required
+
+  const required = [...provider.requiredSlots];
+
+  for (const cond of provider.conditionalSlots ?? []) {
+    if (cond.if === 'patientCount > 17' && (clinic.patientCount ?? 0) > 17) {
+      required.push(cond.slot);
+    }
+    if (cond.if === 'patientCount > 70' && (clinic.patientCount ?? 0) > 70) {
+      required.push(cond.slot);
+    }
+  }
+
+  return required.filter(s => allSlotKeys.includes(s));
 }
 
 // Main export.

@@ -308,10 +308,10 @@ export function getSeedData() {
 
   const locations = ['Phoenix', 'Chandler', 'Estrella', 'Scottsdale', 'OBS'];
   const providers = [
-    { name: 'Dr. R', requiredSlots: ['scribe', 'opener', 'closing'], conditionalSlots: ['middle', 'training'] },
-    { name: 'Dr. A', requiredSlots: ['scribe', 'opener', 'closing'], conditionalSlots: ['middle', 'training'] },
-    { name: 'Dr. S', requiredSlots: ['scribe', 'opener', 'closing'], conditionalSlots: ['middle', 'training'] },
-    { name: 'Dr. B', requiredSlots: ['scribe', 'opener', 'closing'], conditionalSlots: ['middle', 'training'] },
+    { name: 'Dr. R', requiredSlots: ['scribe', 'opener', 'closing'], conditionalSlots: [{ slot: 'middle', if: 'patientCount > 70' }] },
+    { name: 'Dr. A', requiredSlots: ['scribe', 'opener', 'closing'], conditionalSlots: [{ slot: 'middle', if: 'patientCount > 70' }] },
+    { name: 'Dr. S', requiredSlots: ['scribe', 'opener', 'closing'], conditionalSlots: [{ slot: 'middle', if: 'patientCount > 70' }] },
+    { name: 'Dr. B', requiredSlots: ['scribe', 'opener'],            conditionalSlots: [{ slot: 'closing', if: 'patientCount > 17' }] },
   ];
 
   // Note: JC daysOff Mon,Wed and John daysOff Tue,Wed — seed reflects this
