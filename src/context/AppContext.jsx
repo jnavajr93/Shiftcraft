@@ -388,6 +388,20 @@ function runMigrations(data) {
     try { localStorage.setItem('shiftcraft.migration.lockedto_v2', '1'); } catch { /* ignore */ }
   }
 
+  // ── Migration: yadi_roles_v1 ──────────────────
+  // Yadi's roles stripped to ['Opener'] — Scribe removed so she's not consumed
+  // as a free-candidacy scribe at non-Dr-B clinics. MUST_PAIR handles her Dr. B scribe slot.
+  if (!localStorage.getItem('shiftcraft.migration.yadi_roles_v1')) {
+    d = {
+      ...d,
+      people: d.people.map(p =>
+        p.id === 'yadi' ? { ...p, roles: ['Opener'] } : p
+      ),
+    };
+    dirty = true;
+    try { localStorage.setItem('shiftcraft.migration.yadi_roles_v1', '1'); } catch { /* ignore */ }
+  }
+
   // Note: no localStorage save here — caller saves to Supabase
   void dirty;
 

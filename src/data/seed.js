@@ -235,7 +235,9 @@ export function getSeedData() {
     },
     {
       id: 'yadi', name: 'Yadi', color: '#db2777', employmentType: 'Full-time',
-      grade: null, roles: ['Scribe', 'Opener', 'Middle', 'Closing'], skills: [], clearedLocations: [], preferredLocations: [],
+      // roles: ['Opener'] only — Scribe removed so she can't be picked up as free-candidacy scribe
+      // at other clinics. MUST_PAIR with slot:'scribe' places her at Dr. B regardless of roles array.
+      grade: null, roles: ['Opener'], skills: [], clearedLocations: [], preferredLocations: [],
       lockedTo: [{ provider: 'Dr. B', slot: 'scribe' }], daysOff: [],
       availabilityWindows: {
         Mon: { startNotBefore: null, endNoLater: 990 },

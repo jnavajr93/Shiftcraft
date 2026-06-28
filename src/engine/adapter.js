@@ -26,6 +26,8 @@ function toLocationId(name) {
 // Standard clinics: requiredSlots + any conditionalSlots whose condition is met.
 // training is never generated — excluded explicitly as a safety net.
 function getRequiredSlots(clinic, providers) {
+  // TEMP: log raw location value so we can hardcode the exact match
+  console.log(`[OBS diag] clinic.id="${clinic.id}" clinic.location=${JSON.stringify(clinic.location)} isObs=${clinic.location?.toLowerCase()==='obs'}`);
   // Fix 2: case-insensitive OBS check
   const isObs = clinic.location?.toLowerCase() === 'obs';
   // Fix 1: always exclude training, even in fallback path

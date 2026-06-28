@@ -105,8 +105,14 @@ export function solve(cfg, week = null) {
       (c) => c.enabled && c.type === CT.MUST_PAIR
     );
 
+    // Only consider pairings whose anchor shift is scheduled TODAY — otherwise
+    // a Monday MUST_PAIR for Yadi would be processed on Tuesday, reserving her
+    // for a Monday shift that doesn't exist today and locking her out of Tuesday.
+    const dayShiftIds = new Set(dayShifts.map(s => s.id));
+
     const reservations = {}; // shiftId → [{personId, roleId}]
     for (const p of pairings) {
+      if (!dayShiftIds.has(p.anchorId)) continue; // skip constraints for other days
       const person = idx.people[p.personId];
       if (!person || used.has(person.id) || isUnavailable(person.id, day, cfg)) continue;
       // Use constraint.slot if specified (object lockedTo format), otherwise person.roles[0]
