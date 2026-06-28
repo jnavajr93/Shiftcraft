@@ -334,15 +334,21 @@ function PersonCard({ person, providers, locations }) {
 
       {/* Roles */}
       <div className="form-group">
-        <label className="form-label">Roles</label>
+        <label className="form-label">Roles <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'none', fontWeight: 400 }}>(first = primary)</span></label>
         <div className="pill-group">
-          {ROLES.map(r => (
-            <button
-              key={r}
-              className={`pill${person.roles.includes(r) ? ' active' : ''}`}
-              onClick={() => up('roles', toggleArr(person.roles, r))}
-            >{r}</button>
-          ))}
+          {ROLES.map(r => {
+            const idx = person.roles.indexOf(r);
+            const isActive = idx !== -1;
+            return (
+              <button
+                key={r}
+                className={`pill${isActive ? ' active' : ''}`}
+                onClick={() => up('roles', toggleArr(person.roles, r))}
+              >
+                {isActive ? `${idx + 1}. ` : ''}{r}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -620,11 +626,17 @@ function AddPersonModal({ onClose, existingNames, providers, locations }) {
 
           {/* Roles */}
           <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label">Roles</label>
+            <label className="form-label">Roles <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'none', fontWeight: 400 }}>(first = primary)</span></label>
             <div className="pill-group">
-              {ROLES.map(r => (
-                <button key={r} className={`pill${form.roles.includes(r) ? ' active' : ''}`} onClick={() => set('roles', toggleArr(form.roles, r))}>{r}</button>
-              ))}
+              {ROLES.map(r => {
+                const idx = form.roles.indexOf(r);
+                const isActive = idx !== -1;
+                return (
+                  <button key={r} className={`pill${isActive ? ' active' : ''}`} onClick={() => set('roles', toggleArr(form.roles, r))}>
+                    {isActive ? `${idx + 1}. ` : ''}{r}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
