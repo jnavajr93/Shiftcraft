@@ -10,6 +10,11 @@ const OBS_ROLE_FOR_SLOT = {
   scrub: 'Scrub Tech',
 };
 
+// Returns the provider name string from a lockedTo entry (string or {provider,slot} object)
+function lockedToProvider(entry) {
+  return typeof entry === 'string' ? entry : entry.provider;
+}
+
 /** Returns reason why person can't fill this slot, or null if they can */
 function ineligibleReason(person, clinic, slotType, clinics, additionalTasks) {
   // Day off
@@ -31,6 +36,13 @@ function ineligibleReason(person, clinic, slotType, clinics, additionalTasks) {
     t.day === clinic.day && t.assignedPersonId === person.id
   );
   if (taskAssigned) return 'Already assigned today';
+
+  // MUST_PAIR override: if person has a slot-specific lock to this clinic+slot,
+  // they're eligible regardless of their roles array (solver places them via MUST_PAIR).
+  const isMustPairForThisSlot = (person.lockedTo ?? []).some(e =>
+    typeof e === 'object' && e.provider === clinic.provider && e.slot === slotType
+  );
+  if (isMustPairForThisSlot) return null;
 
   // Role check
   if (OBS_SLOT_TYPES.includes(slotType)) {
@@ -163,7 +175,8 @@ export default function SlotPopover({ clinic, slotType, currentPersonId, onAssig
 }
 
 function PersonRow({ person, isCurrent, dimmed, suggested, reason, clinic, slotType, onAssign }) {
-  const hasLockedWarning = person.lockedTo?.length > 0 && !person.lockedTo.includes(clinic.provider);
+  const hasLockedWarning = person.lockedTo?.length > 0 &&
+    !person.lockedTo.some(e => lockedToProvider(e) === clinic.provider);
 
   return (
     <div
@@ -176,7 +189,7 @@ function PersonRow({ person, isCurrent, dimmed, suggested, reason, clinic, slotT
       <span style={{ flex: 1 }}>{person.name}</span>
       {person.grade && <span className={`grade-badge ${person.grade}`}>{person.grade}</span>}
       {hasLockedWarning && !dimmed && (
-        <span style={{ fontSize: 10, color: 'var(--amber)', marginLeft: 2 }} title={`Locked to ${person.lockedTo.join(', ')}`}>⚠</span>
+        <span style={{ fontSize: 10, color: 'var(--amber)', marginLeft: 2 }} title={`Locked to ${person.lockedTo.map(lockedToProvider).join(', ')}`}>⚠</span>
       )}
       {reason && <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{reason}</span>}
     </div>

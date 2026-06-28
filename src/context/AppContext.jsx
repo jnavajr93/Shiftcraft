@@ -402,6 +402,23 @@ function runMigrations(data) {
     try { localStorage.setItem('shiftcraft.migration.yadi_roles_v1', '1'); } catch { /* ignore */ }
   }
 
+  // ── Migration: drb_config_v1 ──────────────────
+  // Force Dr. B provider config to correct slot rules in Supabase.
+  // An earlier migration run may have applied DEFAULT_RULES (with closing in requiredSlots
+  // and middle conditional) to Dr. B before the per-provider overrides were added.
+  if (!localStorage.getItem('shiftcraft.migration.drb_config_v1')) {
+    d = {
+      ...d,
+      providers: (d.providers ?? []).map(p =>
+        p.name === 'Dr. B'
+          ? { ...p, requiredSlots: ['scribe', 'opener'], conditionalSlots: [{ slot: 'closing', if: 'patientCount > 17' }] }
+          : p
+      ),
+    };
+    dirty = true;
+    try { localStorage.setItem('shiftcraft.migration.drb_config_v1', '1'); } catch { /* ignore */ }
+  }
+
   // Note: no localStorage save here — caller saves to Supabase
   void dirty;
 

@@ -241,8 +241,13 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
   const isScribe = slotType === 'scribe';
   const isOpener = slotType === 'opener';
   const isClosing = slotType === 'closing';
-  const hasRoleWarning = person && !person.roles.map(r => r.toLowerCase()).includes(slotType);
-  const hasLockedWarning = person && person.lockedTo?.length > 0 && !person.lockedTo.includes(clinic.provider);
+  // Suppress role warning if person has a slot-specific MUST_PAIR lock for this slot
+  const isMustPairForThisSlot = person && (person.lockedTo ?? []).some(e =>
+    typeof e === 'object' && e.provider === clinic.provider && e.slot === slotType
+  );
+  const hasRoleWarning = person && !isMustPairForThisSlot && !person.roles.map(r => r.toLowerCase()).includes(slotType);
+  const hasLockedWarning = person && person.lockedTo?.length > 0 &&
+    !person.lockedTo.some(e => (typeof e === 'string' ? e : e.provider) === clinic.provider);
   const showWarning = isAdmin && (hasRoleWarning || hasLockedWarning);
   const hasConflict = person && conflictSet && conflictSet.has(`${person.id}:${clinic.day}`);
 
@@ -312,7 +317,7 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
           {showWarning && (
             <span
               className="warning-icon"
-              title={hasLockedWarning ? `Locked to ${person.lockedTo.join(', ')}` : 'Not cleared for this role'}
+              title={hasLockedWarning ? `Locked to ${person.lockedTo.map(e => typeof e === 'string' ? e : e.provider).join(', ')}` : 'Not cleared for this role'}
             >
               <AlertTriangle size={13} />
             </span>
