@@ -744,9 +744,18 @@ export function AppProvider({ children }) {
     setGlobalData(prev => ({ ...prev, people: newOrder }));
   }, []);
 
-  const applyBulkAssignments = useCallback((assignments) => {
+  const applyBulkAssignments = useCallback((assignments, { clearFirst = false } = {}) => {
     setGlobalData(prev => {
       let clinics = prev.clinics;
+      // clearFirst: blank all open clinic slots before applying so stale manual
+      // assignments can't survive when the solver chose a different person for that slot.
+      if (clearFirst) {
+        clinics = clinics.map(c =>
+          c.open
+            ? { ...c, slots: c.location === 'OBS' ? blankObsSlots() : blankStandardSlots() }
+            : c
+        );
+      }
       for (const { clinicId, slot, personId } of assignments) {
         clinics = clinics.map(c => {
           if (c.id !== clinicId) return c;

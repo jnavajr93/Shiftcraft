@@ -354,7 +354,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
         });
       }
 
-      applyBulkAssignments(assignments);
+      applyBulkAssignments(assignments, { clearFirst: !keepExisting });
 
       addLog({
         action: `Schedule generated for Week of ${weekLabel} — ${assignments.length} assignments made`,
