@@ -153,12 +153,10 @@ export function generateSchedule(globalData) {
 
   // MIN_STAFF: only for required slots per clinic (not conditional ones).
   // For OBS clinics every slot is required; for standard clinics use provider.requiredSlots.
-  console.group('[Shiftcraft diag] clinic.location values + required slots');
   const minStaffSeen = new Set();
   for (const clinic of openClinics) {
     const locId = toLocationId(clinic.location);
     const requiredSlots = getRequiredSlots(clinic, globalData.providers ?? []);
-    console.log(`  ${clinic.day} ${clinic.provider || '(no provider)'} @ "${clinic.location}" → locId="${locId}" isObs=${clinic.location?.toLowerCase()==='obs'} requiredSlots=[${requiredSlots.join(',')}]`);
     for (const slotKey of requiredSlots) {
       const key = `${locId}__${slotKey}`;
       if (!minStaffSeen.has(key)) {
@@ -174,7 +172,6 @@ export function generateSchedule(globalData) {
       }
     }
   }
-  console.groupEnd();
 
   // UNAVAILABLE: per person daysOff
   for (const person of globalData.people ?? []) {
@@ -206,29 +203,24 @@ export function generateSchedule(globalData) {
   // Supports both legacy string format ("Dr. B") and new object format ({ provider, slot }).
   // String: any slot, solver uses person.roles[0].
   // Object: targets the specified slot; solver uses constraint.slot.
-  console.group('[Shiftcraft diag] MUST_PAIR constraints generated');
   for (const person of globalData.people ?? []) {
     for (const entry of (person.lockedTo ?? [])) {
       const providerName = typeof entry === 'string' ? entry : entry.provider;
       const lockedSlot   = typeof entry === 'string' ? null  : (entry.slot ?? null);
       for (const shift of shifts) {
         if (shift.name === providerName) {
-          const c = {
+          constraints.push({
             id: `mustpair_${person.id}_${shift.id}${lockedSlot ? `_${lockedSlot}` : ''}`,
             type: 'must_pair',
             enabled: true,
             personId: person.id,
             anchorId: shift.id,
             slot: lockedSlot, // null = any role (uses person.roles[0]); string = specific slot
-          };
-          constraints.push(c);
-          console.log(`  ${person.name} → shift "${shift.name}" id=${shift.id} day=${shift.days} slot=${lockedSlot ?? '(roles[0])'} | entry was:`, entry);
+          });
         }
       }
     }
   }
-  if (!constraints.some(c => c.type === 'must_pair')) console.log('  (none generated)');
-  console.groupEnd();
 
   const cfg = { roles, locations, people, shifts, constraints };
 

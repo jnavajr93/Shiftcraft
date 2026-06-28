@@ -98,38 +98,41 @@ export function solve(cfg, week = null) {
     const cards = [];
     const issues = [];
 
-    // 1) Resolve must-pair anchors first so paired people are locked early.
+    // 1) Global MUST_PAIR pre-pass — reserve paired people before any free
+    //    assignment so they can't be consumed by other shifts processed earlier
+    //    in the sort order. Builds a reservation map: shiftId → [{personId, roleId}].
     const pairings = cfg.constraints.filter(
       (c) => c.enabled && c.type === CT.MUST_PAIR
     );
+
+    const reservations = {}; // shiftId → [{personId, roleId}]
+    for (const p of pairings) {
+      const person = idx.people[p.personId];
+      if (!person || used.has(person.id) || isUnavailable(person.id, day, cfg)) continue;
+      // Use constraint.slot if specified (object lockedTo format), otherwise person.roles[0]
+      const roleId = p.slot ?? person.roles[0];
+      if (!reservations[p.anchorId]) reservations[p.anchorId] = [];
+      reservations[p.anchorId].push({ personId: person.id, roleId });
+      used.add(person.id); // mark used NOW so free candidacy on other shifts skips them
+      // weekHours credited when the shift card is actually built below
+    }
 
     // Sort shifts so the most-constrained (largest min-staff) fill first.
     const sorted = [...dayShifts].sort(
       (a, b) => totalMin(b.locationId, cfg) - totalMin(a.locationId, cfg)
     );
 
-    console.log(`[Shiftcraft diag] ${day} shift order:`, sorted.map(s => `${s.name}@${s.locationId}(totalMin=${totalMin(s.locationId,cfg)})`).join(' → '));
     for (const shift of sorted) {
       const loc = idx.locations[shift.locationId];
       const req = staffingFor(shift.locationId, cfg);
-      const assigned = []; // { personId, roleId }
       const hrs = shiftHours(shift);
 
-      // a) Apply pairings: any person paired to this anchor shift.
-      // HOUR_CAP is not checked here — explicit pairings are user overrides.
-      pairings.forEach((p) => {
-        if (p.anchorId !== shift.id) return;
-        const person = idx.people[p.personId];
-        const alreadyUsed = used.has(person?.id);
-        console.log(`[Shiftcraft diag] MUST_PAIR ${person?.name} → ${shift.name}@${shift.locationId} slot=${p.slot ?? 'roles[0]'} alreadyUsed=${alreadyUsed}`);
-        if (person && !alreadyUsed && !isUnavailable(person.id, day, cfg)) {
-          // Use constraint.slot if specified (object lockedTo format), otherwise person.roles[0]
-          const roleId = p.slot ?? person.roles[0];
-          assigned.push({ personId: person.id, roleId });
-          used.add(person.id);
-          weekHours[person.id] = (weekHours[person.id] || 0) + hrs;
-        }
-      });
+      // a) Apply pre-reserved people for this shift.
+      const assigned = []; // { personId, roleId }
+      for (const res of (reservations[shift.id] ?? [])) {
+        assigned.push(res);
+        weekHours[res.personId] = (weekHours[res.personId] || 0) + hrs;
+      }
 
       // b) Fill each required role up to its minimum.
       for (const roleId of Object.keys(req)) {
