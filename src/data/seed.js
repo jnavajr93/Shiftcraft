@@ -186,7 +186,7 @@ export function calcPersonWeeklyHours(personId, clinics, additionalTasks) {
 
 /** Migrate old Person shape to new shape */
 export function migratePerson(p) {
-  // Migrate lockedTo: string|null → string[]
+  // Migrate lockedTo: string|null → array; array entries may be strings or {provider,slot} objects
   let lockedTo = p.lockedTo ?? [];
   if (typeof lockedTo === 'string') lockedTo = lockedTo ? [lockedTo] : [];
   return {
@@ -236,7 +236,7 @@ export function getSeedData() {
     {
       id: 'yadi', name: 'Yadi', color: '#db2777', employmentType: 'Full-time',
       grade: null, roles: ['Scribe', 'Opener', 'Middle', 'Closing'], skills: [], clearedLocations: [], preferredLocations: [],
-      lockedTo: ['Dr. B'], daysOff: [],
+      lockedTo: [{ provider: 'Dr. B', slot: 'scribe' }], daysOff: [],
       availabilityWindows: {
         Mon: { startNotBefore: null, endNoLater: 990 },
         Wed: { startNotBefore: null, endNoLater: 990 },

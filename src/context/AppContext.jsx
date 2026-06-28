@@ -368,6 +368,26 @@ function runMigrations(data) {
     try { localStorage.setItem('shiftcraft.migration.providerconfig', '1'); } catch { /* ignore */ }
   }
 
+  // ── Migration: lockedto_v2 ────────────────────
+  // Upgrade known seed people from plain string lockedTo entries to {provider,slot} objects.
+  // String entries for user-added people are left as-is (adapter handles both formats).
+  if (!localStorage.getItem('shiftcraft.migration.lockedto_v2')) {
+    const LOCKED_UPGRADES = {
+      'yadi': [{ provider: 'Dr. B', slot: 'scribe' }],
+    };
+    let changed = false;
+    d = {
+      ...d,
+      people: d.people.map(p => {
+        if (!LOCKED_UPGRADES[p.id]) return p;
+        changed = true;
+        return { ...p, lockedTo: LOCKED_UPGRADES[p.id] };
+      }),
+    };
+    if (changed) dirty = true;
+    try { localStorage.setItem('shiftcraft.migration.lockedto_v2', '1'); } catch { /* ignore */ }
+  }
+
   // Note: no localStorage save here — caller saves to Supabase
   void dirty;
 

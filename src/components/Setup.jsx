@@ -25,6 +25,18 @@ function toggleArr(arr, item) {
   return arr.includes(item) ? arr.filter(x => x !== item) : [...arr, item];
 }
 
+// lockedTo entries can be plain strings ("Dr. B") or objects ({ provider, slot }).
+// These helpers unify the two formats for pill display and toggle.
+function lockedToHasProvider(lockedTo, providerName) {
+  return (lockedTo ?? []).some(e => (typeof e === 'string' ? e : e.provider) === providerName);
+}
+function lockedToToggleProvider(lockedTo, providerName) {
+  const arr = lockedTo ?? [];
+  const has = lockedToHasProvider(arr, providerName);
+  if (has) return arr.filter(e => (typeof e === 'string' ? e : e.provider) !== providerName);
+  return [...arr, providerName]; // UI always adds plain strings; objects come from seed/migration
+}
+
 // ─── Availability Constraints ─────────────────
 function AvailabilityConstraints({ windows, daysOff, onChange }) {
   const constrainedDays = Object.keys(windows).filter(
@@ -393,8 +405,8 @@ function PersonCard({ person, providers, locations }) {
           {providers.map(p => (
             <button
               key={p.name}
-              className={`pill small${(person.lockedTo ?? []).includes(p.name) ? ' active' : ''}`}
-              onClick={() => up('lockedTo', toggleArr(person.lockedTo ?? [], p.name))}
+              className={`pill small${lockedToHasProvider(person.lockedTo, p.name) ? ' active' : ''}`}
+              onClick={() => up('lockedTo', lockedToToggleProvider(person.lockedTo, p.name))}
             >{p.name}</button>
           ))}
         </div>
@@ -671,7 +683,7 @@ function AddPersonModal({ onClose, existingNames, providers, locations }) {
             <label className="form-label">Locked to Provider <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'none', fontWeight: 400 }}>(none = flexible)</span></label>
             <div className="pill-group">
               {providers.map(p => (
-                <button key={p.name} className={`pill small${form.lockedTo.includes(p.name) ? ' active' : ''}`} onClick={() => set('lockedTo', toggleArr(form.lockedTo, p.name))}>{p.name}</button>
+                <button key={p.name} className={`pill small${lockedToHasProvider(form.lockedTo, p.name) ? ' active' : ''}`} onClick={() => set('lockedTo', lockedToToggleProvider(form.lockedTo, p.name))}>{p.name}</button>
               ))}
             </div>
           </div>

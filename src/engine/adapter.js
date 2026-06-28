@@ -24,17 +24,22 @@ function toLocationId(name) {
 // Returns the slot keys that are required for a clinic (required + evaluated conditionals).
 // OBS clinics: every slot key present is required.
 // Standard clinics: requiredSlots + any conditionalSlots whose condition is met.
-// training is never generated — manual only; falls through naturally since it's not in any requiredSlots.
+// training is never generated — excluded explicitly as a safety net.
 function getRequiredSlots(clinic, providers) {
-  const allSlotKeys = Object.keys(clinic.slots ?? {});
-  if (clinic.location === 'OBS') return allSlotKeys;
+  // Fix 2: case-insensitive OBS check
+  const isObs = clinic.location?.toLowerCase() === 'obs';
+  // Fix 1: always exclude training, even in fallback path
+  const allSlotKeys = Object.keys(clinic.slots ?? {}).filter(k => k !== 'training');
+
+  if (isObs) return allSlotKeys;
 
   const provider = providers.find(p => p.name === clinic.provider);
   if (!provider?.requiredSlots?.length) return allSlotKeys; // fallback: treat everything as required
 
-  const required = [...provider.requiredSlots];
+  const required = provider.requiredSlots.filter(s => s !== 'training');
 
   for (const cond of provider.conditionalSlots ?? []) {
+    if (cond.slot === 'training') continue; // never generate training
     if (cond.if === 'patientCount > 17' && (clinic.patientCount ?? 0) > 17) {
       required.push(cond.slot);
     }
@@ -194,17 +199,23 @@ export function generateSchedule(globalData) {
     }
   }
 
-  // MUST_PAIR: lockedTo provider name → match against shift names
+  // MUST_PAIR: lockedTo entries → match against shift names.
+  // Supports both legacy string format ("Dr. B") and new object format ({ provider, slot }).
+  // String: any slot, solver uses person.roles[0].
+  // Object: targets the specified slot; solver uses constraint.slot.
   for (const person of globalData.people ?? []) {
-    for (const providerName of (person.lockedTo ?? [])) {
+    for (const entry of (person.lockedTo ?? [])) {
+      const providerName = typeof entry === 'string' ? entry : entry.provider;
+      const lockedSlot   = typeof entry === 'string' ? null  : (entry.slot ?? null);
       for (const shift of shifts) {
         if (shift.name === providerName) {
           constraints.push({
-            id: `mustpair_${person.id}_${shift.id}`,
+            id: `mustpair_${person.id}_${shift.id}${lockedSlot ? `_${lockedSlot}` : ''}`,
             type: 'must_pair',
             enabled: true,
             personId: person.id,
             anchorId: shift.id,
+            slot: lockedSlot, // null = any role (uses person.roles[0]); string = specific slot
           });
         }
       }

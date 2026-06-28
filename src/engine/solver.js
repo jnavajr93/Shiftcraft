@@ -120,7 +120,8 @@ export function solve(cfg, week = null) {
         if (p.anchorId !== shift.id) return;
         const person = idx.people[p.personId];
         if (person && !used.has(person.id) && !isUnavailable(person.id, day, cfg)) {
-          const roleId = person.roles[0];
+          // Use constraint.slot if specified (object lockedTo format), otherwise person.roles[0]
+          const roleId = p.slot ?? person.roles[0];
           assigned.push({ personId: person.id, roleId });
           used.add(person.id);
           weekHours[person.id] = (weekHours[person.id] || 0) + hrs;
