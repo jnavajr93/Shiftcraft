@@ -108,6 +108,7 @@ export function solve(cfg, week = null) {
       (a, b) => totalMin(b.locationId, cfg) - totalMin(a.locationId, cfg)
     );
 
+    console.log(`[Shiftcraft diag] ${day} shift order:`, sorted.map(s => `${s.name}@${s.locationId}(totalMin=${totalMin(s.locationId,cfg)})`).join(' → '));
     for (const shift of sorted) {
       const loc = idx.locations[shift.locationId];
       const req = staffingFor(shift.locationId, cfg);
@@ -119,7 +120,9 @@ export function solve(cfg, week = null) {
       pairings.forEach((p) => {
         if (p.anchorId !== shift.id) return;
         const person = idx.people[p.personId];
-        if (person && !used.has(person.id) && !isUnavailable(person.id, day, cfg)) {
+        const alreadyUsed = used.has(person?.id);
+        console.log(`[Shiftcraft diag] MUST_PAIR ${person?.name} → ${shift.name}@${shift.locationId} slot=${p.slot ?? 'roles[0]'} alreadyUsed=${alreadyUsed}`);
+        if (person && !alreadyUsed && !isUnavailable(person.id, day, cfg)) {
           // Use constraint.slot if specified (object lockedTo format), otherwise person.roles[0]
           const roleId = p.slot ?? person.roles[0];
           assigned.push({ personId: person.id, roleId });
