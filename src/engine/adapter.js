@@ -1,0 +1,160 @@
+// src/engine/adapter.js
+// Translates AppContext globalData → solver cfg, runs solve(), returns
+// results in the same { clinicId, slot, personId } shape applyBulkAssignments expects.
+
+import { solve } from './solver.js';
+
+// Maps role display names (stored in person.roles) to slot key IDs used by the solver.
+const ROLE_TO_SLOT_KEY = {
+  'Scribe':             'scribe',
+  'Opener':             'opener',
+  'Middle':             'middle',
+  'Closing':            'closing',
+  'Training':           'training',
+  'Pre-Op/PACU':        'preop',
+  'Sterile Processing': 'sterile',
+  'Circulator':         'circulator',
+  'Scrub Tech':         'scrub',
+};
+
+function toLocationId(name) {
+  return name.toLowerCase().replace(/\s+/g, '_');
+}
+
+// Main export.
+// globalData  — full AppContext data object (people, locations, clinics, etc.)
+// Returns { assignments: [{clinicId, slot, personId}], issues: string[] }
+export function generateSchedule(globalData) {
+  const openClinics = (globalData.clinics ?? []).filter(c => c.open);
+
+  // ── 1. Roles — derived from slot keys present in open clinics ──────────────
+  const slotKeySet = new Set();
+  for (const clinic of openClinics) {
+    for (const key of Object.keys(clinic.slots ?? {})) {
+      slotKeySet.add(key);
+    }
+  }
+  // role id === slot key; role name === slot key (solver uses name for output)
+  const roles = [...slotKeySet].map(key => ({ id: key, name: key }));
+
+  // ── 2. Locations ──────────────────────────────────────────────────────────
+  const locations = (globalData.locations ?? []).map(name => ({
+    id: toLocationId(name),
+    name,
+  }));
+
+  // ── 3. People ─────────────────────────────────────────────────────────────
+  const people = (globalData.people ?? []).map(p => ({
+    id: p.id,
+    name: p.name,
+    color: p.color,
+    targetHours: p.targetHours ?? null,
+    // Map display role names → slot key IDs; drop any unknown roles
+    roles: (p.roles ?? []).map(r => ROLE_TO_SLOT_KEY[r]).filter(Boolean),
+    // Map cleared location names → location IDs; empty = cleared everywhere
+    locations: (p.clearedLocations ?? []).map(name => toLocationId(name)),
+  }));
+
+  // ── 4. Shifts — one per open clinic ───────────────────────────────────────
+  const shifts = openClinics.map(clinic => ({
+    id: clinic.id,
+    name: clinic.provider,
+    locationId: toLocationId(clinic.location),
+    days: [clinic.day],
+    start: clinic.startTime,
+    end: clinic.endTime,
+    week: null,   // already filtered to current week; pass null so solver runs all
+    anchor: true,
+  }));
+
+  // ── 5. Constraints ────────────────────────────────────────────────────────
+  const constraints = [];
+
+  // MIN_STAFF: one per unique location+role combination derived from open clinics.
+  // Grouped to avoid redundant constraints for the same location on different days.
+  const minStaffSeen = new Set();
+  for (const clinic of openClinics) {
+    const locId = toLocationId(clinic.location);
+    for (const slotKey of Object.keys(clinic.slots ?? {})) {
+      const key = `${locId}__${slotKey}`;
+      if (!minStaffSeen.has(key)) {
+        minStaffSeen.add(key);
+        constraints.push({
+          id: key,
+          type: 'min_staff',
+          enabled: true,
+          locationId: locId,
+          roleId: slotKey,
+          count: 1,
+        });
+      }
+    }
+  }
+
+  // UNAVAILABLE: per person daysOff
+  for (const person of globalData.people ?? []) {
+    if ((person.daysOff ?? []).length > 0) {
+      constraints.push({
+        id: `unavail_${person.id}`,
+        type: 'unavailable',
+        enabled: true,
+        personId: person.id,
+        days: person.daysOff,
+      });
+    }
+  }
+
+  // HOUR_CAP: per person targetHours
+  for (const person of globalData.people ?? []) {
+    if (person.targetHours != null) {
+      constraints.push({
+        id: `hourcap_${person.id}`,
+        type: 'hour_cap',
+        enabled: true,
+        personId: person.id,
+        count: person.targetHours,
+      });
+    }
+  }
+
+  // MUST_PAIR: lockedTo provider name → match against shift names
+  for (const person of globalData.people ?? []) {
+    for (const providerName of (person.lockedTo ?? [])) {
+      for (const shift of shifts) {
+        if (shift.name === providerName) {
+          constraints.push({
+            id: `mustpair_${person.id}_${shift.id}`,
+            type: 'must_pair',
+            enabled: true,
+            personId: person.id,
+            anchorId: shift.id,
+          });
+        }
+      }
+    }
+  }
+
+  const cfg = { roles, locations, people, shifts, constraints };
+
+  // ── 6. Run solver ─────────────────────────────────────────────────────────
+  const result = solve(cfg, null);
+
+  // ── 7. Translate back to [{clinicId, slot, personId}] ────────────────────
+  // solver output: result[day].shifts[].{ shiftId, assigned: [{personId, role}] }
+  // role === idx.roles[roleId].name === slotKey (since we set name = id = slotKey)
+  const assignments = [];
+  const issues = [];
+
+  for (const dayResult of Object.values(result)) {
+    for (const card of dayResult.shifts) {
+      for (const a of card.assigned) {
+        if (a.personId && a.role) {
+          assignments.push({ clinicId: card.shiftId, slot: a.role, personId: a.personId });
+        }
+      }
+    }
+    issues.push(...(dayResult.issues ?? []));
+  }
+
+  return { assignments, issues };
+}

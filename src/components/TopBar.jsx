@@ -7,6 +7,7 @@ import { useApp, isoWeek, mondayOfWeek } from '../context/AppContext.jsx';
 import { useTour } from './Tour.jsx';
 import ChangeLogDrawer from './ChangeLogDrawer.jsx';
 import ChatPanel from './ChatPanel.jsx';
+import { generateSchedule } from '../engine/adapter.js';
 
 // ─── Generate confirmation modal ─────────────
 function GenerateModal({ weekLabel, keepExisting, onKeepChange, onConfirm, onCancel, isRegen }) {
@@ -328,7 +329,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
     setShowGenModal(true);
   };
 
-  const handleGenerateConfirm = async () => {
+  const handleGenerateConfirm = () => {
     setShowGenModal(false);
     setGenState('loading');
 
@@ -338,78 +339,17 @@ export default function TopBar({ activeTab, setActiveTab }) {
       snapshot[c.id] = { ...c.slots };
     }
 
-    const openClinics = data.clinics
-      .filter(c => c.open)
-      .map(({ id, day, location, provider, startTime, endTime, slots, patientCount }) => ({
-        id, day, location, provider, startTime, endTime, patientCount,
-        currentSlots: slots,
-      }));
-
-    const staffRoster = data.people.map(({ id, name, roles, skills, daysOff, lockedTo, preferredLocations, availabilityWindows, targetHours, grade }) => ({
-      id, name, roles, skills, daysOff, lockedTo, preferredLocations, availabilityWindows, targetHours, grade,
-    }));
-
-    const userMessage =
-      `Fill the schedule for the week of ${weekLabel}.\n\n` +
-      `OPEN CLINICS:\n${JSON.stringify(openClinics, null, 0)}\n\n` +
-      `STAFF ROSTER:\n${JSON.stringify(staffRoster, null, 0)}\n\n` +
-      `Output only the JSON object.`;
-
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 30000);
+      const { assignments: raw, issues } = generateSchedule(data);
 
-      const res = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          system: SYSTEM_PROMPT,
-          messages: [{ role: 'user', content: userMessage }],
-        }),
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
-
-      if (!res.ok) {
-        if (res.status === 401) throw new Error('API key not configured. Add ANTHROPIC_API_KEY in Vercel settings.');
-        const errBody = await res.json().catch(() => ({}));
-        throw new Error(errBody.error ?? `Server error ${res.status}`);
-      }
-
-      const apiResponse = await res.json();
-      const rawText = apiResponse.content?.[0]?.text ?? '';
-
-      // Strip accidental markdown fences
-      const jsonText = rawText
-        .replace(/^```(?:json)?\s*/i, '')
-        .replace(/\s*```$/, '')
-        .trim();
-
-      let parsed;
-      try {
-        parsed = JSON.parse(jsonText);
-      } catch {
-        throw new Error('Claude returned an invalid schedule. Try generating again.');
-      }
-
-      const raw = parsed.assignments ?? [];
-      const validClinicIds = new Set(data.clinics.map(c => c.id));
-      const validPersonIds = new Set(data.people.map(p => p.id));
-      const validSlots = new Set(['scribe', 'opener', 'closing', 'middle', 'training']);
-
-      let assignments = raw.filter(a =>
-        a.clinicId && validClinicIds.has(a.clinicId) &&
-        a.personId && validPersonIds.has(a.personId) &&
-        a.slot && validSlots.has(a.slot)
-      );
+      let assignments = raw;
 
       if (keepExisting) {
         assignments = assignments.filter(a => {
           const clinic = data.clinics.find(c => c.id === a.clinicId);
           const sv = clinic?.slots[a.slot];
-          if (a.slot === 'middle' || a.slot === 'training') {
-            return !sv?.personId;
-          }
+          // Variable-time slots store { personId } objects; others store value directly
+          if (sv && typeof sv === 'object') return !sv.personId;
           return !sv;
         });
       }
@@ -417,10 +357,10 @@ export default function TopBar({ activeTab, setActiveTab }) {
       applyBulkAssignments(assignments);
 
       addLog({
-        action: `AI generated schedule for Week of ${weekLabel} — ${assignments.length} assignments made`,
-        personName: 'Claude',
+        action: `Schedule generated for Week of ${weekLabel} — ${assignments.length} assignments made`,
+        personName: 'Solver',
         day: '',
-        detail: '',
+        detail: issues.length > 0 ? `Unfilled: ${issues.join('; ')}` : '',
       });
 
       setUndoInfo({ snapshot, count: assignments.length });
@@ -428,11 +368,12 @@ export default function TopBar({ activeTab, setActiveTab }) {
       setGenState('done');
       setTimeout(() => setGenState('idle'), 2500);
 
+      if (issues.length > 0) {
+        console.warn('[Shiftcraft] Solver unfilled slots:', issues);
+      }
+
     } catch (err) {
-      const msg = err.name === 'AbortError'
-        ? 'Generation timed out. Try again.'
-        : err.message;
-      setGenError(msg);
+      setGenError(err.message);
       setGenState('error');
     }
   };

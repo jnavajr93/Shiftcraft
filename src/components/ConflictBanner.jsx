@@ -16,7 +16,9 @@ export function detectConflicts(clinics, people) {
       for (const [, slotVal] of Object.entries(clinic.slots)) {
         if (getSlotPersonId(slotVal) === person.id) {
           if (!byDay[clinic.day]) byDay[clinic.day] = [];
-          byDay[clinic.day].push(clinic);
+          if (!byDay[clinic.day].some(c => c.id === clinic.id)) {
+            byDay[clinic.day].push(clinic);
+          }
         }
       }
     }

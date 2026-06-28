@@ -69,11 +69,24 @@ function staffingFor(locationId, cfg) {
   return req;
 }
 
+function shiftHours(shift) {
+  return Math.max(0, ((shift.end ?? 0) - (shift.start ?? 0)) / 60);
+}
+
+function exceedsHourCap(personId, additionalHrs, weekHours, cfg) {
+  const cap = cfg.constraints.find(
+    (c) => c.enabled && c.type === CT.HOUR_CAP && c.personId === personId
+  );
+  if (!cap) return false;
+  return (weekHours[personId] || 0) + additionalHrs > cap.count;
+}
+
 // Main entry: returns { [day]: { shifts:[...], unplaced:[...], issues:[...] } }
 // week: 'A', 'B', or null (null = include all shifts regardless of week tag)
 export function solve(cfg, week = null) {
   const idx = indexConfig(cfg);
   const result = {};
+  const weekHours = {}; // cumulative hours per person across all days
 
   for (const day of activeDays(cfg, week)) {
     const used = new Set(); // personIds already placed today
@@ -99,8 +112,10 @@ export function solve(cfg, week = null) {
       const loc = idx.locations[shift.locationId];
       const req = staffingFor(shift.locationId, cfg);
       const assigned = []; // { personId, roleId }
+      const hrs = shiftHours(shift);
 
       // a) Apply pairings: any person paired to this anchor shift.
+      // HOUR_CAP is not checked here — explicit pairings are user overrides.
       pairings.forEach((p) => {
         if (p.anchorId !== shift.id) return;
         const person = idx.people[p.personId];
@@ -108,6 +123,7 @@ export function solve(cfg, week = null) {
           const roleId = person.roles[0];
           assigned.push({ personId: person.id, roleId });
           used.add(person.id);
+          weekHours[person.id] = (weekHours[person.id] || 0) + hrs;
         }
       });
 
@@ -118,11 +134,14 @@ export function solve(cfg, week = null) {
         for (let i = have; i < need; i++) {
           const candidate = cfg.people.find(
             (person) =>
-              !used.has(person.id) && canStaff(person, shift.locationId, roleId, day, cfg)
+              !used.has(person.id) &&
+              !exceedsHourCap(person.id, hrs, weekHours, cfg) &&
+              canStaff(person, shift.locationId, roleId, day, cfg)
           );
           if (candidate) {
             assigned.push({ personId: candidate.id, roleId });
             used.add(candidate.id);
+            weekHours[candidate.id] = (weekHours[candidate.id] || 0) + hrs;
           } else {
             const roleName = idx.roles[roleId]?.name || 'staff';
             issues.push(`${shift.name}: needs ${need - i} more ${roleName}`);
