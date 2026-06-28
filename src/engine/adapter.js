@@ -46,6 +46,57 @@ function getRequiredSlots(clinic, providers) {
   return required.filter(s => allSlotKeys.includes(s));
 }
 
+// Diagnostic: for each unfilled role in the solve result, log why every
+// person was ineligible. Prints to console.group so it's easy to collapse.
+// Intended to be temporary — remove once staffing gaps are understood.
+function diagnoseSolverGaps(cfg, result) {
+  const unavailDays = {};
+  for (const c of cfg.constraints) {
+    if (c.enabled && c.type === 'unavailable') {
+      for (const d of c.days ?? []) {
+        unavailDays[`${c.personId}:${d}`] = true;
+      }
+    }
+  }
+  const hourCaps = {};
+  for (const c of cfg.constraints) {
+    if (c.enabled && c.type === 'hour_cap') hourCaps[c.personId] = c.count;
+  }
+  const shiftById = Object.fromEntries(cfg.shifts.map(s => [s.id, s]));
+  const personById = Object.fromEntries(cfg.people.map(p => [p.id, p]));
+
+  let anyGap = false;
+  for (const [day, dayResult] of Object.entries(result)) {
+    if (!dayResult.issues?.length) continue;
+    // Build 'used' set for this day from assigned cards
+    const usedToday = new Set();
+    for (const card of dayResult.shifts) {
+      for (const a of card.assigned) usedToday.add(a.personId);
+    }
+    for (const card of dayResult.shifts) {
+      const shift = shiftById[card.shiftId];
+      for (const s of card.staffing) {
+        if (s.have >= s.min) continue; // filled — skip
+        anyGap = true;
+        const roleId = s.role; // role name === roleId (adapter sets name = id)
+        console.group(`[Shiftcraft gap] ${day} · ${card.shiftName} @ ${card.location} — ${roleId} (have ${s.have}/${s.min})`);
+        for (const person of cfg.people) {
+          const reasons = [];
+          if (!person.roles.includes(roleId)) reasons.push(`no ${roleId} role (has: ${person.roles.join(', ') || 'none'})`);
+          if (person.locations.length && !person.locations.includes(shift?.locationId)) reasons.push(`not cleared for ${shift?.locationId} (cleared: ${person.locations.join(', ')})`);
+          if (unavailDays[`${person.id}:${day}`]) reasons.push(`day off`);
+          if (usedToday.has(person.id)) reasons.push(`already used elsewhere today`);
+          if (hourCaps[person.id] != null) reasons.push(`hour cap: ${hourCaps[person.id]}h`);
+          const status = reasons.length ? `✗ ${reasons.join(' | ')}` : '✓ eligible but not chosen (hour cap hit or ordering)';
+          console.log(`  ${personById[person.id]?.name ?? person.id}: ${status}`);
+        }
+        console.groupEnd();
+      }
+    }
+  }
+  if (!anyGap) console.log('[Shiftcraft] Solver: all required slots filled');
+}
+
 // Main export.
 // globalData  — full AppContext data object (people, locations, clinics, etc.)
 // Returns { assignments: [{clinicId, slot, personId}], issues: string[] }
@@ -164,6 +215,11 @@ export function generateSchedule(globalData) {
 
   // ── 6. Run solver ─────────────────────────────────────────────────────────
   const result = solve(cfg, null);
+
+  // ── 6b. Diagnostics — log why each unfilled slot has no candidate ─────────
+  // Runs a second pass after solve() to explain rejections per person.
+  // Remove or gate behind a flag once the staffing gaps are understood.
+  diagnoseSolverGaps(cfg, result);
 
   // ── 7. Translate back to [{clinicId, slot, personId}] ────────────────────
   // solver output: result[day].shifts[].{ shiftId, assigned: [{personId, role}] }
