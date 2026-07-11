@@ -326,22 +326,6 @@ function PersonCard({ person, providers, locations }) {
         </div>
       </div>
 
-      {/* Staff type */}
-      <div className="form-group">
-        <label className="form-label">Staff Type</label>
-        <div style={{ display: 'flex', gap: 4 }}>
-          {['tech', 'admin'].map(t => (
-            <button
-              key={t}
-              className={`pill small${(person.staffType ?? 'tech') === t ? ' active' : ''}`}
-              onClick={() => up('staffType', t)}
-            >
-              {t.charAt(0).toUpperCase() + t.slice(1)}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* Grade */}
       <div className="form-group">
         <label className="form-label">Grade</label>
@@ -366,7 +350,7 @@ function PersonCard({ person, providers, locations }) {
           <>
             <label className="form-label">Roles</label>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic', padding: '2px 0' }}>
-              Admin roles — coming soon
+              Roles will be configured later
             </div>
           </>
         ) : (
@@ -654,18 +638,6 @@ function AddPersonModal({ onClose, existingNames, providers, locations, defaultS
             </div>
           </div>
 
-          {/* Staff type */}
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label">Staff Type</label>
-            <div style={{ display: 'flex', gap: 4 }}>
-              {['tech', 'admin'].map(t => (
-                <button key={t} className={`pill small${form.staffType === t ? ' active' : ''}`} onClick={() => set('staffType', t)}>
-                  {t.charAt(0).toUpperCase() + t.slice(1)}
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* Grade */}
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label className="form-label">Grade</label>
@@ -679,25 +651,36 @@ function AddPersonModal({ onClose, existingNames, providers, locations, defaultS
 
           {/* Roles */}
           <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label">Roles <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'none', fontWeight: 400 }}>(first = primary)</span></label>
-            <div className="pill-group">
-              {ROLES.map(r => {
-                const idx = form.roles.indexOf(r);
-                const isActive = idx !== -1;
-                return (
-                  <button key={r} className={`pill${isActive ? ' active' : ''}`} onClick={() => set('roles', toggleArr(form.roles, r))}>
-                    {isActive ? `${idx + 1}. ` : ''}{r}
-                  </button>
-                );
-              })}
-            </div>
+            {form.staffType === 'admin' ? (
+              <>
+                <label className="form-label">Roles</label>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic', padding: '2px 0' }}>
+                  Roles will be configured later
+                </div>
+              </>
+            ) : (
+              <>
+                <label className="form-label">Roles <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'none', fontWeight: 400 }}>(first = primary)</span></label>
+                <div className="pill-group">
+                  {ROLES.map(r => {
+                    const idx = form.roles.indexOf(r);
+                    const isActive = idx !== -1;
+                    return (
+                      <button key={r} className={`pill${isActive ? ' active' : ''}`} onClick={() => set('roles', toggleArr(form.roles, r))}>
+                        {isActive ? `${idx + 1}. ` : ''}{r}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </div>
 
           {/* Skills */}
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label className="form-label">Skills</label>
             <div className="pill-group">
-              {SKILLS.map(s => (
+              {(form.staffType === 'admin' ? ADMIN_SKILLS : SKILLS).map(s => (
                 <button key={s} className={`pill small${form.skills.includes(s) ? ' active' : ''}`} onClick={() => set('skills', toggleArr(form.skills, s))}>{s}</button>
               ))}
             </div>
