@@ -753,6 +753,7 @@ html, body, #root {
   font-family: var(--font); min-height: 28px; display: inline-flex; align-items: center;
 }
 .pill.active { background: var(--accent); border-color: var(--accent); color: var(--btn-text); }
+.pill.daysoff.active { background: #dc2626; border-color: #dc2626; color: #ffffff; }
 .pill.small  { padding: 3px 8px; font-size: 11px; min-height: 24px; }
 
 .grade-picker { display: flex; gap: 4px; }

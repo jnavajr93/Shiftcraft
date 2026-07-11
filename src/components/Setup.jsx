@@ -326,6 +326,22 @@ function PersonCard({ person, providers, locations }) {
         </div>
       </div>
 
+      {/* Staff type */}
+      <div className="form-group">
+        <label className="form-label">Staff Type</label>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {['tech', 'admin'].map(t => (
+            <button
+              key={t}
+              className={`pill small${(person.staffType ?? 'tech') === t ? ' active' : ''}`}
+              onClick={() => up('staffType', t)}
+            >
+              {t.charAt(0).toUpperCase() + t.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Grade */}
       <div className="form-group">
         <label className="form-label">Grade</label>
@@ -419,7 +435,7 @@ function PersonCard({ person, providers, locations }) {
           {DAYS.map(d => (
             <button
               key={d}
-              className={`pill small${(person.daysOff ?? []).includes(d) ? ' active' : ''}`}
+              className={`pill small daysoff${(person.daysOff ?? []).includes(d) ? ' active' : ''}`}
               onClick={() => up('daysOff', toggleArr(person.daysOff ?? [], d))}
             >{d}</button>
           ))}
@@ -489,7 +505,7 @@ function PersonCard({ person, providers, locations }) {
 }
 
 // ─── Add Person Modal ────────────────────────
-function AddPersonModal({ onClose, existingNames, providers, locations }) {
+function AddPersonModal({ onClose, existingNames, providers, locations, defaultStaffType = 'tech' }) {
   const { addPerson, addLog } = useApp();
 
   const defaultColor = PRESET_COLORS.find(c => !existingNames.includes(c)) ?? PRESET_COLORS[0];
@@ -499,6 +515,7 @@ function AddPersonModal({ onClose, existingNames, providers, locations }) {
     color: defaultColor,
     employmentType: 'Full-time',
     grade: null,
+    staffType: defaultStaffType,
     roles: [],
     skills: [],
     clearedLocations: [],
@@ -545,6 +562,7 @@ function AddPersonModal({ onClose, existingNames, providers, locations }) {
       color: form.color,
       employmentType: form.employmentType,
       grade: form.grade,
+      staffType: form.staffType,
       roles: form.roles,
       skills: form.skills,
       clearedLocations: form.clearedLocations,
@@ -625,6 +643,18 @@ function AddPersonModal({ onClose, existingNames, providers, locations }) {
             </div>
           </div>
 
+          {/* Staff type */}
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Staff Type</label>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {['tech', 'admin'].map(t => (
+                <button key={t} className={`pill small${form.staffType === t ? ' active' : ''}`} onClick={() => set('staffType', t)}>
+                  {t.charAt(0).toUpperCase() + t.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Grade */}
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label className="form-label">Grade</label>
@@ -693,7 +723,7 @@ function AddPersonModal({ onClose, existingNames, providers, locations }) {
             <label className="form-label">Days Off</label>
             <div className="pill-group">
               {DAYS.map(d => (
-                <button key={d} className={`pill small${form.daysOff.includes(d) ? ' active' : ''}`} onClick={() => set('daysOff', toggleArr(form.daysOff, d))}>{d}</button>
+                <button key={d} className={`pill small daysoff${form.daysOff.includes(d) ? ' active' : ''}`} onClick={() => set('daysOff', toggleArr(form.daysOff, d))}>{d}</button>
               ))}
             </div>
           </div>
@@ -721,10 +751,11 @@ function AddPersonModal({ onClose, existingNames, providers, locations }) {
   );
 }
 
-// ─── People Tab ───────────────────────────────
-function PeopleTab() {
+// ─── Staff Tab ────────────────────────────────
+function StaffTab() {
   const { data, reorderPeople } = useApp();
   const [showModal, setShowModal] = useState(false);
+  const [staffSubTab, setStaffSubTab] = useState('tech');
 
   const sensors = useSensors(useSensor(PointerSensor, {
     activationConstraint: { distance: 5 },
@@ -737,17 +768,36 @@ function PeopleTab() {
     reorderPeople(arrayMove(data.people, oldIndex, newIndex));
   };
 
+  const techPeople = data.people.filter(p => (p.staffType ?? 'tech') !== 'admin');
+  const adminPeople = data.people.filter(p => p.staffType === 'admin');
+  const visiblePeople = staffSubTab === 'tech' ? techPeople : adminPeople;
+
   return (
     <div className="setup-content">
-      <div className="section-add" style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {['tech', 'admin'].map(t => (
+            <button
+              key={t}
+              className={`setup-subtab${staffSubTab === t ? ' active' : ''}`}
+              style={{ fontSize: 12, padding: '4px 12px' }}
+              onClick={() => setStaffSubTab(t)}
+            >
+              {t.charAt(0).toUpperCase() + t.slice(1)}
+              <span style={{ marginLeft: 5, opacity: 0.6, fontWeight: 400 }}>
+                ({t === 'tech' ? techPeople.length : adminPeople.length})
+              </span>
+            </button>
+          ))}
+        </div>
         <button className="btn btn-primary" onClick={() => setShowModal(true)}>
           <Plus size={15} /> Add Person
         </button>
       </div>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={data.people.map(p => p.id)} strategy={verticalListSortingStrategy}>
+        <SortableContext items={visiblePeople.map(p => p.id)} strategy={verticalListSortingStrategy}>
           <div className="people-grid">
-            {data.people.map(p => (
+            {visiblePeople.map(p => (
               <PersonCard
                 key={p.id}
                 person={p}
@@ -764,6 +814,7 @@ function PeopleTab() {
           existingNames={data.people.map(p => p.name)}
           providers={data.providers}
           locations={data.locations}
+          defaultStaffType={staffSubTab}
         />
       )}
     </div>
@@ -847,7 +898,7 @@ function ClinicsTab() {
       location: data.locations[0] ?? 'Phoenix',
       provider: data.providers[0]?.name ?? 'Dr. R',
       open: true, startTime: 480, endTime: 1020, patientCount: null,
-      slots: { scribe: null, opener: null, closing: null, middle: null, training: null },
+      slots: { openingFD: null, closingFD: null, scribe: null, opener: null, closing: null, middle: null, training: null },
     });
     setEditId(id);
   };
@@ -927,12 +978,12 @@ function LocationsTab() {
 
 // ─── Main Setup ───────────────────────────────
 export default function Setup() {
-  const [subTab, setSubTab] = useState('people');
+  const [subTab, setSubTab] = useState('staff');
 
   return (
     <div className="setup-page">
       <div className="setup-subtabs">
-        {['people', 'clinics', 'locations'].map(t => (
+        {['staff', 'clinics', 'locations'].map(t => (
           <button
             key={t}
             className={`setup-subtab${subTab === t ? ' active' : ''}`}
@@ -942,7 +993,7 @@ export default function Setup() {
           </button>
         ))}
       </div>
-      {subTab === 'people'    && <PeopleTab />}
+      {subTab === 'staff'     && <StaffTab />}
       {subTab === 'clinics'   && <ClinicsTab />}
       {subTab === 'locations' && <LocationsTab />}
     </div>

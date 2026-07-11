@@ -58,7 +58,9 @@ function readLocalWeekSlotMap(weekStr) {
 function applySlotMap(clinics, tasks, map) {
   const newClinics = clinics.map(c => ({
     ...c,
-    slots: map[c.id] ?? (c.location === 'OBS' ? blankObsSlots() : blankStandardSlots()),
+    slots: c.location === 'OBS'
+      ? { ...blankObsSlots(),      ...(map[c.id] ?? {}) }
+      : { ...blankStandardSlots(), ...(map[c.id] ?? {}) },
   }));
   const newTasks = (tasks ?? []).map(t => ({
     ...t,
@@ -73,6 +75,7 @@ function blankObsSlots() {
 
 function blankStandardSlots() {
   return {
+    openingFD: null, closingFD: null,
     scribe: { personId: null, start: null, end: null },
     opener: null, closing: null,
     middle: { personId: null, start: null, end: null },
@@ -417,6 +420,22 @@ function runMigrations(data) {
     };
     dirty = true;
     try { localStorage.setItem('shiftcraft.migration.drb_config_v1', '1'); } catch { /* ignore */ }
+  }
+
+  // ── Migration: frontdeskslots ─────────────────
+  // Add openingFD and closingFD slots to all non-OBS clinics.
+  if (!localStorage.getItem('shiftcraft.migration.frontdeskslots')) {
+    d = {
+      ...d,
+      clinics: d.clinics.map(c => {
+        if (c.location === 'OBS') return c;
+        const slots = c.slots ?? {};
+        if ('openingFD' in slots && 'closingFD' in slots) return c;
+        return { ...c, slots: { openingFD: null, closingFD: null, ...slots } };
+      }),
+    };
+    dirty = true;
+    try { localStorage.setItem('shiftcraft.migration.frontdeskslots', '1'); } catch { /* ignore */ }
   }
 
   // Note: no localStorage save here — caller saves to Supabase

@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { Pencil, AlertTriangle, Users, Power, Check, X as XIcon } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { getSlotLabel, getSlotTimeLabel, getSlotPersonId, getSlotTimeObj, formatVariableSlotTime, formatOpenerTimeDisplay, formatScribeTimeDisplay, minutesToTime, minutesToTimeInput, timeInputToMinutes, SLOT_TYPES, OBS_SLOT_TYPES } from '../data/seed.js';
+import { getSlotLabel, getSlotTimeLabel, getSlotPersonId, getSlotTimeObj, formatVariableSlotTime, formatOpenerTimeDisplay, formatScribeTimeDisplay, formatClosingOverlayDisplay, minutesToTime, minutesToTimeInput, timeInputToMinutes, SLOT_TYPES, OBS_SLOT_TYPES, SLOT_DISPLAY_LABELS } from '../data/seed.js';
 import SlotPopover from './SlotPopover.jsx';
 import { getConflictPersonDays } from './ConflictBanner.jsx';
 
@@ -121,7 +121,7 @@ function ScribeTimeEditor({ slotVal, clinicId, onClose }) {
   );
 }
 
-function OpenerTimeEditor({ slotVal, clinicId, onClose }) {
+function OpenerTimeEditor({ slotVal, clinicId, slotType = 'opener', onClose }) {
   const { updateSlotTime } = useApp();
   const obj = (slotVal && typeof slotVal === 'object') ? slotVal : {};
   const [startVal, setStartVal] = useState(obj.start != null ? minutesToTimeInput(obj.start) : '');
@@ -130,7 +130,7 @@ function OpenerTimeEditor({ slotVal, clinicId, onClose }) {
   const handleSave = () => {
     const s = startVal ? timeInputToMinutes(startVal) : null;
     const e = endVal ? timeInputToMinutes(endVal) : 1020;
-    updateSlotTime(clinicId, 'opener', s, e);
+    updateSlotTime(clinicId, slotType, s, e);
     onClose();
   };
 
@@ -168,7 +168,7 @@ function OpenerTimeEditor({ slotVal, clinicId, onClose }) {
   );
 }
 
-function ClosingTimeEditor({ slotVal, clinicId, onClose }) {
+function ClosingTimeEditor({ slotVal, clinicId, slotType = 'closing', onClose }) {
   const { updateSlotTime } = useApp();
   const obj = (slotVal && typeof slotVal === 'object') ? slotVal : {};
   const [startVal, setStartVal] = useState(obj.start != null ? minutesToTimeInput(obj.start) : '09:00');
@@ -178,7 +178,7 @@ function ClosingTimeEditor({ slotVal, clinicId, onClose }) {
   const handleSave = () => {
     const s = startVal ? timeInputToMinutes(startVal) : 540;
     const e = endIsClose ? null : endVal ? timeInputToMinutes(endVal) : null;
-    updateSlotTime(clinicId, 'closing', s, e);
+    updateSlotTime(clinicId, slotType, s, e);
     onClose();
   };
 
@@ -241,11 +241,15 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
   const isScribe = slotType === 'scribe';
   const isOpener = slotType === 'opener';
   const isClosing = slotType === 'closing';
+  const isOpeningFD = slotType === 'openingFD';
+  const isClosingFD = slotType === 'closingFD';
+  const isFDSlot = isOpeningFD || isClosingFD;
   // Suppress role warning if person has a slot-specific MUST_PAIR lock for this slot
   const isMustPairForThisSlot = person && (person.lockedTo ?? []).some(e =>
     typeof e === 'object' && e.provider === clinic.provider && e.slot === slotType
   );
-  const hasRoleWarning = person && !isMustPairForThisSlot && !person.roles.map(r => r.toLowerCase()).includes(slotType);
+  // FD slots have no matching role — suppress the warning
+  const hasRoleWarning = person && !isMustPairForThisSlot && !isFDSlot && !person.roles.map(r => r.toLowerCase()).includes(slotType);
   const hasLockedWarning = person && person.lockedTo?.length > 0 &&
     !person.lockedTo.some(e => (typeof e === 'string' ? e : e.provider) === clinic.provider);
   const showWarning = isAdmin && (hasRoleWarning || hasLockedWarning);
@@ -257,12 +261,13 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
   const scribeTimeDisplay = isScribe ? formatScribeTimeDisplay(slotVal) : null;
   const scribeHasOverride = isScribe && slotVal && typeof slotVal === 'object' && (slotVal.start != null || slotVal.end != null);
   const showScribeTimeRow = isScribe && ((isAdmin && clinicOpen) || scribeHasOverride);
-  // Opener display
-  const openerDisplay = isOpener ? formatOpenerTimeDisplay(clinic, slotVal) : null;
-  // Closing display pieces
-  const closingObj = (isClosing && slotVal && typeof slotVal === 'object') ? slotVal : {};
-  const closingStartStr = isClosing ? (closingObj.start != null ? minutesToTime(closingObj.start) : '9:00 AM') : null;
-  const closingEndStr   = isClosing ? (closingObj.end   != null ? minutesToTime(closingObj.end)   : null) : null; // null = ~Close
+  // Opener / Opening FD display
+  const openerDisplay = (isOpener || isOpeningFD) ? formatOpenerTimeDisplay(clinic, slotVal) : null;
+  // Closing / Closing FD display pieces
+  const isClosingType = isClosing || isClosingFD;
+  const closingObj = (isClosingType && slotVal && typeof slotVal === 'object') ? slotVal : {};
+  const closingStartStr = isClosingType ? (closingObj.start != null ? minutesToTime(closingObj.start) : '9:00 AM') : null;
+  const closingEndStr   = isClosingType ? (closingObj.end   != null ? minutesToTime(closingObj.end)   : null) : null; // null = ~Close
 
   const isHighlighted = hasSearch && person && matchedPersonIds.includes(personId);
   const isDimmed = hasSearch && person && !matchedPersonIds.includes(personId);
@@ -285,8 +290,8 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
         style={{ cursor: interactive ? 'pointer' : 'default' }}
       >
         <div className="slot-label-col">
-          <div className="slot-label">{slotType}</div>
-          {!isOpener && !isClosing && slotTime && (
+          <div className="slot-label">{SLOT_DISPLAY_LABELS[slotType] ?? slotType}</div>
+          {!isOpener && !isClosing && !isOpeningFD && !isClosingFD && slotTime && (
             <div className="slot-time">{slotTime}</div>
           )}
         </div>
@@ -374,12 +379,13 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
         )
       )}
 
-      {/* Opener time row */}
-      {isOpener && clinicOpen && (
+      {/* Opener / Opening FD time row */}
+      {(isOpener || isOpeningFD) && clinicOpen && (
         editingTime && interactive ? (
           <OpenerTimeEditor
             slotVal={slotVal}
             clinicId={clinic.id}
+            slotType={slotType}
             onClose={() => setEditingTime(false)}
           />
         ) : (
@@ -393,12 +399,13 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
         )
       )}
 
-      {/* Closing time row */}
-      {isClosing && clinicOpen && (
+      {/* Closing / Closing FD time row */}
+      {(isClosing || isClosingFD) && clinicOpen && (
         editingTime && interactive ? (
           <ClosingTimeEditor
             slotVal={slotVal}
             clinicId={clinic.id}
+            slotType={slotType}
             onClose={() => setEditingTime(false)}
           />
         ) : (

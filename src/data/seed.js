@@ -1,6 +1,16 @@
 export const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 export const ROLES = ['Scribe', 'Opener', 'Middle', 'Closing', 'Training', 'Pre-Op/PACU', 'Sterile Processing', 'Circulator', 'Scrub Tech'];
-export const SLOT_TYPES = ['scribe', 'opener', 'closing', 'middle', 'training'];
+export const SLOT_TYPES = ['openingFD', 'closingFD', 'scribe', 'opener', 'closing', 'middle', 'training'];
+
+export const SLOT_DISPLAY_LABELS = {
+  openingFD: 'Opening FD',
+  closingFD: 'Closing FD',
+  scribe: 'Scribe',
+  opener: 'Opener',
+  closing: 'Closing',
+  middle: 'Middle',
+  training: 'Training',
+};
 export const OBS_SLOT_TYPES = ['preop', 'sterile', 'circulator', 'scrub'];
 export const EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'PRN'];
 export const SKILLS = ['Workup', 'Treatments', 'FAs', 'Autoclave & Closing'];
@@ -76,15 +86,17 @@ export function accommodationLabel(acc) {
 export function getSlotTimeLabel(clinic, slotType) {
   const { startTime } = clinic;
   switch (slotType) {
-    case 'scribe':   return null;
-    case 'opener':   return `${minutesToTime(startTime)} – 5:00 PM`;
-    case 'closing':  return '9:00 AM – ~Close';
-    default:         return null;
+    case 'scribe':     return null;
+    case 'openingFD':
+    case 'opener':     return `${minutesToTime(startTime)} – 5:00 PM`;
+    case 'closingFD':
+    case 'closing':    return '9:00 AM – ~Close';
+    default:           return null;
   }
 }
 
 export function getSlotLabel(slotType, location) {
-  const label = slotType.charAt(0).toUpperCase() + slotType.slice(1);
+  const label = SLOT_DISPLAY_LABELS[slotType] ?? (slotType.charAt(0).toUpperCase() + slotType.slice(1));
   return `${label} @ ${location}`;
 }
 
@@ -120,6 +132,20 @@ export function formatTaskTime(task) {
 export function calcSlotHours(clinic, slotType) {
   const { startTime, endTime } = clinic;
   switch (slotType) {
+    case 'openingFD': {
+      const sv = clinic.slots?.openingFD;
+      const obj = (sv && typeof sv === 'object') ? sv : {};
+      const s = obj.start != null ? obj.start : (startTime - 15);
+      const e = obj.end   != null ? obj.end   : 1020;
+      return (e - s) / 60;
+    }
+    case 'closingFD': {
+      const sv = clinic.slots?.closingFD;
+      const obj = (sv && typeof sv === 'object') ? sv : {};
+      const s = obj.start != null ? obj.start : 540;
+      const e = obj.end   != null ? obj.end   : (endTime + 75);
+      return (e - s) / 60;
+    }
     case 'scribe': {
       const sv = clinic.slots?.scribe;
       const scriberStart = (sv && typeof sv === 'object') ? (sv.start ?? null) : null;
@@ -195,6 +221,7 @@ export function migratePerson(p) {
     color: p.color,
     employmentType: p.employmentType ?? 'Full-time',
     grade: p.grade ?? null,
+    staffType: p.staffType ?? null,
     roles: p.roles ?? [],
     skills: p.skills ?? [],
     clearedLocations: p.clearedLocations ?? p.locations ?? [],

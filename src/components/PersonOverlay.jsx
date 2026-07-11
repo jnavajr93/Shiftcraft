@@ -22,9 +22,9 @@ function WeekRows({ person, clinics, additionalTasks }) {
                 let time;
                 if (slotType === 'scribe') {
                   time = formatScribeTimeDisplay(slotVal) ?? '1st Patient – Close';
-                } else if (slotType === 'opener') {
+                } else if (slotType === 'opener' || slotType === 'openingFD') {
                   time = formatOpenerTimeDisplay(c, slotVal);
-                } else if (slotType === 'closing') {
+                } else if (slotType === 'closing' || slotType === 'closingFD') {
                   time = formatClosingOverlayDisplay(slotVal);
                 } else if (slotType === 'middle' || slotType === 'training') {
                   time = formatVariableSlotTime(slotVal) ?? 'Time not set';

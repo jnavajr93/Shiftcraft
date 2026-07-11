@@ -533,7 +533,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
               }
             }}
           >
-            Admin
+            Manager
           </button>
         </div>
       </div>
