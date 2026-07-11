@@ -9,7 +9,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { useApp } from '../context/AppContext.jsx';
 import {
-  generateId, DAYS, minutesToTime, ROLES, EMPLOYMENT_TYPES, SKILLS,
+  generateId, DAYS, minutesToTime, ROLES, EMPLOYMENT_TYPES, SKILLS, ADMIN_SKILLS,
   ACCOMMODATION_TYPES, EARLY_LEAVE_REASONS, accommodationLabel,
 } from '../data/seed.js';
 import ClinicConfig from './ClinicConfig.jsx';
@@ -362,29 +362,40 @@ function PersonCard({ person, providers, locations }) {
 
       {/* Roles */}
       <div className="form-group">
-        <label className="form-label">Roles <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'none', fontWeight: 400 }}>(first = primary)</span></label>
-        <div className="pill-group">
-          {ROLES.map(r => {
-            const idx = person.roles.indexOf(r);
-            const isActive = idx !== -1;
-            return (
-              <button
-                key={r}
-                className={`pill${isActive ? ' active' : ''}`}
-                onClick={() => up('roles', toggleArr(person.roles, r))}
-              >
-                {isActive ? `${idx + 1}. ` : ''}{r}
-              </button>
-            );
-          })}
-        </div>
+        {person.staffType === 'admin' ? (
+          <>
+            <label className="form-label">Roles</label>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic', padding: '2px 0' }}>
+              Admin roles — coming soon
+            </div>
+          </>
+        ) : (
+          <>
+            <label className="form-label">Roles <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'none', fontWeight: 400 }}>(first = primary)</span></label>
+            <div className="pill-group">
+              {ROLES.map(r => {
+                const idx = person.roles.indexOf(r);
+                const isActive = idx !== -1;
+                return (
+                  <button
+                    key={r}
+                    className={`pill${isActive ? ' active' : ''}`}
+                    onClick={() => up('roles', toggleArr(person.roles, r))}
+                  >
+                    {isActive ? `${idx + 1}. ` : ''}{r}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Skills */}
       <div className="form-group">
         <label className="form-label">Skills</label>
         <div className="pill-group">
-          {SKILLS.map(s => (
+          {(person.staffType === 'admin' ? ADMIN_SKILLS : SKILLS).map(s => (
             <button
               key={s}
               className={`pill small${(person.skills ?? []).includes(s) ? ' active' : ''}`}

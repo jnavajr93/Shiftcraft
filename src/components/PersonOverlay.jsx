@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { DAYS, calcPersonWeeklyHours, getSlotLabel, getSlotPersonId, formatVariableSlotTime, formatOpenerTimeDisplay, formatClosingOverlayDisplay, formatScribeTimeDisplay, formatTaskTime } from '../data/seed.js';
+import { DAYS, calcPersonWeeklyHours, getSlotLabel, getSlotPersonId, formatVariableSlotTime, formatOpenerTimeDisplay, formatOpeningFDTimeDisplay, formatClosingOverlayDisplay, formatClosingFDOverlayDisplay, formatScribeTimeDisplay, formatTaskTime } from '../data/seed.js';
 import ArcChart from './ArcChart.jsx';
 
 function useIsMobile() {
@@ -22,10 +22,14 @@ function WeekRows({ person, clinics, additionalTasks }) {
                 let time;
                 if (slotType === 'scribe') {
                   time = formatScribeTimeDisplay(slotVal) ?? '1st Patient – Close';
-                } else if (slotType === 'opener' || slotType === 'openingFrontDesk') {
+                } else if (slotType === 'opener') {
                   time = formatOpenerTimeDisplay(c, slotVal);
-                } else if (slotType === 'closing' || slotType === 'closingFrontDesk') {
+                } else if (slotType === 'openingFrontDesk') {
+                  time = formatOpeningFDTimeDisplay(slotVal);
+                } else if (slotType === 'closing') {
                   time = formatClosingOverlayDisplay(slotVal);
+                } else if (slotType === 'closingFrontDesk') {
+                  time = formatClosingFDOverlayDisplay(slotVal);
                 } else if (slotType === 'frontDesk') {
                   time = formatVariableSlotTime(slotVal) ?? 'Open – Close';
                 } else if (slotType === 'middle' || slotType === 'training') {

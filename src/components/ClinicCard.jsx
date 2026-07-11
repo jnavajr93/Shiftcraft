@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { Pencil, AlertTriangle, Users, Power, Check, X as XIcon } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { getSlotLabel, getSlotTimeLabel, getSlotPersonId, getSlotTimeObj, formatVariableSlotTime, formatOpenerTimeDisplay, formatScribeTimeDisplay, formatClosingOverlayDisplay, minutesToTime, minutesToTimeInput, timeInputToMinutes, SLOT_TYPES, OBS_SLOT_TYPES, SLOT_DISPLAY_LABELS } from '../data/seed.js';
+import { getSlotLabel, getSlotTimeLabel, getSlotPersonId, getSlotTimeObj, formatVariableSlotTime, formatOpenerTimeDisplay, formatOpeningFDTimeDisplay, formatClosingFDOverlayDisplay, formatScribeTimeDisplay, formatClosingOverlayDisplay, minutesToTime, minutesToTimeInput, timeInputToMinutes, SLOT_TYPES, OBS_SLOT_TYPES, SLOT_DISPLAY_LABELS } from '../data/seed.js';
 import SlotPopover from './SlotPopover.jsx';
 import { getConflictPersonDays } from './ConflictBanner.jsx';
 
@@ -121,11 +121,11 @@ function ScribeTimeEditor({ slotVal, clinicId, onClose }) {
   );
 }
 
-function OpenerTimeEditor({ slotVal, clinicId, slotType = 'opener', onClose }) {
+function OpenerTimeEditor({ slotVal, clinicId, slotType = 'opener', defaultEndTime = '17:00', onClose }) {
   const { updateSlotTime } = useApp();
   const obj = (slotVal && typeof slotVal === 'object') ? slotVal : {};
   const [startVal, setStartVal] = useState(obj.start != null ? minutesToTimeInput(obj.start) : '');
-  const [endVal, setEndVal] = useState(obj.end != null ? minutesToTimeInput(obj.end) : '17:00');
+  const [endVal, setEndVal] = useState(obj.end != null ? minutesToTimeInput(obj.end) : defaultEndTime);
 
   const handleSave = () => {
     const s = startVal ? timeInputToMinutes(startVal) : null;
@@ -168,10 +168,10 @@ function OpenerTimeEditor({ slotVal, clinicId, slotType = 'opener', onClose }) {
   );
 }
 
-function ClosingTimeEditor({ slotVal, clinicId, slotType = 'closing', onClose }) {
+function ClosingTimeEditor({ slotVal, clinicId, slotType = 'closing', defaultStartTime = '09:00', onClose }) {
   const { updateSlotTime } = useApp();
   const obj = (slotVal && typeof slotVal === 'object') ? slotVal : {};
-  const [startVal, setStartVal] = useState(obj.start != null ? minutesToTimeInput(obj.start) : '09:00');
+  const [startVal, setStartVal] = useState(obj.start != null ? minutesToTimeInput(obj.start) : defaultStartTime);
   const [endVal, setEndVal] = useState(obj.end != null ? minutesToTimeInput(obj.end) : '');
   const [endIsClose, setEndIsClose] = useState(obj.end == null);
 
@@ -262,12 +262,14 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
   const scribeTimeDisplay = isScribe ? formatScribeTimeDisplay(slotVal) : null;
   const scribeHasOverride = isScribe && slotVal && typeof slotVal === 'object' && (slotVal.start != null || slotVal.end != null);
   const showScribeTimeRow = isScribe && ((isAdmin && clinicOpen) || scribeHasOverride);
-  // Opener / Opening FD display
-  const openerDisplay = (isOpener || isOpeningFrontDesk) ? formatOpenerTimeDisplay(clinic, slotVal) : null;
+  // Opener display (uses clinic start time)
+  const openerDisplay = isOpener ? formatOpenerTimeDisplay(clinic, slotVal)
+    : isOpeningFrontDesk ? formatOpeningFDTimeDisplay(slotVal) : null;
   // Closing / Closing FD display pieces
   const isClosingType = isClosing || isClosingFrontDesk;
   const closingObj = (isClosingType && slotVal && typeof slotVal === 'object') ? slotVal : {};
-  const closingStartStr = isClosingType ? (closingObj.start != null ? minutesToTime(closingObj.start) : '9:00 AM') : null;
+  const closingDefaultStart = isClosingFrontDesk ? '10:30 AM' : '9:00 AM';
+  const closingStartStr = isClosingType ? (closingObj.start != null ? minutesToTime(closingObj.start) : closingDefaultStart) : null;
   const closingEndStr   = isClosingType ? (closingObj.end   != null ? minutesToTime(closingObj.end)   : null) : null; // null = ~Close
   // Front Desk display
   const frontDeskDisplay = isFrontDesk ? (formatVariableSlotTime(slotVal) ?? 'Open – Close') : null;
@@ -389,6 +391,7 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
             slotVal={slotVal}
             clinicId={clinic.id}
             slotType={slotType}
+            defaultEndTime={isOpeningFrontDesk ? '15:30' : '17:00'}
             onClose={() => setEditingTime(false)}
           />
         ) : (
@@ -409,6 +412,7 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
             slotVal={slotVal}
             clinicId={clinic.id}
             slotType={slotType}
+            defaultStartTime={isClosingFrontDesk ? '10:30' : '09:00'}
             onClose={() => setEditingTime(false)}
           />
         ) : (

@@ -15,6 +15,7 @@ export const SLOT_DISPLAY_LABELS = {
 export const OBS_SLOT_TYPES = ['preop', 'sterile', 'circulator', 'scrub'];
 export const EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'PRN'];
 export const SKILLS = ['Workup', 'Treatments', 'FAs', 'Autoclave & Closing'];
+export const ADMIN_SKILLS = ['Triage', 'Front Desk', 'Surgery Scheduling'];
 export const ACCOMMODATION_TYPES = [
   'extended_lunch',
   'early_leave',
@@ -109,6 +110,21 @@ export function formatOpenerTimeDisplay(clinic, slotVal) {
   return `${startStr} – ${endStr}`;
 }
 
+// Opening Front Desk: defaults Open → 3:30 PM
+export function formatOpeningFDTimeDisplay(slotVal) {
+  const obj = (slotVal && typeof slotVal === 'object') ? slotVal : {};
+  const startStr = obj.start != null ? minutesToTime(obj.start) : 'Open';
+  const endStr   = obj.end   != null ? minutesToTime(obj.end)   : '3:30 PM';
+  return `${startStr} – ${endStr}`;
+}
+
+// Closing Front Desk overlay (plain text): defaults 10:30 AM → Close
+export function formatClosingFDOverlayDisplay(slotVal) {
+  const obj = (slotVal && typeof slotVal === 'object') ? slotVal : {};
+  const startStr = obj.start != null ? minutesToTime(obj.start) : '10:30 AM';
+  return `${startStr} – Close`;
+}
+
 // Plain-text closing display for overlays/text contexts (no ~, no JSX)
 export function formatClosingOverlayDisplay(slotVal) {
   const obj = (slotVal && typeof slotVal === 'object') ? slotVal : {};
@@ -137,14 +153,14 @@ export function calcSlotHours(clinic, slotType) {
     case 'openingFrontDesk': {
       const sv = clinic.slots?.openingFrontDesk;
       const obj = (sv && typeof sv === 'object') ? sv : {};
-      const s = obj.start != null ? obj.start : (startTime - 15);
-      const e = obj.end   != null ? obj.end   : 1020;
+      const s = obj.start != null ? obj.start : startTime; // Open = clinic start (no buffer)
+      const e = obj.end   != null ? obj.end   : 930;       // default 3:30 PM
       return (e - s) / 60;
     }
     case 'closingFrontDesk': {
       const sv = clinic.slots?.closingFrontDesk;
       const obj = (sv && typeof sv === 'object') ? sv : {};
-      const s = obj.start != null ? obj.start : 540;
+      const s = obj.start != null ? obj.start : 630;       // default 10:30 AM
       const e = obj.end   != null ? obj.end   : (endTime + 75);
       return (e - s) / 60;
     }
