@@ -75,7 +75,7 @@ function blankObsSlots() {
 
 function blankStandardSlots() {
   return {
-    openingFD: null, closingFD: null,
+    openingFrontDesk: null, closingFrontDesk: null, frontDesk: null,
     scribe: { personId: null, start: null, end: null },
     opener: null, closing: null,
     middle: { personId: null, start: null, end: null },
@@ -422,20 +422,29 @@ function runMigrations(data) {
     try { localStorage.setItem('shiftcraft.migration.drb_config_v1', '1'); } catch { /* ignore */ }
   }
 
-  // ── Migration: frontdeskslots ─────────────────
-  // Add openingFD and closingFD slots to all non-OBS clinics.
-  if (!localStorage.getItem('shiftcraft.migration.frontdeskslots')) {
+  // ── Migration: frontdesksingle ────────────────
+  // Replace old openingFD/closingFD keys with openingFrontDesk/closingFrontDesk,
+  // and add frontDesk slot to all non-OBS clinics.
+  if (!localStorage.getItem('shiftcraft.migration.frontdesksingle')) {
     d = {
       ...d,
       clinics: d.clinics.map(c => {
         if (c.location === 'OBS') return c;
-        const slots = c.slots ?? {};
-        if ('openingFD' in slots && 'closingFD' in slots) return c;
-        return { ...c, slots: { openingFD: null, closingFD: null, ...slots } };
+        const { openingFD: oFD, closingFD: cFD, ...rest } = c.slots ?? {};
+        const slots = {
+          openingFrontDesk: rest.openingFrontDesk ?? oFD ?? null,
+          closingFrontDesk: rest.closingFrontDesk ?? cFD ?? null,
+          frontDesk:        rest.frontDesk ?? null,
+          ...rest,
+        };
+        // Remove legacy keys if they snuck into rest
+        delete slots.openingFD;
+        delete slots.closingFD;
+        return { ...c, slots };
       }),
     };
     dirty = true;
-    try { localStorage.setItem('shiftcraft.migration.frontdeskslots', '1'); } catch { /* ignore */ }
+    try { localStorage.setItem('shiftcraft.migration.frontdesksingle', '1'); } catch { /* ignore */ }
   }
 
   // Note: no localStorage save here — caller saves to Supabase

@@ -241,9 +241,10 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
   const isScribe = slotType === 'scribe';
   const isOpener = slotType === 'opener';
   const isClosing = slotType === 'closing';
-  const isOpeningFD = slotType === 'openingFD';
-  const isClosingFD = slotType === 'closingFD';
-  const isFDSlot = isOpeningFD || isClosingFD;
+  const isOpeningFrontDesk = slotType === 'openingFrontDesk';
+  const isClosingFrontDesk = slotType === 'closingFrontDesk';
+  const isFrontDesk = slotType === 'frontDesk';
+  const isFDSlot = isOpeningFrontDesk || isClosingFrontDesk || isFrontDesk;
   // Suppress role warning if person has a slot-specific MUST_PAIR lock for this slot
   const isMustPairForThisSlot = person && (person.lockedTo ?? []).some(e =>
     typeof e === 'object' && e.provider === clinic.provider && e.slot === slotType
@@ -262,12 +263,14 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
   const scribeHasOverride = isScribe && slotVal && typeof slotVal === 'object' && (slotVal.start != null || slotVal.end != null);
   const showScribeTimeRow = isScribe && ((isAdmin && clinicOpen) || scribeHasOverride);
   // Opener / Opening FD display
-  const openerDisplay = (isOpener || isOpeningFD) ? formatOpenerTimeDisplay(clinic, slotVal) : null;
+  const openerDisplay = (isOpener || isOpeningFrontDesk) ? formatOpenerTimeDisplay(clinic, slotVal) : null;
   // Closing / Closing FD display pieces
-  const isClosingType = isClosing || isClosingFD;
+  const isClosingType = isClosing || isClosingFrontDesk;
   const closingObj = (isClosingType && slotVal && typeof slotVal === 'object') ? slotVal : {};
   const closingStartStr = isClosingType ? (closingObj.start != null ? minutesToTime(closingObj.start) : '9:00 AM') : null;
   const closingEndStr   = isClosingType ? (closingObj.end   != null ? minutesToTime(closingObj.end)   : null) : null; // null = ~Close
+  // Front Desk display
+  const frontDeskDisplay = isFrontDesk ? (formatVariableSlotTime(slotVal) ?? 'Open – Close') : null;
 
   const isHighlighted = hasSearch && person && matchedPersonIds.includes(personId);
   const isDimmed = hasSearch && person && !matchedPersonIds.includes(personId);
@@ -291,7 +294,7 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
       >
         <div className="slot-label-col">
           <div className="slot-label">{SLOT_DISPLAY_LABELS[slotType] ?? slotType}</div>
-          {!isOpener && !isClosing && !isOpeningFD && !isClosingFD && slotTime && (
+          {!isOpener && !isClosing && !isOpeningFrontDesk && !isClosingFrontDesk && !isFrontDesk && slotTime && (
             <div className="slot-time">{slotTime}</div>
           )}
         </div>
@@ -379,8 +382,8 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
         )
       )}
 
-      {/* Opener / Opening FD time row */}
-      {(isOpener || isOpeningFD) && clinicOpen && (
+      {/* Opener / Opening Front Desk time row */}
+      {(isOpener || isOpeningFrontDesk) && clinicOpen && (
         editingTime && interactive ? (
           <OpenerTimeEditor
             slotVal={slotVal}
@@ -399,8 +402,8 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
         )
       )}
 
-      {/* Closing / Closing FD time row */}
-      {(isClosing || isClosingFD) && clinicOpen && (
+      {/* Closing / Closing Front Desk time row */}
+      {(isClosing || isClosingFrontDesk) && clinicOpen && (
         editingTime && interactive ? (
           <ClosingTimeEditor
             slotVal={slotVal}
@@ -416,6 +419,26 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
             <span>
               {closingStartStr} – {closingEndStr != null ? closingEndStr : <em>~Close</em>}
             </span>
+            {interactive && <Pencil size={9} style={{ opacity: 0.5 }} />}
+          </div>
+        )
+      )}
+
+      {/* Front Desk time row */}
+      {isFrontDesk && clinicOpen && (
+        editingTime && interactive ? (
+          <VariableTimeEditor
+            slotType={slotType}
+            slotVal={slotVal}
+            clinicId={clinic.id}
+            onClose={() => setEditingTime(false)}
+          />
+        ) : (
+          <div
+            className={`variable-time-row${interactive ? ' editable' : ''}`}
+            onClick={interactive ? (e) => { e.stopPropagation(); setEditingTime(true); } : undefined}
+          >
+            <span>{frontDeskDisplay}</span>
             {interactive && <Pencil size={9} style={{ opacity: 0.5 }} />}
           </div>
         )
@@ -550,18 +573,29 @@ export default function ClinicCard({ clinic, onPersonClick, onEditClinic, matche
                   clinicOpen={clinic.open}
                 />
               ))
-            : SLOT_TYPES.map(slotType => (
-                <SlotRow
-                  key={slotType}
-                  clinic={clinic}
-                  slotType={slotType}
-                  onPersonClick={onPersonClick}
-                  matchedPersonIds={matchedPersonIds}
-                  hasSearch={hasSearch}
-                  conflictSet={conflictSet}
-                  clinicOpen={clinic.open}
-                />
-              ))
+            : (() => {
+                const isDrRMonFri = clinic.provider === 'Dr. R' &&
+                  (clinic.day === 'Mon' || clinic.day === 'Fri');
+                const fdSlots = isDrRMonFri
+                  ? ['openingFrontDesk', 'closingFrontDesk']
+                  : ['frontDesk'];
+                const clinicSlotTypes = [
+                  ...fdSlots,
+                  'scribe', 'opener', 'closing', 'middle', 'training',
+                ];
+                return clinicSlotTypes.map(slotType => (
+                  <SlotRow
+                    key={slotType}
+                    clinic={clinic}
+                    slotType={slotType}
+                    onPersonClick={onPersonClick}
+                    matchedPersonIds={matchedPersonIds}
+                    hasSearch={hasSearch}
+                    conflictSet={conflictSet}
+                    clinicOpen={clinic.open}
+                  />
+                ));
+              })()
           }
         </div>
       )}

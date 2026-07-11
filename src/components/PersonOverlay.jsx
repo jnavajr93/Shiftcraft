@@ -22,10 +22,12 @@ function WeekRows({ person, clinics, additionalTasks }) {
                 let time;
                 if (slotType === 'scribe') {
                   time = formatScribeTimeDisplay(slotVal) ?? '1st Patient – Close';
-                } else if (slotType === 'opener' || slotType === 'openingFD') {
+                } else if (slotType === 'opener' || slotType === 'openingFrontDesk') {
                   time = formatOpenerTimeDisplay(c, slotVal);
-                } else if (slotType === 'closing' || slotType === 'closingFD') {
+                } else if (slotType === 'closing' || slotType === 'closingFrontDesk') {
                   time = formatClosingOverlayDisplay(slotVal);
+                } else if (slotType === 'frontDesk') {
+                  time = formatVariableSlotTime(slotVal) ?? 'Open – Close';
                 } else if (slotType === 'middle' || slotType === 'training') {
                   time = formatVariableSlotTime(slotVal) ?? 'Time not set';
                 } else {

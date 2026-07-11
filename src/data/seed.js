@@ -1,10 +1,11 @@
 export const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 export const ROLES = ['Scribe', 'Opener', 'Middle', 'Closing', 'Training', 'Pre-Op/PACU', 'Sterile Processing', 'Circulator', 'Scrub Tech'];
-export const SLOT_TYPES = ['openingFD', 'closingFD', 'scribe', 'opener', 'closing', 'middle', 'training'];
+export const SLOT_TYPES = ['openingFrontDesk', 'closingFrontDesk', 'frontDesk', 'scribe', 'opener', 'closing', 'middle', 'training'];
 
 export const SLOT_DISPLAY_LABELS = {
-  openingFD: 'Opening FD',
-  closingFD: 'Closing FD',
+  openingFrontDesk: 'Open FD',
+  closingFrontDesk: 'Close FD',
+  frontDesk: 'Front Desk',
   scribe: 'Scribe',
   opener: 'Opener',
   closing: 'Closing',
@@ -86,12 +87,13 @@ export function accommodationLabel(acc) {
 export function getSlotTimeLabel(clinic, slotType) {
   const { startTime } = clinic;
   switch (slotType) {
-    case 'scribe':     return null;
-    case 'openingFD':
-    case 'opener':     return `${minutesToTime(startTime)} – 5:00 PM`;
-    case 'closingFD':
-    case 'closing':    return '9:00 AM – ~Close';
-    default:           return null;
+    case 'scribe':           return null;
+    case 'openingFrontDesk':
+    case 'opener':           return `${minutesToTime(startTime)} – 5:00 PM`;
+    case 'closingFrontDesk':
+    case 'closing':          return '9:00 AM – ~Close';
+    case 'frontDesk':        return null; // shows via time editor row
+    default:                 return null;
   }
 }
 
@@ -132,18 +134,25 @@ export function formatTaskTime(task) {
 export function calcSlotHours(clinic, slotType) {
   const { startTime, endTime } = clinic;
   switch (slotType) {
-    case 'openingFD': {
-      const sv = clinic.slots?.openingFD;
+    case 'openingFrontDesk': {
+      const sv = clinic.slots?.openingFrontDesk;
       const obj = (sv && typeof sv === 'object') ? sv : {};
       const s = obj.start != null ? obj.start : (startTime - 15);
       const e = obj.end   != null ? obj.end   : 1020;
       return (e - s) / 60;
     }
-    case 'closingFD': {
-      const sv = clinic.slots?.closingFD;
+    case 'closingFrontDesk': {
+      const sv = clinic.slots?.closingFrontDesk;
       const obj = (sv && typeof sv === 'object') ? sv : {};
       const s = obj.start != null ? obj.start : 540;
       const e = obj.end   != null ? obj.end   : (endTime + 75);
+      return (e - s) / 60;
+    }
+    case 'frontDesk': {
+      const sv = clinic.slots?.frontDesk;
+      const obj = (sv && typeof sv === 'object') ? sv : {};
+      const s = obj.start != null ? obj.start : startTime;
+      const e = obj.end   != null ? obj.end   : endTime;
       return (e - s) / 60;
     }
     case 'scribe': {
