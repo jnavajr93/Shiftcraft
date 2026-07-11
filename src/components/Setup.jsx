@@ -21,6 +21,8 @@ const PRESET_COLORS = [
   '#b45309','#0f766e','#7e22ce','#be185d','#166534','#1d4ed8',
 ];
 
+const DEFAULT_HOURS = { 'Full-time': 38, 'Part-time': 32, 'PRN': 0 };
+
 function toggleArr(arr, item) {
   return arr.includes(item) ? arr.filter(x => x !== item) : [...arr, item];
 }
@@ -318,7 +320,7 @@ function PersonCard({ person, providers, locations }) {
             <button
               key={et}
               className={`pill small${person.employmentType === et ? ' active' : ''}`}
-              onClick={() => up('employmentType', et)}
+              onClick={() => updatePerson(person.id, { employmentType: et, targetHours: DEFAULT_HOURS[et] ?? 0 })}
             >
               {et}
             </button>
@@ -517,12 +519,13 @@ function AddPersonModal({ onClose, existingNames, providers, locations, defaultS
     preferredLocations: [],
     lockedTo: [],
     daysOff: [],
-    targetHours: 40,
+    targetHours: 38,
   });
   const [nameError, setNameError] = useState('');
   const [shake, setShake] = useState(false);
 
   const set = (field, val) => setForm(f => ({ ...f, [field]: val }));
+  const setEmploymentType = (et) => setForm(f => ({ ...f, employmentType: et, targetHours: DEFAULT_HOURS[et] ?? 0 }));
 
   const togglePrefLocation = (loc) => {
     const cur = form.preferredLocations;
@@ -633,7 +636,7 @@ function AddPersonModal({ onClose, existingNames, providers, locations, defaultS
             <label className="form-label">Employment</label>
             <div style={{ display: 'flex', gap: 4 }}>
               {EMPLOYMENT_TYPES.map(et => (
-                <button key={et} className={`pill small${form.employmentType === et ? ' active' : ''}`} onClick={() => set('employmentType', et)}>{et}</button>
+                <button key={et} className={`pill small${form.employmentType === et ? ' active' : ''}`} onClick={() => setEmploymentType(et)}>{et}</button>
               ))}
             </div>
           </div>

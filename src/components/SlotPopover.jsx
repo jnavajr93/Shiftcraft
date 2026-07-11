@@ -10,6 +10,8 @@ const OBS_ROLE_FOR_SLOT = {
   scrub: 'Scrub Tech',
 };
 
+const FD_SLOT_TYPES = new Set(['openingFrontDesk', 'closingFrontDesk', 'frontDesk']);
+
 // Returns the provider name string from a lockedTo entry (string or {provider,slot} object)
 function lockedToProvider(entry) {
   return typeof entry === 'string' ? entry : entry.provider;
@@ -36,6 +38,9 @@ function ineligibleReason(person, clinic, slotType, clinics, additionalTasks) {
     t.day === clinic.day && t.assignedPersonId === person.id
   );
   if (taskAssigned) return 'Already assigned today';
+
+  // Front desk slots have no role requirement — admin staff are eligible by staffType alone
+  if (FD_SLOT_TYPES.has(slotType)) return null;
 
   // MUST_PAIR override: if person has a slot-specific lock to this clinic+slot,
   // they're eligible regardless of their roles array (solver places them via MUST_PAIR).
@@ -87,8 +92,14 @@ export default function SlotPopover({ clinic, slotType, currentPersonId, onAssig
   const gradeOrder = { A: 0, B: 1, C: 2 };
   const currentPerson = currentPersonId ? data.people.find(p => p.id === currentPersonId) : null;
 
+  // Front desk slots → admin staff only. Clinical/OBS slots → tech staff only.
+  const isFDSlot = FD_SLOT_TYPES.has(slotType);
+  const peopleForSlot = data.people.filter(p =>
+    isFDSlot ? p.staffType === 'admin' : p.staffType !== 'admin'
+  );
+
   // Classify each person
-  const classified = data.people.map(person => {
+  const classified = peopleForSlot.map(person => {
     const reason = ineligibleReason(person, clinic, slotType, data.clinics, data.additionalTasks);
     return { person, eligible: !reason, reason };
   });
