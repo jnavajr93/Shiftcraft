@@ -964,6 +964,18 @@ html, body, #root {
   to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
+/* ─── Floating AI Button ────────────────────────── */
+.fab-ai {
+  position: fixed; bottom: 24px; right: 24px; z-index: 185;
+  width: 52px; height: 52px; border-radius: 50%;
+  background: var(--accent); color: var(--btn-text);
+  border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.20);
+  transition: box-shadow 150ms, transform 150ms;
+}
+.fab-ai:hover { box-shadow: 0 6px 24px rgba(0,0,0,0.28); transform: scale(1.06); }
+
 /* ─── Week Date Picker ─────────────────────────── */
 .week-date-picker {
   position: absolute; top: calc(100% + 8px); left: 50%;
