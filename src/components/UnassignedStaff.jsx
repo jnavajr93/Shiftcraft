@@ -1,23 +1,5 @@
-import { useDraggable } from '@dnd-kit/core';
 import { useApp } from '../context/AppContext.jsx';
 import { DAYS, getSlotPersonId } from '../data/seed.js';
-
-function DraggablePersonChip({ person, onPersonClick }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: person.id });
-  return (
-    <div
-      ref={setNodeRef}
-      {...listeners}
-      {...attributes}
-      className="person-chip"
-      style={{ cursor: 'grab', touchAction: 'none', opacity: isDragging ? 0.4 : 1 }}
-      onClick={() => onPersonClick(person.id)}
-    >
-      <div className="dot" style={{ background: person.color }} />
-      {person.name}
-    </div>
-  );
-}
 
 export default function UnassignedStaff({ onPersonClick }) {
   const { data, isAdmin } = useApp();
@@ -61,11 +43,15 @@ export default function UnassignedStaff({ onPersonClick }) {
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                     {unassigned.map(person => (
-                      <DraggablePersonChip
+                      <div
                         key={person.id}
-                        person={person}
-                        onPersonClick={onPersonClick}
-                      />
+                        className="person-chip"
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => onPersonClick(person.id)}
+                      >
+                        <div className="dot" style={{ background: person.color }} />
+                        {person.name}
+                      </div>
                     ))}
                   </div>
                 )}
