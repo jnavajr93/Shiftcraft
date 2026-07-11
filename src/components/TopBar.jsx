@@ -312,6 +312,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
     data, addLog, applyBulkAssignments, restoreClinicSlots, lastSaved,
   } = useApp();
   const weekLabelRef = useRef(null);
+  const undoTimerRef = useRef(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showPinModal, setShowPinModal] = useState(false);
   const { showWelcomeCard } = useTour();
@@ -346,6 +347,14 @@ export default function TopBar({ activeTab, setActiveTab }) {
   const [genError, setGenError] = useState('');
   const [undoInfo, setUndoInfo] = useState(null); // { snapshot, count }
   const [hadGeneration, setHadGeneration] = useState(false);
+
+  // Auto-dismiss the undo toast after 4 s
+  useEffect(() => {
+    if (!undoInfo || genState === 'loading') return;
+    clearTimeout(undoTimerRef.current);
+    undoTimerRef.current = setTimeout(() => setUndoInfo(null), 4000);
+    return () => clearTimeout(undoTimerRef.current);
+  }, [undoInfo, genState]);
 
   const handleCopy = async () => {
     const result = await copyFromTwoWeeksAgo();
@@ -609,9 +618,9 @@ export default function TopBar({ activeTab, setActiveTab }) {
         <div className="copy-toast">{copyToast}</div>
       )}
 
-      {/* Undo toast — persists until dismissed */}
+      {/* Undo toast — top-center so it doesn't cover the hours bar; auto-dismisses after 4 s */}
       {undoInfo && genState !== 'loading' && (
-        <div className="copy-toast" style={{ display: 'flex', alignItems: 'center', gap: 10, bottom: 24, fontSize: 13 }}>
+        <div className="copy-toast" style={{ display: 'flex', alignItems: 'center', gap: 10, top: 68, bottom: 'unset', fontSize: 13, pointerEvents: 'auto' }}>
           <span>Schedule generated — {undoInfo.count} slots filled</span>
           <button
             className="btn"
@@ -622,7 +631,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
           </button>
           <button
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', display: 'flex', padding: 2 }}
-            onClick={() => setUndoInfo(null)}
+            onClick={() => { clearTimeout(undoTimerRef.current); setUndoInfo(null); }}
           >
             <X size={14} />
           </button>
