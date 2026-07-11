@@ -312,7 +312,6 @@ export default function TopBar({ activeTab, setActiveTab }) {
     data, addLog, applyBulkAssignments, restoreClinicSlots, lastSaved,
   } = useApp();
   const weekLabelRef = useRef(null);
-  const undoTimerRef = useRef(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showPinModal, setShowPinModal] = useState(false);
   const { showWelcomeCard } = useTour();
@@ -333,14 +332,6 @@ export default function TopBar({ activeTab, setActiveTab }) {
     const mins = Math.floor(secs / 60);
     return `Saved ${mins}m ago`;
   })();
-
-  // Auto-dismiss the undo toast after 4 s
-  useEffect(() => {
-    if (!undoInfo || genState === 'loading') return;
-    clearTimeout(undoTimerRef.current);
-    undoTimerRef.current = setTimeout(() => setUndoInfo(null), 4000);
-    return () => clearTimeout(undoTimerRef.current);
-  }, [undoInfo, genState]);
 
   const isCurrentWeek = currentWeek === isoWeek(new Date());
   const [copyToast, setCopyToast] = useState(null);
@@ -543,6 +534,14 @@ export default function TopBar({ activeTab, setActiveTab }) {
                 <History size={20} strokeWidth={1.5} />
               </button>
               <button
+                className={`btn btn-icon topbar-mobile-hidden${showChat ? ' active' : ''}`}
+                onClick={() => setShowChat(s => !s)}
+                aria-label="Schedule assistant"
+                title="AI Schedule Assistant"
+              >
+                <Sparkles size={20} strokeWidth={1.5} />
+              </button>
+              <button
                 data-tour="setup-tab"
                 className={`btn btn-pill topbar-mobile-hidden ${activeTab === 'setup' ? 'active' : ''}`}
                 onClick={() => setActiveTab(t => t === 'setup' ? 'schedule' : 'setup')}
@@ -610,21 +609,9 @@ export default function TopBar({ activeTab, setActiveTab }) {
         <div className="copy-toast">{copyToast}</div>
       )}
 
-      {/* Floating AI assistant button — Manager mode only */}
-      {isAdmin && (
-        <button
-          className="fab-ai"
-          onClick={() => setShowChat(s => !s)}
-          aria-label="AI Schedule Assistant"
-          title="AI Schedule Assistant"
-        >
-          <Sparkles size={22} strokeWidth={1.5} />
-        </button>
-      )}
-
-      {/* Undo toast — top-center, auto-dismisses after 4 s */}
+      {/* Undo toast — persists until dismissed */}
       {undoInfo && genState !== 'loading' && (
-        <div className="copy-toast" style={{ display: 'flex', alignItems: 'center', gap: 10, bottom: 'unset', top: 68, fontSize: 13, pointerEvents: 'auto' }}>
+        <div className="copy-toast" style={{ display: 'flex', alignItems: 'center', gap: 10, bottom: 24, fontSize: 13 }}>
           <span>Schedule generated — {undoInfo.count} slots filled</span>
           <button
             className="btn"
@@ -635,7 +622,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
           </button>
           <button
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', display: 'flex', padding: 2 }}
-            onClick={() => { clearTimeout(undoTimerRef.current); setUndoInfo(null); }}
+            onClick={() => setUndoInfo(null)}
           >
             <X size={14} />
           </button>
