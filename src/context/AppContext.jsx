@@ -729,10 +729,10 @@ export function AppProvider({ children }) {
     return [...allSlotPersonIds, ...allTasks].every(v => v == null);
   }, [globalData]);
 
-  const copyFromPreviousWeek = useCallback(async () => {
+  const copyFromTwoWeeksAgo = useCallback(async () => {
     if (!globalData) return null;
     const monday = mondayOfWeek(currentWeek);
-    monday.setUTCDate(monday.getUTCDate() - 7);
+    monday.setUTCDate(monday.getUTCDate() - 14);
     const prevWeek = isoWeek(monday);
 
     let prevMap = await loadWeekSlotMapDB(prevWeek);
@@ -746,6 +746,19 @@ export function AppProvider({ children }) {
     });
     return mondayOfWeek(prevWeek);
   }, [currentWeek, globalData]);
+
+  const clearWeek = useCallback(() => {
+    setGlobalData(prev => {
+      const clinics = prev.clinics.map(c => ({
+        ...c,
+        slots: c.location === 'OBS' ? blankObsSlots() : blankStandardSlots(),
+      }));
+      const additionalTasks = (prev.additionalTasks ?? []).map(t => ({ ...t, assignedPersonId: null }));
+      const map = extractSlotMap(clinics, additionalTasks);
+      saveWeekSlotMapDB(currentWeek, map);
+      return { ...prev, clinics, additionalTasks };
+    });
+  }, [currentWeek]);
 
   // ─── Clinic mutations ───────────────────────
   const updateClinic = useCallback((clinicId, changes) => {
@@ -1014,7 +1027,7 @@ export function AppProvider({ children }) {
       isAdmin, setIsAdmin,
       theme, setTheme,
       currentWeek, weekLabel,
-      navigateWeek, jumpToWeek, weekIsEmpty, copyFromPreviousWeek,
+      navigateWeek, jumpToWeek, weekIsEmpty, copyFromTwoWeeksAgo, clearWeek,
       updateClinic, assignSlot, updateSlotTime,
       assignTask, addTask, removeTask, updateTaskTime,
       updatePerson, addPerson, deletePerson, reorderPeople,

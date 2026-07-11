@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Calendar, Sun, Moon, ChevronLeft, ChevronRight,
-  History, Printer, Sparkles, Wand2, Loader2, X, CircleHelp,
+  History, Printer, Sparkles, Wand2, Loader2, X, CircleHelp, RotateCcw,
 } from 'lucide-react';
 import { useApp, isoWeek, mondayOfWeek } from '../context/AppContext.jsx';
 import { useTour } from './Tour.jsx';
@@ -49,6 +49,39 @@ function GenerateModal({ weekLabel, keepExisting, onKeepChange, onConfirm, onCan
           <button className="btn" onClick={onCancel}>Cancel</button>
           <button className="btn btn-primary" style={{ minHeight: 40 }} onClick={onConfirm}>
             <Wand2 size={15} /> Generate
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Clear Week confirmation modal ───────────────
+function ClearWeekModal({ weekLabel, onConfirm, onCancel }) {
+  return (
+    <div
+      className="overlay-backdrop"
+      style={{ zIndex: 250 }}
+      onClick={e => { if (e.target === e.currentTarget) onCancel(); }}
+    >
+      <div className="overlay-modal" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()}>
+        <div className="overlay-header">
+          <div style={{ fontWeight: 500, fontSize: 16 }}>Clear this week's schedule?</div>
+          <button className="overlay-close" onClick={onCancel}><X size={16} /></button>
+        </div>
+        <div className="overlay-body">
+          <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
+            This will remove all staff assignments for <strong>Week of {weekLabel}</strong>.
+            Clinic settings and times are kept. This cannot be undone.
+          </p>
+        </div>
+        <div style={{
+          display: 'flex', gap: 8, justifyContent: 'flex-end',
+          padding: '12px 24px', borderTop: '0.5px solid var(--border)', flexShrink: 0,
+        }}>
+          <button className="btn" onClick={onCancel}>Cancel</button>
+          <button className="btn btn-danger" style={{ minHeight: 40 }} onClick={onConfirm}>
+            Clear Week
           </button>
         </div>
       </div>
@@ -275,7 +308,7 @@ function WeekDatePicker({ currentWeek, onSelectWeek, onClose, triggerRef }) {
 export default function TopBar({ activeTab, setActiveTab }) {
   const {
     isAdmin, setIsAdmin, theme, setTheme,
-    weekLabel, currentWeek, navigateWeek, jumpToWeek, weekIsEmpty, copyFromPreviousWeek,
+    weekLabel, currentWeek, navigateWeek, jumpToWeek, weekIsEmpty, copyFromTwoWeeksAgo, clearWeek,
     data, addLog, applyBulkAssignments, restoreClinicSlots, lastSaved,
   } = useApp();
   const weekLabelRef = useRef(null);
@@ -302,6 +335,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
 
   const isCurrentWeek = currentWeek === isoWeek(new Date());
   const [copyToast, setCopyToast] = useState(null);
+  const [showClearModal, setShowClearModal] = useState(false);
   const [showLog, setShowLog] = useState(false);
   const [showChat, setShowChat] = useState(false);
 
@@ -313,14 +347,22 @@ export default function TopBar({ activeTab, setActiveTab }) {
   const [undoInfo, setUndoInfo] = useState(null); // { snapshot, count }
   const [hadGeneration, setHadGeneration] = useState(false);
 
-  const handleCopy = () => {
-    const result = copyFromPreviousWeek();
+  const handleCopy = async () => {
+    const result = await copyFromTwoWeeksAgo();
     if (!result) {
-      setCopyToast('No previous week data found');
+      setCopyToast('No data found 2 weeks ago');
     } else {
       const label = result.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
       setCopyToast(`Copied from week of ${label}`);
     }
+    setTimeout(() => setCopyToast(null), 3000);
+  };
+
+  const handleClearConfirm = () => {
+    setShowClearModal(false);
+    clearWeek();
+    addLog({ action: `Week of ${weekLabel} cleared by manager`, personName: 'Manager', day: '', detail: '' });
+    setCopyToast('Week cleared');
     setTimeout(() => setCopyToast(null), 3000);
   };
 
@@ -447,7 +489,16 @@ export default function TopBar({ activeTab, setActiveTab }) {
         <div className="topbar-right">
           {isAdmin && weekIsEmpty() && (
             <button className="btn btn-pill topbar-mobile-hidden" style={{ fontSize: 12, minHeight: 32 }} onClick={handleCopy}>
-              Copy from last week
+              Copy from 2 weeks ago
+            </button>
+          )}
+          {isAdmin && !weekIsEmpty() && (
+            <button
+              className="btn btn-pill topbar-mobile-hidden"
+              style={{ fontSize: 12, minHeight: 32, color: 'var(--red, #dc2626)', gap: 5 }}
+              onClick={() => setShowClearModal(true)}
+            >
+              <RotateCcw size={13} /> Clear Week
             </button>
           )}
           {isAdmin && (
@@ -589,6 +640,13 @@ export default function TopBar({ activeTab, setActiveTab }) {
         />
       )}
 
+      {showClearModal && (
+        <ClearWeekModal
+          weekLabel={weekLabel}
+          onConfirm={handleClearConfirm}
+          onCancel={() => setShowClearModal(false)}
+        />
+      )}
       {showLog && <ChangeLogDrawer onClose={() => setShowLog(false)} />}
       {showChat && <ChatPanel onClose={() => setShowChat(false)} />}
       {showPinModal && (
