@@ -209,6 +209,21 @@ export function calcSlotHours(clinic, slotType) {
   }
 }
 
+/**
+ * Returns the same subset of clinics the board renders:
+ * the first clinic per (location, day) in array order.
+ * Shadow clinics (same location+day, later in the array) are excluded.
+ */
+export function getBoardClinics(clinics) {
+  const seen = new Set();
+  return clinics.filter(c => {
+    const key = `${c.location}:${c.day}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export function calcPersonWeeklyHours(personId, clinics, additionalTasks) {
   let total = 0;
   for (const clinic of clinics) {

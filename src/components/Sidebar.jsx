@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import { useApp } from '../context/AppContext.jsx';
-import { calcPersonWeeklyHours, SKILLS, minutesToTime, accommodationLabel } from '../data/seed.js';
+import { calcPersonWeeklyHours, getBoardClinics, SKILLS, minutesToTime, accommodationLabel } from '../data/seed.js';
 
 const SKILL_ABBR = {
   'Workup':             'WU',
@@ -223,6 +223,7 @@ export default function Sidebar({ onPersonClick }) {
   const sorted = [...data.people].sort(
     (a, b) => (GRADE_ORDER[a.grade] ?? 3) - (GRADE_ORDER[b.grade] ?? 3)
   );
+  const boardClinics = getBoardClinics(data.clinics);
 
   return (
     <div data-tour="staff-sidebar" className="sidebar">
@@ -236,7 +237,7 @@ export default function Sidebar({ onPersonClick }) {
             key={person.id}
             person={person}
             onPersonClick={onPersonClick}
-            clinics={data.clinics}
+            clinics={boardClinics}
           />
         ))}
       </div>

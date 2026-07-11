@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { getSeedData, migratePerson, generateId, getSlotPersonId, OBS_SLOT_TYPES } from '../data/seed.js';
+import { getSeedData, migratePerson, generateId, getSlotPersonId, OBS_SLOT_TYPES, getBoardClinics } from '../data/seed.js';
 import { supabase } from '../supabase.js';
 import {
   saveSchedule as saveScheduleDB,
@@ -518,6 +518,52 @@ export function AppProvider({ children }) {
           weekMap = extractSlotMap(data.clinics, data.additionalTasks);
           saveWeekSlotMapDB(nowWeek, weekMap);
         }
+      }
+
+      // One-time cleanup: clear stale slot assignments from shadow clinics across ALL
+      // weeks in Supabase. A shadow clinic is one at a location:day pair that already
+      // appeared earlier in the clinics array — it is hidden on the board (.find picks
+      // the first) but was previously visible in the overlay and hours (.filter saw all).
+      if (!localStorage.getItem('shiftcraft.migration.clearshadowslots')) {
+        const seenLocDay = new Set();
+        const shadowClinicIds = new Set();
+        for (const c of data.clinics) {
+          const locDayKey = `${c.location}:${c.day}`;
+          if (seenLocDay.has(locDayKey)) shadowClinicIds.add(c.id);
+          else seenLocDay.add(locDayKey);
+        }
+
+        if (shadowClinicIds.size > 0) {
+          try {
+            const { data: weekRows } = await supabase
+              .from('schedule_data')
+              .select('key, value')
+              .like('key', 'shiftcraft_week_%');
+            if (weekRows) {
+              for (const row of weekRows) {
+                const cleanedMap = { ...row.value };
+                let dirty = false;
+                for (const clinicId of shadowClinicIds) {
+                  const shadowSlots = cleanedMap[clinicId];
+                  if (shadowSlots && Object.values(shadowSlots).some(v => getSlotPersonId(v) != null)) {
+                    const clinic = data.clinics.find(c => c.id === clinicId);
+                    cleanedMap[clinicId] = clinic?.location === 'OBS' ? blankObsSlots() : blankStandardSlots();
+                    dirty = true;
+                  }
+                }
+                if (dirty) {
+                  const weekStr = row.key.replace('shiftcraft_week_', '');
+                  saveWeekSlotMapDB(weekStr, cleanedMap);
+                  if (weekStr === nowWeek) weekMap = cleanedMap;
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('[Shiftcraft] Shadow slot cleanup failed:', e);
+          }
+        }
+
+        try { localStorage.setItem('shiftcraft.migration.clearshadowslots', '1'); } catch { /* ignore */ }
       }
 
       const applied = applySlotMap(data.clinics, data.additionalTasks, weekMap);

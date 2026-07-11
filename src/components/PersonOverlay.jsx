@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { DAYS, calcPersonWeeklyHours, getSlotLabel, getSlotPersonId, formatVariableSlotTime, formatOpenerTimeDisplay, formatOpeningFDTimeDisplay, formatClosingOverlayDisplay, formatClosingFDOverlayDisplay, formatScribeTimeDisplay, formatTaskTime } from '../data/seed.js';
+import { DAYS, calcPersonWeeklyHours, getBoardClinics, getSlotLabel, getSlotPersonId, formatVariableSlotTime, formatOpenerTimeDisplay, formatOpeningFDTimeDisplay, formatClosingOverlayDisplay, formatClosingFDOverlayDisplay, formatScribeTimeDisplay, formatTaskTime } from '../data/seed.js';
 import ArcChart from './ArcChart.jsx';
 
 function useIsMobile() {
@@ -76,7 +76,8 @@ function WeekRows({ person, clinics, additionalTasks }) {
 function OverlayInner({ person, onClose }) {
   const { data, isAdmin, deletePerson, addLog } = useApp();
   const [confirming, setConfirming] = useState(false);
-  const hours = calcPersonWeeklyHours(person.id, data.clinics, data.additionalTasks);
+  const boardClinics = getBoardClinics(data.clinics);
+  const hours = calcPersonWeeklyHours(person.id, boardClinics, data.additionalTasks);
 
   const handleRemove = () => {
     addLog({ action: `${person.name} removed from roster by admin`, personName: person.name, day: '', detail: '' });
@@ -99,7 +100,7 @@ function OverlayInner({ person, onClose }) {
         <button className="overlay-close" onClick={onClose}><X size={16} /></button>
       </div>
       <div className="overlay-body">
-        <WeekRows person={person} clinics={data.clinics} additionalTasks={data.additionalTasks} />
+        <WeekRows person={person} clinics={boardClinics} additionalTasks={data.additionalTasks} />
         {isAdmin && (
           <ArcChart
             hours={hours}

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { calcPersonWeeklyHours } from '../data/seed.js';
+import { calcPersonWeeklyHours, getBoardClinics } from '../data/seed.js';
 
 // Unit test — runs once at module load
 function runHoursTest() {
@@ -23,8 +23,9 @@ export default function HoursBar() {
   const { data } = useApp();
   const [collapsed, setCollapsed] = useState(false);
 
+  const boardClinics = getBoardClinics(data.clinics);
   const assigned = data.people
-    .map(p => ({ person: p, hours: calcPersonWeeklyHours(p.id, data.clinics, data.additionalTasks) }))
+    .map(p => ({ person: p, hours: calcPersonWeeklyHours(p.id, boardClinics, data.additionalTasks) }))
     .filter(({ hours }) => hours > 0);
 
   const totalHours = assigned.reduce((sum, { hours }) => sum + hours, 0);
