@@ -527,9 +527,12 @@ export default function ClinicCard({ clinic, onPersonClick, onEditClinic, matche
       <div className="clinic-card-header">
         <div>
           <div className="clinic-card-title">{clinic.provider}</div>
-          <div className="clinic-card-sub">{clinic.location} · {minutesToTime(clinic.startTime)} – {minutesToTime(clinic.endTime)}</div>
+          <div className="clinic-card-sub">{clinic.location}</div>
         </div>
         <div className="clinic-card-header-right">
+          <span className="clinic-time-pill">
+            {minutesToTime(clinic.startTime)} – {minutesToTime(clinic.endTime)}
+          </span>
           {clinic.open && <PatientBadge count={clinic.patientCount} />}
           {isAdmin && (
             <>
