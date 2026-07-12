@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { DAYS, calcPersonWeeklyHours, getBoardClinics, getSlotLabel, getSlotPersonId, formatVariableSlotTime, formatOpenerTimeDisplay, formatOpeningFDTimeDisplay, formatClosingOverlayDisplay, formatClosingFDOverlayDisplay, formatScribeTimeDisplay, formatTaskTime } from '../data/seed.js';
+import { DAYS, calcPersonWeeklyHours, getBoardClinics, getSlotLabel, getSlotPersonId, formatVariableSlotTime, formatOpenerTimeDisplay, formatOpeningFDTimeDisplay, formatClosingOverlayDisplay, formatClosingFDOverlayDisplay, formatScribeTimeDisplay, formatTaskTime, OBS_SLOT_TYPES } from '../data/seed.js';
 import ArcChart from './ArcChart.jsx';
 
 function useIsMobile() {
@@ -34,6 +34,8 @@ function WeekRows({ person, clinics, additionalTasks }) {
                   time = formatVariableSlotTime(slotVal) ?? 'Open – Close';
                 } else if (slotType === 'middle' || slotType === 'training') {
                   time = formatVariableSlotTime(slotVal) ?? 'Time not set';
+                } else if (OBS_SLOT_TYPES.includes(slotType)) {
+                  time = 'Open – Close';
                 } else {
                   time = '';
                 }

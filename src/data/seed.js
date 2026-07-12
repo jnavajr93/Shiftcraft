@@ -205,6 +205,23 @@ export function calcSlotHours(clinic, slotType) {
       const endMin = sv.end === 'close' ? endTime : sv.end;
       return (endMin - sv.start) / 60;
     }
+    case 'preop':
+    case 'sterile':
+    case 'circulator':
+    case 'scrub': {
+      const sv = clinic.slots?.[slotType];
+      const obj = (sv && typeof sv === 'object') ? sv : {};
+      if (obj.start != null && obj.end != null) {
+        return (obj.end - obj.start) / 60;
+      }
+      const provider = clinic.provider ?? '';
+      if (provider.includes('Dr. R')) {
+        return (endTime + 120 - (startTime - 60)) / 60;
+      } else if (provider.includes('Dr. A')) {
+        return (endTime + 60 - (startTime - 60)) / 60;
+      }
+      return 0;
+    }
     default: return 0;
   }
 }

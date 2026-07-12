@@ -458,12 +458,60 @@ const OBS_LABELS = {
   scrub: 'Scrub Tech',
 };
 
+function ObsTimeEditor({ slotType, slotVal, clinicId, onClose }) {
+  const { updateSlotTime } = useApp();
+  const obj = (slotVal && typeof slotVal === 'object') ? slotVal : {};
+  const [startVal, setStartVal] = useState(obj.start != null ? minutesToTimeInput(obj.start) : '');
+  const [endVal, setEndVal] = useState(obj.end != null ? minutesToTimeInput(obj.end) : '');
+
+  const handleSave = () => {
+    const s = startVal ? timeInputToMinutes(startVal) : null;
+    const e = endVal ? timeInputToMinutes(endVal) : null;
+    updateSlotTime(clinicId, slotType, s, e);
+    onClose();
+  };
+
+  return (
+    <div className="variable-time-editor" onClick={e => e.stopPropagation()}>
+      <div className="variable-time-fields">
+        <label className="vte-label">Start</label>
+        <input
+          type="time"
+          className="vte-input"
+          value={startVal}
+          onChange={e => setStartVal(e.target.value)}
+          autoFocus
+        />
+        <label className="vte-label">End</label>
+        <input
+          type="time"
+          className="vte-input"
+          value={endVal}
+          onChange={e => setEndVal(e.target.value)}
+        />
+      </div>
+      <div style={{ fontSize: 10, color: 'var(--text-muted)', padding: '2px 0 4px' }}>
+        Leave blank to use provider-buffered hours
+      </div>
+      <div className="variable-time-actions">
+        <button className="btn btn-primary" style={{ minHeight: 26, fontSize: 11, padding: '3px 10px' }} onClick={handleSave}>
+          <Check size={11} /> Save
+        </button>
+        <button className="btn" style={{ minHeight: 26, fontSize: 11, padding: '3px 8px' }} onClick={onClose}>
+          <XIcon size={11} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ObsSlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch, conflictSet, clinicOpen }) {
   const { data, isAdmin, assignSlot } = useApp();
   const slotVal = clinic.slots[slotType];
   const personId = getSlotPersonId(slotVal);
   const person = personId ? data.people.find(p => p.id === personId) : null;
   const [showPopover, setShowPopover] = useState(false);
+  const [editingTime, setEditingTime] = useState(false);
 
   const droppableId = `slot:${clinic.id}:${slotType}`;
   const { setNodeRef: setDropRef, isOver } = useDroppable({ id: droppableId });
@@ -474,42 +522,65 @@ function ObsSlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSear
   const isDimmed = hasSearch && person && !matchedPersonIds.includes(personId);
   const interactive = isAdmin && clinicOpen;
   const label = OBS_LABELS[slotType] ?? slotType;
+  const obsTimeDisplay = formatVariableSlotTime(slotVal);
 
   return (
-    <div
-      ref={setRef}
-      className={['slot-row', isOver && interactive ? 'drop-target' : ''].filter(Boolean).join(' ')}
-      onClick={interactive ? () => setShowPopover(s => !s) : undefined}
-      style={{ cursor: interactive ? 'pointer' : 'default' }}
-    >
-      <div className="slot-label-col" style={{ whiteSpace: 'normal', minWidth: 80 }}>
-        <div className="slot-label">{label}</div>
-      </div>
-      <div className="slot-content">
-        {person ? (
-          <div
-            className={['person-chip', isHighlighted ? 'highlighted' : '', isDimmed ? 'dimmed' : '', hasConflict ? 'conflict-ring' : ''].filter(Boolean).join(' ')}
-            onClick={e => { e.stopPropagation(); onPersonClick(personId); }}
-          >
-            <div className="dot" style={{ background: person.color }} />
-            {person.name}
-            {hasConflict && <AlertTriangle size={11} style={{ color: 'var(--red)', flexShrink: 0 }} />}
-          </div>
-        ) : (
-          <div className={['slot-empty', isOver && interactive ? 'droppable' : ''].filter(Boolean).join(' ')}>
-            {label}
-          </div>
+    <div>
+      <div
+        ref={setRef}
+        className={['slot-row', isOver && interactive ? 'drop-target' : ''].filter(Boolean).join(' ')}
+        onClick={interactive ? () => setShowPopover(s => !s) : undefined}
+        style={{ cursor: interactive ? 'pointer' : 'default' }}
+      >
+        <div className="slot-label-col" style={{ whiteSpace: 'normal', minWidth: 80 }}>
+          <div className="slot-label">{label}</div>
+        </div>
+        <div className="slot-content">
+          {person ? (
+            <div
+              className={['person-chip', isHighlighted ? 'highlighted' : '', isDimmed ? 'dimmed' : '', hasConflict ? 'conflict-ring' : ''].filter(Boolean).join(' ')}
+              onClick={e => { e.stopPropagation(); onPersonClick(personId); }}
+            >
+              <div className="dot" style={{ background: person.color }} />
+              {person.name}
+              {hasConflict && <AlertTriangle size={11} style={{ color: 'var(--red)', flexShrink: 0 }} />}
+            </div>
+          ) : (
+            <div className={['slot-empty', isOver && interactive ? 'droppable' : ''].filter(Boolean).join(' ')}>
+              {label}
+            </div>
+          )}
+        </div>
+        {showPopover && interactive && (
+          <SlotPopover
+            clinic={clinic}
+            slotType={slotType}
+            currentPersonId={personId}
+            onAssign={(pid) => { assignSlot(clinic.id, slotType, pid); setShowPopover(false); }}
+            onRemove={() => { assignSlot(clinic.id, slotType, null); setShowPopover(false); }}
+            onClose={() => setShowPopover(false)}
+          />
         )}
       </div>
-      {showPopover && interactive && (
-        <SlotPopover
-          clinic={clinic}
-          slotType={slotType}
-          currentPersonId={personId}
-          onAssign={(pid) => { assignSlot(clinic.id, slotType, pid); setShowPopover(false); }}
-          onRemove={() => { assignSlot(clinic.id, slotType, null); setShowPopover(false); }}
-          onClose={() => setShowPopover(false)}
-        />
+
+      {/* OBS time row */}
+      {clinicOpen && (
+        editingTime ? (
+          <ObsTimeEditor
+            slotType={slotType}
+            slotVal={slotVal}
+            clinicId={clinic.id}
+            onClose={() => setEditingTime(false)}
+          />
+        ) : (
+          <div
+            className={`variable-time-row${interactive ? ' editable' : ''}`}
+            onClick={interactive ? (e) => { e.stopPropagation(); setEditingTime(true); } : undefined}
+          >
+            <span>{obsTimeDisplay ?? 'Open – Close'}</span>
+            {interactive && <Pencil size={9} style={{ opacity: 0.5 }} />}
+          </div>
+        )
       )}
     </div>
   );

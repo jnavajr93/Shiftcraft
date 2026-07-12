@@ -70,7 +70,12 @@ function applySlotMap(clinics, tasks, map) {
 }
 
 function blankObsSlots() {
-  return { preop: { personId: null }, sterile: { personId: null }, circulator: { personId: null }, scrub: { personId: null } };
+  return {
+    preop: { personId: null, start: null, end: null },
+    sterile: { personId: null, start: null, end: null },
+    circulator: { personId: null, start: null, end: null },
+    scrub: { personId: null, start: null, end: null },
+  };
 }
 
 function blankStandardSlots() {
