@@ -452,6 +452,16 @@ function runMigrations(data) {
     try { localStorage.setItem('shiftcraft.migration.frontdesksingle', '1'); } catch { /* ignore */ }
   }
 
+  // ── Migration: tasktypes_research ────────────────
+  // Add 'Research' to the built-in task type list.
+  if (!localStorage.getItem('shiftcraft.migration.tasktypes_research')) {
+    if (Array.isArray(d.taskTypes) && !d.taskTypes.includes('Research')) {
+      d = { ...d, taskTypes: [...d.taskTypes, 'Research'] };
+      dirty = true;
+    }
+    try { localStorage.setItem('shiftcraft.migration.tasktypes_research', '1'); } catch { /* ignore */ }
+  }
+
   // Note: no localStorage save here — caller saves to Supabase
   void dirty;
 
