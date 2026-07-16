@@ -238,7 +238,7 @@ function ManagerModal({ onSuccess, onCancel }) {
           value={initials}
           onChange={handleInitialsChange}
           onKeyDown={e => { if (e.key === 'Enter' && canSubmit) submit(digits, initials); }}
-          placeholder="e.g. JN"
+
           maxLength={3}
           style={{
             width: '100%', boxSizing: 'border-box',
