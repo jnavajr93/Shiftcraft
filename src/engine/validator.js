@@ -181,8 +181,8 @@ export function findInvalidSlotAssignments(assignments, clinics) {
 }
 
 // ─── Self-contained tests ───────────────────────────────────────────────────
-// Reproduce the exact Hailey scenario: two same-name records with NO
-// linkedPersonId set, one in OBS and one in FD on the same day.
+// Two same-name records with NO linkedPersonId, one in OBS and one in FD on
+// the same day. Universal rules: same name = same person, OBS wins.
 // Call runValidationTests() and check console for PASS / FAIL lines.
 
 export function runValidationTests() {
@@ -201,14 +201,14 @@ export function runValidationTests() {
 
   console.group('[Shiftcraft] Validator self-test');
 
-  // ── Test 1: Exact Hailey scenario ─────────────────────────────────────────
+  // ── Test 1: unlinked same-name pair — OBS wins ────────────────────────────
   // Two same-name records with NO linkedPersonId. Tech in OBS, admin in FD.
-  // Expected: FD dropped (OBS wins). This is the bug that shipped twice.
+  // Expected: FD dropped, OBS kept.
   {
     console.group('Test 1: unlinked same-name pair, OBS + FD same day');
     const people = [
-      { id: 'admin-1', name: 'Hailey', staffType: 'admin', linkedPersonId: null },
-      { id: 'tech-1',  name: 'Hailey', staffType: null,    linkedPersonId: null },
+      { id: 'admin-1', name: 'Sam', staffType: 'admin', linkedPersonId: null },
+      { id: 'tech-1',  name: 'Sam', staffType: null,    linkedPersonId: null },
     ];
     const clinics = [
       { id: 'wed-obs',      day: 'Wed', location: 'OBS',      open: true },
@@ -219,37 +219,20 @@ export function runValidationTests() {
       { clinicId: 'wed-chandler', slot: 'frontDesk', personId: 'admin-1' },
     ];
 
-    // Demonstrate what OLD ID-based logic produced (the bug):
-    const oldCanonical = { 'admin-1': 'admin-1', 'tech-1': 'tech-1' }; // each maps to self
-    const oldKey = (id) => oldCanonical[id] ?? id;
-    const oldGroups = {};
-    for (const a of assignments) {
-      const clinic = clinics.find(c => c.id === a.clinicId);
-      const key = oldKey(a.personId);
-      const isObs = clinic.location?.toLowerCase() === 'obs';
-      if (!oldGroups[key]) oldGroups[key] = {};
-      if (!oldGroups[key][clinic.day]) oldGroups[key][clinic.day] = [];
-      oldGroups[key][clinic.day].push({ a, isObs });
-    }
-    const oldConflicts = Object.values(oldGroups).flatMap(d => Object.values(d).filter(e => e.length > 1));
-    assert(oldConflicts.length === 0, 'OLD CODE: no conflicts detected (expected — this is the bug)');
-
-    // Run NEW validation:
     const { safe, dropped } = validateAndRepairAssignments(assignments, clinics, people);
-    assert(safe.length === 1,             'NEW CODE: exactly 1 safe assignment');
-    assert(safe[0]?.personId === 'tech-1', 'NEW CODE: safe assignment is OBS (tech-Hailey)');
-    assert(dropped.length === 1,           'NEW CODE: exactly 1 dropped assignment');
-    assert(dropped[0]?.personId === 'admin-1', 'NEW CODE: dropped is FD (admin-Hailey)');
+    assert(safe.length === 1,              'exactly 1 safe assignment');
+    assert(safe[0]?.personId === 'tech-1', 'safe assignment is OBS record');
+    assert(dropped.length === 1,           'exactly 1 dropped assignment');
+    assert(dropped[0]?.personId === 'admin-1', 'dropped is FD record');
     console.groupEnd();
   }
 
-  // ── Test 2: Linked pair (linkedPersonId set on one side) ──────────────────
-  // Admin has linkedPersonId pointing to tech. Same expected result.
+  // ── Test 2: one-directional link — same result ────────────────────────────
   {
     console.group('Test 2: one-directional link, OBS + FD same day');
     const people = [
-      { id: 'admin-1', name: 'Hailey', staffType: 'admin', linkedPersonId: 'tech-1' },
-      { id: 'tech-1',  name: 'Hailey', staffType: null,    linkedPersonId: null },
+      { id: 'admin-1', name: 'Sam', staffType: 'admin', linkedPersonId: 'tech-1' },
+      { id: 'tech-1',  name: 'Sam', staffType: null,    linkedPersonId: null },
     ];
     const clinics = [
       { id: 'wed-obs',      day: 'Wed', location: 'OBS',      open: true },
@@ -261,7 +244,7 @@ export function runValidationTests() {
     ];
     const { safe, dropped } = validateAndRepairAssignments(assignments, clinics, people);
     assert(safe.length === 1,              'exactly 1 safe assignment');
-    assert(safe[0]?.personId === 'tech-1', 'safe is OBS tech-Hailey');
+    assert(safe[0]?.personId === 'tech-1', 'safe is OBS record');
     assert(dropped.length === 1,           'exactly 1 dropped');
     console.groupEnd();
   }

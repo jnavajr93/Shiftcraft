@@ -48,6 +48,15 @@ export async function saveWeekSlotMap(weekStr, map) {
   return { error: error ?? null }
 }
 
+export async function deleteWeekSlotMap(weekStr) {
+  const { error } = await supabase
+    .from('schedule_data')
+    .delete()
+    .eq('key', weekKey(weekStr))
+  if (error) console.error('[Shiftcraft] Delete week error:', error)
+  return { error: error ?? null }
+}
+
 export async function loadWeekSlotMap(weekStr) {
   const { data, error } = await supabase
     .from('schedule_data')

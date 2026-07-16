@@ -6,6 +6,7 @@ import {
   loadSchedule as loadScheduleDB,
   saveWeekSlotMap as saveWeekSlotMapDB,
   loadWeekSlotMap as loadWeekSlotMapDB,
+  deleteWeekSlotMap as deleteWeekSlotMapDB,
   saveChangelog as saveChangelogDB,
   loadChangelog as loadChangelogDB,
   weekKey,
@@ -915,15 +916,16 @@ export function AppProvider({ children }) {
 
   const clearWeek = useCallback(async () => {
     if (!globalData) return;
+    // Delete the week row entirely — a cleared week must have zero leftover data in Supabase.
+    // On next load the init() path will see status:'empty' and seed a fresh blank map.
+    await deleteWeekSlotMapDB(currentWeek);
     const clinics = globalData.clinics.map(c => ({
       ...c,
       slots: c.location === 'OBS' ? blankObsSlots() : blankStandardSlots(),
     }));
     const additionalTasks = (globalData.additionalTasks ?? []).map(t => ({ ...t, assignedPersonId: null }));
-    const map = extractSlotMap(clinics, additionalTasks);
     setGlobalData(prev => ({ ...prev, clinics, additionalTasks }));
-    await doSaveWeek(currentWeek, map);
-  }, [currentWeek, globalData, doSaveWeek]);
+  }, [currentWeek, globalData]);
 
   // ─── Clinic mutations ───────────────────────
   const updateClinic = useCallback(async (clinicId, changes) => {
