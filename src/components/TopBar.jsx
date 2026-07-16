@@ -2,8 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Calendar, Sun, Moon, ChevronLeft, ChevronRight,
   History, Printer, Sparkles, Wand2, Loader2, X, CircleHelp, RotateCcw,
+  Download, Upload,
 } from 'lucide-react';
 import { useApp, isoWeek, mondayOfWeek } from '../context/AppContext.jsx';
+
+const EXPORT_VERSION = 'shiftcraft-v1';
 import { useTour } from './Tour.jsx';
 import ChangeLogDrawer from './ChangeLogDrawer.jsx';
 import ChatPanel from './ChatPanel.jsx';
@@ -305,14 +308,48 @@ function WeekDatePicker({ currentWeek, onSelectWeek, onClose, triggerRef }) {
   );
 }
 
+// ─── Import confirmation modal ────────────────
+function ImportModal({ importWeekLabel, exportedAt, onConfirm, onCancel }) {
+  return (
+    <div
+      className="overlay-backdrop"
+      style={{ zIndex: 250 }}
+      onClick={e => { if (e.target === e.currentTarget) onCancel(); }}
+    >
+      <div className="overlay-modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()}>
+        <div className="overlay-header">
+          <div style={{ fontWeight: 500, fontSize: 16 }}>Import this week?</div>
+          <button className="overlay-close" onClick={onCancel}><X size={16} /></button>
+        </div>
+        <div className="overlay-body">
+          <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
+            This will replace all assignments for <strong>Week of {importWeekLabel}</strong> with
+            the backup from <strong>{exportedAt}</strong>. Current assignments for that week will be overwritten.
+          </p>
+        </div>
+        <div style={{
+          display: 'flex', gap: 8, justifyContent: 'flex-end',
+          padding: '12px 24px', borderTop: '0.5px solid var(--border)', flexShrink: 0,
+        }}>
+          <button className="btn" onClick={onCancel}>Cancel</button>
+          <button className="btn btn-primary" style={{ minHeight: 40 }} onClick={onConfirm}>
+            <Upload size={14} /> Import
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function TopBar({ activeTab, setActiveTab }) {
   const {
     isAdmin, setIsAdmin, theme, setTheme,
     weekLabel, currentWeek, navigateWeek, jumpToWeek, weekIsEmpty, copyFromTwoWeeksAgo, clearWeek,
-    data, addLog, applyBulkAssignments, restoreClinicSlots, lastSaved, saveStatus,
+    data, addLog, applyBulkAssignments, restoreClinicSlots, lastSaved, saveStatus, importWeekData,
   } = useApp();
   const weekLabelRef = useRef(null);
   const undoTimerRef = useRef(null);
+  const fileInputRef = useRef(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showPinModal, setShowPinModal] = useState(false);
   const { showWelcomeCard } = useTour();
@@ -339,6 +376,96 @@ export default function TopBar({ activeTab, setActiveTab }) {
   const [showClearModal, setShowClearModal] = useState(false);
   const [showLog, setShowLog] = useState(false);
   const [showChat, setShowChat] = useState(false);
+
+  // ─── Export / Import state ───────────────────
+  const [pendingImport, setPendingImport] = useState(null); // parsed file data awaiting confirmation
+  const [importError, setImportError] = useState('');
+
+  const handleExport = () => {
+    if (!data) return;
+    const monday = mondayOfWeek(currentWeek);
+    const slotMap = {};
+    for (const c of data.clinics) slotMap[c.id] = { ...c.slots };
+    for (const t of (data.additionalTasks ?? [])) slotMap[`task:${t.id}`] = t.assignedPersonId;
+
+    const payload = {
+      version: EXPORT_VERSION,
+      weekStr: currentWeek,
+      weekMonday: monday.toISOString().slice(0, 10),
+      exportedAt: new Date().toISOString(),
+      slotMap,
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `shiftcraft-week-${payload.weekMonday}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setCopyToast('Week exported');
+    setTimeout(() => setCopyToast(null), 3000);
+  };
+
+  const handleImportClick = () => {
+    setImportError('');
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const parsed = JSON.parse(ev.target.result);
+        if (
+          !parsed ||
+          parsed.version !== EXPORT_VERSION ||
+          typeof parsed.weekStr !== 'string' ||
+          !parsed.weekStr.match(/^\d{4}-W\d{2}$/) ||
+          !parsed.slotMap ||
+          typeof parsed.slotMap !== 'object'
+        ) {
+          setImportError('Not a valid Shiftcraft week export file');
+          setCopyToast('Not a valid Shiftcraft week export file');
+          setTimeout(() => setCopyToast(null), 4000);
+          return;
+        }
+        setPendingImport(parsed);
+      } catch {
+        setImportError('Not a valid Shiftcraft week export file');
+        setCopyToast('Not a valid Shiftcraft week export file');
+        setTimeout(() => setCopyToast(null), 4000);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleImportConfirm = async () => {
+    if (!pendingImport) return;
+    const { weekStr, slotMap, weekMonday, exportedAt } = pendingImport;
+    setPendingImport(null);
+
+    const ok = await importWeekData(weekStr, slotMap);
+    if (!ok) {
+      setCopyToast('Import failed — check connection');
+      setTimeout(() => setCopyToast(null), 4000);
+      return;
+    }
+
+    const importedLabel = new Date(weekMonday).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+    addLog({
+      action: `Week of ${importedLabel} restored from backup (exported ${new Date(exportedAt).toLocaleString()})`,
+      personName: 'Manager',
+      day: '',
+      detail: '',
+    });
+    setCopyToast('Week restored from backup');
+    setTimeout(() => setCopyToast(null), 3000);
+  };
 
   // Generate state
   const [showGenModal, setShowGenModal] = useState(false);
@@ -512,6 +639,33 @@ export default function TopBar({ activeTab, setActiveTab }) {
           )}
           {isAdmin && (
             <>
+              <button
+                className="btn btn-pill topbar-mobile-hidden"
+                style={{ fontSize: 12, minHeight: 32, gap: 5 }}
+                onClick={handleExport}
+                title="Export this week as a backup file"
+              >
+                <Download size={13} /> Export
+              </button>
+              <button
+                className="btn btn-pill topbar-mobile-hidden"
+                style={{ fontSize: 12, minHeight: 32, gap: 5 }}
+                onClick={handleImportClick}
+                title="Restore a week from a backup file"
+              >
+                <Upload size={13} /> Import
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json"
+                style={{ display: 'none' }}
+                onChange={handleFileChange}
+              />
+            </>
+          )}
+          {isAdmin && (
+            <>
               {/* Generate schedule button */}
               <button
                 data-tour="generate-button"
@@ -668,6 +822,14 @@ export default function TopBar({ activeTab, setActiveTab }) {
       )}
       {showLog && <ChangeLogDrawer onClose={() => setShowLog(false)} />}
       {showChat && <ChatPanel onClose={() => setShowChat(false)} />}
+      {pendingImport && (
+        <ImportModal
+          importWeekLabel={new Date(pendingImport.weekMonday).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}
+          exportedAt={new Date(pendingImport.exportedAt).toLocaleString()}
+          onConfirm={handleImportConfirm}
+          onCancel={() => setPendingImport(null)}
+        />
+      )}
       {showPinModal && (
         <PinModal
           onSuccess={() => { setShowPinModal(false); setIsAdmin(true); }}

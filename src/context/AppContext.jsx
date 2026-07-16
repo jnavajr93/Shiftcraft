@@ -789,6 +789,37 @@ export function AppProvider({ children }) {
     return mondayOfWeek(prevWeek);
   }, [currentWeek, globalData, doSaveWeek]);
 
+  // ─── Week import (from backup file) ────────
+  // Saves the provided slotMap to Supabase for the target week,
+  // then navigates to that week so the restored data is visible.
+  const importWeekData = useCallback(async (weekStr, slotMap) => {
+    // Save imported map to Supabase first
+    const ok = await doSaveWeek(weekStr, slotMap);
+    if (!ok) return false;
+
+    if (weekStr === currentWeek) {
+      // Already viewing this week — apply to local state immediately
+      setGlobalData(g => {
+        if (!g) return g;
+        const applied = applySlotMap(g.clinics, g.additionalTasks, slotMap);
+        return { ...g, ...applied };
+      });
+    } else {
+      // Viewing a different week — save it first, then switch
+      if (globalData) {
+        const currentMap = extractSlotMap(globalData.clinics, globalData.additionalTasks);
+        await doSaveWeek(currentWeek, currentMap);
+      }
+      setCurrentWeek(weekStr);
+      setGlobalData(g => {
+        if (!g) return g;
+        const applied = applySlotMap(g.clinics, g.additionalTasks, slotMap);
+        return { ...g, ...applied };
+      });
+    }
+    return true;
+  }, [currentWeek, globalData, doSaveWeek]);
+
   const clearWeek = useCallback(async () => {
     if (!globalData) return;
     const clinics = globalData.clinics.map(c => ({
@@ -1061,7 +1092,7 @@ export function AppProvider({ children }) {
       isAdmin, setIsAdmin,
       theme, setTheme,
       currentWeek, weekLabel,
-      navigateWeek, jumpToWeek, weekIsEmpty, copyFromTwoWeeksAgo, clearWeek,
+      navigateWeek, jumpToWeek, weekIsEmpty, copyFromTwoWeeksAgo, clearWeek, importWeekData,
       updateClinic, assignSlot, updateSlotTime,
       assignTask, addTask, removeTask, updateTaskTime,
       updatePerson, addPerson, deletePerson, reorderPeople,
