@@ -507,7 +507,70 @@ export default function TopBar({ activeTab, setActiveTab }) {
     setShowGenModal(true);
   };
 
-  const handleGenerateConfirm = () => {
+  /**
+   * Post-generation validation: detects double-bookings in the proposed assignment list
+   * (same personId, or linked-person pair, assigned to 2+ same-day clinics).
+   * OBS takes precedence — non-OBS assignments are dropped and logged.
+   * Returns { safe: Assignment[], dropped: {personId, clinicId, slot, day, location}[] }.
+   */
+  function validateAndRepairAssignments(assignments, clinics, people) {
+    const clinicById = Object.fromEntries(clinics.map(c => [c.id, c]));
+
+    // Build canonical ID map: for linked pairs, both IDs map to the same canonical ID
+    // so conflicts across linked records are detected.
+    const canonical = {};
+    for (const p of people) {
+      if (!canonical[p.id]) canonical[p.id] = p.id;
+      if (p.linkedPersonId) {
+        const lowId = p.id < p.linkedPersonId ? p.id : p.linkedPersonId;
+        canonical[p.id] = lowId;
+        canonical[p.linkedPersonId] = lowId;
+      }
+    }
+
+    // Group: canonical personId → day → list of assignments
+    const groups = {}; // { [canonicalId]: { [day]: [{ assignment, isObs, location }] } }
+    for (const a of assignments) {
+      const clinic = clinicById[a.clinicId];
+      if (!clinic) continue;
+      const cid = canonical[a.personId] ?? a.personId;
+      const isObs = clinic.location?.toLowerCase() === 'obs';
+      if (!groups[cid]) groups[cid] = {};
+      if (!groups[cid][clinic.day]) groups[cid][clinic.day] = [];
+      groups[cid][clinic.day].push({ a, isObs, location: clinic.location, day: clinic.day });
+    }
+
+    const dropKeys = new Set(); // 'clinicId:slot' to drop
+    const dropped = [];
+
+    for (const dayMap of Object.values(groups)) {
+      for (const entries of Object.values(dayMap)) {
+        if (entries.length <= 1) continue;
+        const obsEntries    = entries.filter(e => e.isObs);
+        const nonObsEntries = entries.filter(e => !e.isObs);
+        if (obsEntries.length > 0) {
+          // OBS wins — remove all non-OBS assignments for this person on this day
+          for (const e of nonObsEntries) {
+            dropKeys.add(`${e.a.clinicId}:${e.a.slot}`);
+            dropped.push({ personId: e.a.personId, clinicId: e.a.clinicId, slot: e.a.slot, day: e.day, location: e.location });
+          }
+        } else {
+          // All non-OBS conflicts — keep first, drop the rest
+          for (const e of nonObsEntries.slice(1)) {
+            dropKeys.add(`${e.a.clinicId}:${e.a.slot}`);
+            dropped.push({ personId: e.a.personId, clinicId: e.a.clinicId, slot: e.a.slot, day: e.day, location: e.location });
+          }
+        }
+      }
+    }
+
+    return {
+      safe: assignments.filter(a => !dropKeys.has(`${a.clinicId}:${a.slot}`)),
+      dropped,
+    };
+  }
+
+  const handleGenerateConfirm = async () => {
     setShowGenModal(false);
     setGenState('loading');
 
@@ -532,10 +595,27 @@ export default function TopBar({ activeTab, setActiveTab }) {
         });
       }
 
-      applyBulkAssignments(assignments, { clearFirst: !keepExisting });
+      // Post-generation validation: detect and repair double-bookings before saving.
+      // A generated schedule must never reach the database with a conflict.
+      const { safe, dropped } = validateAndRepairAssignments(assignments, data.clinics, data.people);
+      assignments = safe;
+
+      // Await the save — generation is complete only when data is on Supabase
+      await applyBulkAssignments(assignments, { clearFirst: !keepExisting });
+
+      const personById = Object.fromEntries(data.people.map(p => [p.id, p]));
+      for (const d of dropped) {
+        const name = personById[d.personId]?.name ?? d.personId;
+        addLog({
+          action: `Removed ${name} from ${d.slot} @ ${d.location} — OBS precedence (auto-repair)`,
+          personName: name,
+          day: d.day,
+          detail: '',
+        });
+      }
 
       addLog({
-        action: `Schedule generated for Week of ${weekLabel} — ${assignments.length} assignments made`,
+        action: `Schedule generated for Week of ${weekLabel} — ${assignments.length} assignments made${dropped.length > 0 ? `, ${dropped.length} conflict(s) auto-repaired` : ''}`,
         personName: 'Solver',
         day: '',
         detail: issues.length > 0 ? `Unfilled: ${issues.join('; ')}` : '',

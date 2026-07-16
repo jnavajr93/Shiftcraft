@@ -22,6 +22,17 @@ function ineligibleReason(person, clinic, slotType, clinics, additionalTasks) {
   // Day off
   if ((person.daysOff ?? []).includes(clinic.day)) return 'Off this day';
 
+  // OBS precedence: if assigning to a non-OBS slot and person already has an OBS
+  // assignment that day, block with a specific error (OBS holds exclusive priority).
+  const isObsSlot = clinic.location?.toLowerCase() === 'obs';
+  const hasObsAssignment = !isObsSlot && clinics.some(c =>
+    c.day === clinic.day &&
+    c.open &&
+    c.location?.toLowerCase() === 'obs' &&
+    Object.values(c.slots).some(sv => getSlotPersonId(sv) === person.id)
+  );
+  if (hasObsAssignment) return 'Assigned to OBS this day';
+
   // Already assigned to any slot on this day, except the exact slot this popover is for
   const clinicAssigned = clinics.some(c =>
     c.day === clinic.day &&

@@ -3,6 +3,7 @@
 // results in the same { clinicId, slot, personId } shape applyBulkAssignments expects.
 
 import { solve } from './solver.js';
+import { getActiveFDSlots } from '../data/seed.js';
 
 // Maps role display names (stored in person.roles) to slot key IDs used by the solver.
 const ROLE_TO_SLOT_KEY = {
@@ -21,9 +22,8 @@ function toLocationId(name) {
   return name.toLowerCase().replace(/\s+/g, '_');
 }
 
-// Front desk slot keys — always required when present in a clinic, regardless of
-// provider.requiredSlots config. Filled by admin staff (FIX 2).
-const FD_SLOT_KEYS = ['frontDesk', 'openingFrontDesk', 'closingFrontDesk'];
+// All possible front desk slot keys — used for exclusion logic below.
+const ALL_FD_SLOT_KEYS = new Set(['frontDesk', 'openingFrontDesk', 'closingFrontDesk']);
 
 // Returns the slot keys that are required for a clinic (required + evaluated conditionals).
 // OBS clinics: every slot key present is required.
@@ -33,8 +33,14 @@ const FD_SLOT_KEYS = ['frontDesk', 'openingFrontDesk', 'closingFrontDesk'];
 function getRequiredSlots(clinic, providers) {
   // case-insensitive OBS check
   const isObs = clinic.location?.toLowerCase() === 'obs';
-  // always exclude training
-  const allSlotKeys = Object.keys(clinic.slots ?? {}).filter(k => k !== 'training');
+  // For standard clinics, exclude training AND any FD slots not rendered by the card.
+  // Only the active FD slots are visible; filling the others creates invisible orphan assignments.
+  const activeFDSet = isObs ? null : new Set(getActiveFDSlots(clinic));
+  const allSlotKeys = Object.keys(clinic.slots ?? {}).filter(k => {
+    if (k === 'training') return false;
+    if (!isObs && ALL_FD_SLOT_KEYS.has(k) && !activeFDSet.has(k)) return false;
+    return true;
+  });
 
   if (isObs) return allSlotKeys;
 
@@ -53,8 +59,11 @@ function getRequiredSlots(clinic, providers) {
     }
   }
 
-  // FIX 2: always include present front desk keys regardless of provider config
-  for (const fdKey of FD_SLOT_KEYS) {
+  // FIX 2: include only the FD slots the card actually renders for this clinic.
+  // Dr. R Mon/Fri renders openingFrontDesk + closingFrontDesk; all others render frontDesk.
+  // Never fill the invisible FD slots — they appear in data but are not on the card.
+  const activeFD = getActiveFDSlots(clinic);
+  for (const fdKey of activeFD) {
     if (allSlotKeys.includes(fdKey) && !required.includes(fdKey)) {
       required.push(fdKey);
     }

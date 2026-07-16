@@ -227,6 +227,19 @@ export function calcSlotHours(clinic, slotType) {
 }
 
 /**
+ * Returns the FD slot keys actually rendered on the board card for this clinic.
+ * Dr. R Mon/Fri → openingFrontDesk + closingFrontDesk; all others → frontDesk.
+ * Used by the overlay, hours bar, and AI generation so they all agree on which
+ * slots are visible — any other FD slot on the same clinic object is hidden data.
+ */
+export function getActiveFDSlots(clinic) {
+  if (!clinic) return [];
+  const isDrRMonFri = clinic.provider === 'Dr. R' &&
+    (clinic.day === 'Mon' || clinic.day === 'Fri');
+  return isDrRMonFri ? ['openingFrontDesk', 'closingFrontDesk'] : ['frontDesk'];
+}
+
+/**
  * Returns the same subset of clinics the board renders:
  * the first clinic per (location, day) in array order.
  * Shadow clinics (same location+day, later in the array) are excluded.
@@ -245,7 +258,14 @@ export function calcPersonWeeklyHours(personId, clinics, additionalTasks) {
   let total = 0;
   for (const clinic of clinics) {
     if (!clinic.open) continue;
+    const isObs = clinic.location?.toLowerCase() === 'obs';
+    // For standard clinics, only count the FD slots the card actually renders.
+    // The other FD slots exist in the data but are never visible, so any person
+    // assigned there from a stale AI run must not inflate the hours ring.
+    const activeFD = isObs ? null : new Set(getActiveFDSlots(clinic));
+    const FD_ALL = new Set(['openingFrontDesk', 'closingFrontDesk', 'frontDesk']);
     for (const [slotType, slotVal] of Object.entries(clinic.slots)) {
+      if (!isObs && FD_ALL.has(slotType) && !activeFD.has(slotType)) continue;
       if (getSlotPersonId(slotVal) === personId) {
         total += calcSlotHours(clinic, slotType);
       }

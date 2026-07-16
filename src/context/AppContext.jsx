@@ -843,7 +843,46 @@ export function AppProvider({ children }) {
 
   const assignSlot = useCallback(async (clinicId, slotType, personId) => {
     if (!globalData) return;
-    const clinics = globalData.clinics.map(c => {
+
+    const targetClinic = globalData.clinics.find(c => c.id === clinicId);
+    if (!targetClinic) return;
+    const isObsAssignment = targetClinic.location?.toLowerCase() === 'obs';
+
+    let clinics = globalData.clinics;
+    const logEntries = [];
+    const person = personId ? globalData.people.find(p => p.id === personId) : null;
+
+    // OBS precedence: when assigning someone TO an OBS slot, auto-remove any existing
+    // same-day non-OBS assignments for that person and write a changelog entry.
+    if (isObsAssignment && personId) {
+      clinics = clinics.map(c => {
+        if (c.location?.toLowerCase() === 'obs') return c; // keep OBS clinics as-is
+        if (c.day !== targetClinic.day || !c.open) return c;
+        // Remove this person from every slot in same-day non-OBS clinics
+        const newSlots = { ...c.slots };
+        let changed = false;
+        for (const [st, sv] of Object.entries(newSlots)) {
+          if (getSlotPersonId(sv) !== personId) continue;
+          if (typeof sv === 'object' && sv !== null) {
+            newSlots[st] = { ...sv, personId: null };
+          } else {
+            newSlots[st] = null;
+          }
+          changed = true;
+          logEntries.push({
+            timestamp: Date.now(),
+            action: `Removed ${person?.name ?? personId} from ${st} @ ${c.location} — OBS precedence`,
+            personName: person?.name ?? '—',
+            day: c.day,
+            detail: '',
+          });
+        }
+        return changed ? { ...c, slots: newSlots } : c;
+      });
+    }
+
+    // Apply the intended assignment
+    clinics = clinics.map(c => {
       if (c.id !== clinicId) return c;
       const existing = c.slots[slotType];
       const times = (existing && typeof existing === 'object')
@@ -851,20 +890,19 @@ export function AppProvider({ children }) {
         : { start: null, end: null };
       return { ...c, slots: { ...c.slots, [slotType]: { personId: personId ?? null, ...times } } };
     });
+
     const map = extractSlotMap(clinics, globalData.additionalTasks);
     setGlobalData(prev => ({ ...prev, clinics }));
 
-    const clinic = clinics.find(c => c.id === clinicId);
-    const person = personId ? globalData.people.find(p => p.id === personId) : null;
-    if (clinic) {
-      const action = personId
-        ? `${person?.name} assigned to ${slotType} @ ${clinic.location} (${clinic.provider}) on ${clinic.day}`
-        : `Slot removed: ${slotType} @ ${clinic.location} (${clinic.provider}) on ${clinic.day}`;
-      setChangelog(log => [{
-        timestamp: Date.now(), action,
-        personName: person?.name ?? '—', day: clinic.day, detail: '',
-      }, ...log].slice(0, 500));
-    }
+    // Log auto-removals first, then the actual assignment
+    const mainAction = personId
+      ? `${person?.name} assigned to ${slotType} @ ${targetClinic.location} (${targetClinic.provider}) on ${targetClinic.day}`
+      : `Slot removed: ${slotType} @ ${targetClinic.location} (${targetClinic.provider}) on ${targetClinic.day}`;
+    const allEntries = [
+      ...logEntries,
+      { timestamp: Date.now(), action: mainAction, personName: person?.name ?? '—', day: targetClinic.day, detail: '' },
+    ];
+    setChangelog(log => [...allEntries, ...log].slice(0, 500));
 
     await doSaveWeek(currentWeek, map);
   }, [currentWeek, globalData, doSaveWeek]);
