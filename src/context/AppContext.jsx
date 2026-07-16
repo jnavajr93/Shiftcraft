@@ -68,7 +68,22 @@ function applySlotMap(clinics, tasks, map) {
       }
       return { ...c, slots: merged };
     }
-    return { ...c, slots: { ...blankStandardSlots(), ...(map[c.id] ?? {}) } };
+    // Merge with blank standard shape, then clear personIds in inactive FD slots.
+    // Inactive FD slots on Dr. R Mon/Fri: 'frontDesk' is dead; only
+    // openingFrontDesk/closingFrontDesk are rendered. Stale Supabase data
+    // can leave a personId in the inactive slot, causing phantom "already assigned"
+    // in every popover and conflict banner on that day. Clearing here makes the
+    // fix universal: every week load cleans itself regardless of init() startup week.
+    const merged = { ...blankStandardSlots(), ...(map[c.id] ?? {}) };
+    const activeFD = new Set(getActiveFDSlots(c));
+    const ALL_FD = ['openingFrontDesk', 'closingFrontDesk', 'frontDesk'];
+    for (const fdKey of ALL_FD) {
+      if (!activeFD.has(fdKey) && merged[fdKey]) {
+        console.warn(`[Shiftcraft applySlotMap] Regular clinic ${c.id} (${c.provider} ${c.day}): clearing stale inactive FD slot "${fdKey}"`);
+        merged[fdKey] = null;
+      }
+    }
+    return { ...c, slots: merged };
   });
   const newTasks = (tasks ?? []).map(t => ({
     ...t,
