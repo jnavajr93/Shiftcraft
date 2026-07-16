@@ -123,10 +123,14 @@ export function solve(cfg, week = null) {
       // weekHours credited when the shift card is actually built below
     }
 
-    // Sort shifts so the most-constrained (largest min-staff) fill first.
-    const sorted = [...dayShifts].sort(
-      (a, b) => totalMin(b.locationId, cfg) - totalMin(a.locationId, cfg)
-    );
+    // Sort shifts: FIX 1 — priority field first (OBS = 10, others = 0) so OBS fills before
+    // regular clinics and doesn't lose OBS-capable staff to regular slots.
+    // Secondary: most-constrained location (largest total min-staff) fills first.
+    const sorted = [...dayShifts].sort((a, b) => {
+      const pa = a.priority ?? 0, pb = b.priority ?? 0;
+      if (pb !== pa) return pb - pa;
+      return totalMin(b.locationId, cfg) - totalMin(a.locationId, cfg);
+    });
 
     for (const shift of sorted) {
       const loc = idx.locations[shift.locationId];

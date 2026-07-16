@@ -21,16 +21,19 @@ function toLocationId(name) {
   return name.toLowerCase().replace(/\s+/g, '_');
 }
 
+// Front desk slot keys — always required when present in a clinic, regardless of
+// provider.requiredSlots config. Filled by admin staff (FIX 2).
+const FD_SLOT_KEYS = ['frontDesk', 'openingFrontDesk', 'closingFrontDesk'];
+
 // Returns the slot keys that are required for a clinic (required + evaluated conditionals).
 // OBS clinics: every slot key present is required.
 // Standard clinics: requiredSlots + any conditionalSlots whose condition is met.
 // training is never generated — excluded explicitly as a safety net.
+// Front desk keys are always included when present (FIX 2).
 function getRequiredSlots(clinic, providers) {
-  // TEMP: log raw location value so we can hardcode the exact match
-  console.log(`[OBS diag] clinic.id="${clinic.id}" clinic.location=${JSON.stringify(clinic.location)} isObs=${clinic.location?.toLowerCase()==='obs'}`);
-  // Fix 2: case-insensitive OBS check
+  // case-insensitive OBS check
   const isObs = clinic.location?.toLowerCase() === 'obs';
-  // Fix 1: always exclude training, even in fallback path
+  // always exclude training
   const allSlotKeys = Object.keys(clinic.slots ?? {}).filter(k => k !== 'training');
 
   if (isObs) return allSlotKeys;
@@ -47,6 +50,13 @@ function getRequiredSlots(clinic, providers) {
     }
     if (cond.if === 'patientCount > 70' && (clinic.patientCount ?? 0) > 70) {
       required.push(cond.slot);
+    }
+  }
+
+  // FIX 2: always include present front desk keys regardless of provider config
+  for (const fdKey of FD_SLOT_KEYS) {
+    if (allSlotKeys.includes(fdKey) && !required.includes(fdKey)) {
+      required.push(fdKey);
     }
   }
 
@@ -127,16 +137,26 @@ export function generateSchedule(globalData) {
   }));
 
   // ── 3. People ─────────────────────────────────────────────────────────────
-  const people = (globalData.people ?? []).map(p => ({
-    id: p.id,
-    name: p.name,
-    color: p.color,
-    targetHours: p.targetHours ?? null,
+  const people = (globalData.people ?? []).map(p => {
     // Map display role names → slot key IDs; drop any unknown roles
-    roles: (p.roles ?? []).map(r => ROLE_TO_SLOT_KEY[r]).filter(Boolean),
-    // Map cleared location names → location IDs; empty = cleared everywhere
-    locations: (p.clearedLocations ?? []).map(name => toLocationId(name)),
-  }));
+    const mappedRoles = (p.roles ?? []).map(r => ROLE_TO_SLOT_KEY[r]).filter(Boolean);
+
+    // FIX 2: Admin staff with 'Front Desk' skill are eligible for all FD slot types.
+    // Admin people currently have no roles configured; skill is the gate.
+    if (p.staffType === 'admin' && (p.skills ?? []).includes('Front Desk')) {
+      mappedRoles.push('frontDesk', 'openingFrontDesk', 'closingFrontDesk');
+    }
+
+    return {
+      id: p.id,
+      name: p.name,
+      color: p.color,
+      targetHours: p.targetHours ?? null,
+      roles: mappedRoles,
+      // Map cleared location names → location IDs; empty = cleared everywhere
+      locations: (p.clearedLocations ?? []).map(name => toLocationId(name)),
+    };
+  });
 
   // ── 4. Shifts — one per open clinic ───────────────────────────────────────
   const shifts = openClinics.map(clinic => ({
@@ -148,6 +168,9 @@ export function generateSchedule(globalData) {
     end: clinic.endTime,
     week: null,   // already filtered to current week; pass null so solver runs all
     anchor: true,
+    // FIX 1: OBS clinics get high priority so they are processed before regular clinics
+    // on days where both run. Prevents OBS-capable staff from being consumed by regular slots.
+    priority: clinic.location?.toLowerCase() === 'obs' ? 10 : 0,
   }));
 
   // ── 5. Constraints ────────────────────────────────────────────────────────
