@@ -11,7 +11,7 @@ import { useTour } from './Tour.jsx';
 import ChangeLogDrawer from './ChangeLogDrawer.jsx';
 import ChatPanel from './ChatPanel.jsx';
 import { generateSchedule } from '../engine/adapter.js';
-import { validateAndRepairAssignments, findObsViolations } from '../engine/validator.js';
+import { validateAndRepairAssignments, findObsViolations, findInvalidSlotAssignments } from '../engine/validator.js';
 
 // ─── Generate confirmation modal ─────────────
 function GenerateModal({ weekLabel, keepExisting, onKeepChange, onConfirm, onCancel, isRegen }) {
@@ -584,6 +584,17 @@ export default function TopBar({ activeTab, setActiveTab }) {
       // A generated schedule must never reach the database with a conflict.
       const { safe, dropped } = validateAndRepairAssignments(assignments, data.clinics, data.people);
       assignments = safe;
+
+      // Slot-type integrity check: no OBS slot in a regular clinic, no regular slot in OBS.
+      // The adapter/solver fixes should prevent this, but verify before writing to Supabase.
+      const invalidSlots = findInvalidSlotAssignments(assignments, data.clinics);
+      if (invalidSlots.length > 0) {
+        const msg = `Invalid slot assignments — schedule NOT saved:\n${invalidSlots.join('\n')}`;
+        console.error('[Shiftcraft] ' + msg);
+        setGenError(msg);
+        setGenState('error');
+        return;
+      }
 
       // OBS integrity check: if any OBS slot is empty while a qualified person
       // was placed at a regular clinic, that is a hard violation — the two-phase

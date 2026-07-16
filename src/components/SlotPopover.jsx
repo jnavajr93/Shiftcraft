@@ -31,11 +31,23 @@ function ineligibleReason(person, clinic, slotType, clinics, additionalTasks, al
   // OBS precedence: if assigning to a non-OBS slot and person already has an OBS
   // assignment that day (under any same-name record), block with a specific error.
   const isObsSlot = clinic.location?.toLowerCase() === 'obs';
-  if (!isObsSlot && dayAssignments.some(a => a.isObs)) return 'Assigned to OBS this day';
+  if (!isObsSlot && dayAssignments.some(a => a.isObs)) {
+    const obs = dayAssignments.filter(a => a.isObs);
+    console.warn(`[Shiftcraft eligibility] ${person.name} blocked (OBS precedence) on ${clinic.day}:`,
+      obs.map(a => ({ clinicId: a.clinicId, location: a.clinic?.location, provider: a.clinic?.provider, slotType: a.slotType, personId: a.personId }))
+    );
+    return 'Assigned to OBS this day';
+  }
 
   // Already assigned to any board clinic slot today, except the exact slot this popover is for
-  const clinicAssigned = dayAssignments.some(a => !(a.clinicId === clinic.id && a.slotType === slotType));
-  if (clinicAssigned) return 'Already assigned today';
+  const blocking = dayAssignments.filter(a => !(a.clinicId === clinic.id && a.slotType === slotType));
+  const clinicAssigned = blocking.length > 0;
+  if (clinicAssigned) {
+    console.warn(`[Shiftcraft eligibility] ${person.name} blocked (already assigned) on ${clinic.day}:`,
+      blocking.map(a => ({ clinicId: a.clinicId, location: a.clinic?.location, provider: a.clinic?.provider, slotType: a.slotType, personId: a.personId, isObs: a.isObs }))
+    );
+    return 'Already assigned today';
+  }
 
   // Already assigned to an additional task on this day
   const samePersonIds = new Set(

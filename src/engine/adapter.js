@@ -3,7 +3,7 @@
 // results in the same { clinicId, slot, personId } shape applyBulkAssignments expects.
 
 import { solve } from './solver.js';
-import { getActiveFDSlots } from '../data/seed.js';
+import { getActiveFDSlots, OBS_SLOT_TYPES } from '../data/seed.js';
 
 // Maps role display names (stored in person.roles) to slot key IDs used by the solver.
 const ROLE_TO_SLOT_KEY = {
@@ -42,7 +42,10 @@ function getRequiredSlots(clinic, providers) {
     return true;
   });
 
-  if (isObs) return allSlotKeys;
+  // OBS clinics: only the four canonical OBS slot types are ever required.
+  // Filter here as belt-and-suspenders — applySlotMap also strips stale keys on load,
+  // but an in-memory OBS clinic with a stale key would still produce a bad constraint.
+  if (isObs) return allSlotKeys.filter(k => OBS_SLOT_TYPES.includes(k));
 
   const provider = providers.find(p => p.name === clinic.provider);
   if (!provider?.requiredSlots?.length) return allSlotKeys; // fallback: treat everything as required

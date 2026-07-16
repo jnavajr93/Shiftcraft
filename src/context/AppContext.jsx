@@ -55,12 +55,20 @@ function readLocalWeekSlotMap(weekStr) {
 
 /** Apply a slotMap onto clinics and tasks, returning new arrays */
 function applySlotMap(clinics, tasks, map) {
-  const newClinics = clinics.map(c => ({
-    ...c,
-    slots: c.location === 'OBS'
-      ? { ...blankObsSlots(),      ...(map[c.id] ?? {}) }
-      : { ...blankStandardSlots(), ...(map[c.id] ?? {}) },
-  }));
+  const newClinics = clinics.map(c => {
+    if (c.location === 'OBS') {
+      // Merge with blank OBS shape, then strip any non-OBS keys that leaked in from
+      // stale Supabase data (e.g. a prior bad generation that wrote 'frontDesk' to OBS).
+      const merged = { ...blankObsSlots(), ...(map[c.id] ?? {}) };
+      const invalidKeys = Object.keys(merged).filter(k => !OBS_SLOT_TYPES.includes(k));
+      if (invalidKeys.length > 0) {
+        console.warn(`[Shiftcraft applySlotMap] OBS clinic ${c.id}: stripping invalid slot keys:`, invalidKeys);
+        for (const k of invalidKeys) delete merged[k];
+      }
+      return { ...c, slots: merged };
+    }
+    return { ...c, slots: { ...blankStandardSlots(), ...(map[c.id] ?? {}) } };
+  });
   const newTasks = (tasks ?? []).map(t => ({
     ...t,
     assignedPersonId: map[`task:${t.id}`] ?? null,
@@ -594,7 +602,38 @@ export function AppProvider({ children }) {
         }
       }
 
-      // 3. Shadow clinic cleanup — DISABLED
+      // 3. Stale OBS slot cleanup — runs on every load (idempotent, cheap).
+      // Removes any slot keys from OBS clinics in the week map that are not in OBS_SLOT_TYPES.
+      // These leak in when a prior generation run wrote non-OBS slot types (e.g. 'frontDesk')
+      // to an OBS clinic. applySlotMap strips them from in-memory state, but the Supabase row
+      // must also be cleaned so other clients load clean data.
+      {
+        const obsClinicIds = new Set(
+          data.clinics.filter(c => c.location?.toLowerCase() === 'obs').map(c => c.id)
+        );
+        let weekMapDirty = false;
+        const cleanedWeekMap = { ...weekMap };
+        for (const clinicId of obsClinicIds) {
+          const slots = cleanedWeekMap[clinicId];
+          if (!slots || typeof slots !== 'object') continue;
+          const invalidKeys = Object.keys(slots).filter(k => !OBS_SLOT_TYPES.includes(k));
+          if (invalidKeys.length > 0) {
+            console.warn(`[Shiftcraft init] OBS clinic ${clinicId}: removing stale Supabase slot keys:`, invalidKeys);
+            const cleaned = Object.fromEntries(
+              Object.entries(slots).filter(([k]) => OBS_SLOT_TYPES.includes(k))
+            );
+            cleanedWeekMap[clinicId] = cleaned;
+            weekMapDirty = true;
+          }
+        }
+        if (weekMapDirty) {
+          weekMap = cleanedWeekMap;
+          saveWeekSlotMapDB(nowWeek, weekMap);
+          console.log('[Shiftcraft init] Cleaned stale OBS slot data and saved to Supabase');
+        }
+      }
+
+      // Shadow clinic cleanup — DISABLED
       // Previously blanked slot assignments on "shadow" clinics (duplicate location:day entries).
       // Disabled because it ran on new devices/browsers and risked blanking valid data until
       // the deduplication logic can be fully verified against production clinic configurations.
@@ -605,7 +644,7 @@ export function AppProvider({ children }) {
 
       const applied = applySlotMap(data.clinics, data.additionalTasks, weekMap);
 
-      // 4. Load changelog
+      // 5. Load changelog
       const cl = await loadChangelogDB();
 
       if (cancelled) return;
@@ -1013,6 +1052,19 @@ export function AppProvider({ children }) {
       );
     }
     for (const { clinicId, slot, personId } of assignments) {
+      const targetClinic = clinics.find(c => c.id === clinicId);
+      if (targetClinic) {
+        const isObsClinic = targetClinic.location?.toLowerCase() === 'obs';
+        const isObsSlot   = OBS_SLOT_TYPES.includes(slot);
+        if (isObsClinic && !isObsSlot) {
+          console.error(`[Shiftcraft] applyBulkAssignments: BLOCKED writing non-OBS slot "${slot}" to OBS clinic "${clinicId}". This is a bug in the solver or adapter.`);
+          continue;
+        }
+        if (!isObsClinic && isObsSlot) {
+          console.error(`[Shiftcraft] applyBulkAssignments: BLOCKED writing OBS slot "${slot}" to regular clinic "${clinicId}". This is a bug in the solver or adapter.`);
+          continue;
+        }
+      }
       clinics = clinics.map(c => {
         if (c.id !== clinicId) return c;
         let newSlotVal;

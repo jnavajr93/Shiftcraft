@@ -153,6 +153,33 @@ export function findObsViolations(assignments, clinics, people) {
   return violations;
 }
 
+// OBS slot keys — must match OBS_SLOT_TYPES in seed.js
+const OBS_SLOT_KEYS = new Set(['preop', 'sterile', 'circulator', 'scrub']);
+
+/**
+ * Post-generation slot-type integrity check.
+ *
+ * Returns an array of violation strings for any assignment whose slot type is
+ * invalid for its clinic type (OBS slot in regular clinic or vice versa).
+ * An empty array is clean.
+ */
+export function findInvalidSlotAssignments(assignments, clinics) {
+  const violations = [];
+  const clinicById = new Map(clinics.map(c => [c.id, c]));
+  for (const a of assignments) {
+    const clinic = clinicById.get(a.clinicId);
+    if (!clinic) continue;
+    const isObsClinic = clinic.location?.toLowerCase() === 'obs';
+    const isObsSlot   = OBS_SLOT_KEYS.has(a.slot);
+    if (isObsClinic && !isObsSlot) {
+      violations.push(`${clinic.day} OBS clinic has non-OBS slot "${a.slot}" assigned (person ${a.personId})`);
+    } else if (!isObsClinic && isObsSlot) {
+      violations.push(`${clinic.day} ${clinic.location} clinic has OBS slot "${a.slot}" assigned (person ${a.personId})`);
+    }
+  }
+  return violations;
+}
+
 // ─── Self-contained tests ───────────────────────────────────────────────────
 // Reproduce the exact Hailey scenario: two same-name records with NO
 // linkedPersonId set, one in OBS and one in FD on the same day.
