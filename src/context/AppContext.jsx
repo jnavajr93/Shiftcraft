@@ -492,6 +492,8 @@ export function AppProvider({ children }) {
     (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
   );
   const [isAdmin, setIsAdmin] = useState(false);
+  // Session-scoped initials for the active manager. Cleared on exit; never persisted.
+  const [managerInitials, setManagerInitials] = useState(null);
   const [lastSaved, setLastSaved] = useState(null);
 
   // null = no error; string = error message blocking the UI
@@ -673,8 +675,12 @@ export function AppProvider({ children }) {
   }, [isLoading, currentWeek]);
 
   const addLog = useCallback((entry) => {
-    setChangelog(prev => [{ ...entry, timestamp: Date.now() }, ...prev]);
-  }, []);
+    setChangelog(prev => [{
+      ...entry,
+      timestamp: Date.now(),
+      initials: entry.initials ?? managerInitials ?? undefined,
+    }, ...prev]);
+  }, [managerInitials]);
 
   // ─── Week navigation ────────────────────────
   const navigateWeek = useCallback(async (delta) => {
@@ -854,15 +860,22 @@ export function AppProvider({ children }) {
 
     // OBS precedence: when assigning someone TO an OBS slot, auto-remove any existing
     // same-day non-OBS assignments for that person and write a changelog entry.
+    // Uses name-based canonical identity — checks all same-name records, not just this ID.
     if (isObsAssignment && personId) {
+      const personName = person?.name?.trim().toLowerCase() ?? '';
+      const samePersonIds = new Set(
+        (globalData.people ?? [])
+          .filter(q => q.name.trim().toLowerCase() === personName)
+          .map(q => q.id)
+      );
       clinics = clinics.map(c => {
         if (c.location?.toLowerCase() === 'obs') return c; // keep OBS clinics as-is
         if (c.day !== targetClinic.day || !c.open) return c;
-        // Remove this person from every slot in same-day non-OBS clinics
+        // Remove any same-name record from every slot in same-day non-OBS clinics
         const newSlots = { ...c.slots };
         let changed = false;
         for (const [st, sv] of Object.entries(newSlots)) {
-          if (getSlotPersonId(sv) !== personId) continue;
+          if (!samePersonIds.has(getSlotPersonId(sv))) continue;
           if (typeof sv === 'object' && sv !== null) {
             newSlots[st] = { ...sv, personId: null };
           } else {
@@ -899,13 +912,13 @@ export function AppProvider({ children }) {
       ? `${person?.name} assigned to ${slotType} @ ${targetClinic.location} (${targetClinic.provider}) on ${targetClinic.day}`
       : `Slot removed: ${slotType} @ ${targetClinic.location} (${targetClinic.provider}) on ${targetClinic.day}`;
     const allEntries = [
-      ...logEntries,
-      { timestamp: Date.now(), action: mainAction, personName: person?.name ?? '—', day: targetClinic.day, detail: '' },
+      ...logEntries.map(e => ({ ...e, initials: e.initials ?? managerInitials ?? undefined })),
+      { timestamp: Date.now(), action: mainAction, personName: person?.name ?? '—', day: targetClinic.day, detail: '', initials: managerInitials ?? undefined },
     ];
     setChangelog(log => [...allEntries, ...log].slice(0, 500));
 
     await doSaveWeek(currentWeek, map);
-  }, [currentWeek, globalData, doSaveWeek]);
+  }, [currentWeek, globalData, doSaveWeek, managerInitials]);
 
   const updateSlotTime = useCallback(async (clinicId, slotType, start, end) => {
     if (!globalData) return;
@@ -939,11 +952,12 @@ export function AppProvider({ children }) {
       setChangelog(log => [{
         timestamp: Date.now(), action,
         personName: person?.name ?? '—', day: task.day, detail: '',
+        initials: managerInitials ?? undefined,
       }, ...log].slice(0, 500));
     }
 
     await doSaveWeek(currentWeek, map);
-  }, [currentWeek, globalData, doSaveWeek]);
+  }, [currentWeek, globalData, doSaveWeek, managerInitials]);
 
   const addTask = useCallback(async (task) => {
     if (!globalData) return;
@@ -1128,6 +1142,7 @@ export function AppProvider({ children }) {
       saveStatus,
       lastSaved,
       isAdmin, setIsAdmin,
+      managerInitials, setManagerInitials,
       theme, setTheme,
       currentWeek, weekLabel,
       navigateWeek, jumpToWeek, weekIsEmpty, copyFromTwoWeeksAgo, clearWeek, importWeekData,

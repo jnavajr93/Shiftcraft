@@ -503,7 +503,7 @@ function PersonCard({ person, providers, locations }) {
 
 // ─── Add Person Modal ────────────────────────
 function AddPersonModal({ onClose, existingPeople, providers, locations, defaultStaffType = 'tech' }) {
-  const { addPerson, updatePerson, addLog } = useApp();
+  const { addPerson, updatePerson, addLog, managerInitials } = useApp();
 
   const existingNames = existingPeople.map(p => p.name);
   const defaultColor = PRESET_COLORS.find(c => !existingNames.includes(c)) ?? PRESET_COLORS[0];
@@ -594,7 +594,7 @@ function AddPersonModal({ onClose, existingPeople, providers, locations, default
     if (shouldLink) {
       updatePerson(matchingOtherType.id, { linkedPersonId: newId });
     }
-    addLog({ action: `${person.name} added to roster (${form.staffType})`, personName: person.name, day: '', detail: '' });
+    addLog({ action: `${person.name} added to roster (${form.staffType})`, personName: person.name, day: '', detail: '', initials: managerInitials ?? undefined });
     onClose();
   };
 
@@ -853,11 +853,11 @@ function StaffTab() {
 
 // ─── Clinic Row (with inline delete confirm) ──
 function ClinicRow({ c, onEdit, onDeleted }) {
-  const { removeClinic, addLog } = useApp();
+  const { removeClinic, addLog, managerInitials } = useApp();
   const [confirming, setConfirming] = useState(false);
 
   const handleDelete = () => {
-    addLog({ action: `${c.provider} · ${c.location} on ${c.day} removed`, personName: '', day: c.day, detail: '' });
+    addLog({ action: `${c.provider} · ${c.location} on ${c.day} removed`, personName: '', day: c.day, detail: '', initials: managerInitials ?? undefined });
     removeClinic(c.id);
     onDeleted?.();
   };

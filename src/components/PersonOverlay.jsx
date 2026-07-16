@@ -85,7 +85,7 @@ function WeekRows({ personIds, clinics, additionalTasks }) {
 }
 
 function OverlayInner({ person, onClose }) {
-  const { data, isAdmin, deletePerson, addLog } = useApp();
+  const { data, isAdmin, managerInitials, deletePerson, addLog } = useApp();
   const [confirming, setConfirming] = useState(false);
   const boardClinics = getBoardClinics(data.clinics);
 
@@ -101,7 +101,7 @@ function OverlayInner({ person, onClose }) {
   );
 
   const handleRemove = () => {
-    addLog({ action: `${person.name} removed from roster by admin`, personName: person.name, day: '', detail: '' });
+    addLog({ action: `${person.name} removed from roster by admin`, personName: person.name, day: '', detail: '', initials: managerInitials ?? undefined });
     deletePerson(person.id);
     onClose();
   };

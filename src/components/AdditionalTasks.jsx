@@ -283,7 +283,7 @@ function AddTaskForm({ day, onAdd, onCancel }) {
 
 // ─── Additional Tasks Panel ──────────────────
 export default function AdditionalTasks({ onPersonClick }) {
-  const { data, isAdmin, removeTask, addTask, addLog } = useApp();
+  const { data, isAdmin, managerInitials, removeTask, addTask, addLog } = useApp();
   const [addingDay, setAddingDay] = useState(null);
 
   const handleAdd = (task) => {
@@ -297,6 +297,7 @@ export default function AdditionalTasks({ onPersonClick }) {
       personName: '',
       day: task.day,
       detail: '',
+      initials: managerInitials ?? undefined,
     });
     removeTask(task.id);
   };

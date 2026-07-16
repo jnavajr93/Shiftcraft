@@ -11,6 +11,7 @@ import { useTour } from './Tour.jsx';
 import ChangeLogDrawer from './ChangeLogDrawer.jsx';
 import ChatPanel from './ChatPanel.jsx';
 import { generateSchedule } from '../engine/adapter.js';
+import { validateAndRepairAssignments } from '../engine/validator.js';
 
 // ─── Generate confirmation modal ─────────────
 function GenerateModal({ weekLabel, keepExisting, onKeepChange, onConfirm, onCancel, isRegen }) {
@@ -92,14 +93,17 @@ function ClearWeekModal({ weekLabel, onConfirm, onCancel }) {
   );
 }
 
-// ─── PIN gate modal ──────────────────────────────
+// ─── Manager unlock modal (PIN + initials) ───────
 const ADMIN_PIN = '0000';
 
-function PinModal({ onSuccess, onCancel }) {
+function ManagerModal({ onSuccess, onCancel }) {
   const [digits, setDigits] = useState(['', '', '', '']);
-  const [error, setError] = useState(false);
+  const [initials, setInitials] = useState('');
+  const [pinError, setPinError] = useState(false);
+  const [initialsError, setInitialsError] = useState(false);
   const [shake, setShake] = useState(false);
   const refs = [useRef(), useRef(), useRef(), useRef()];
+  const initialsRef = useRef();
 
   useEffect(() => {
     refs[0].current?.focus();
@@ -109,17 +113,25 @@ function PinModal({ onSuccess, onCancel }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const submit = (ds) => {
-    if (ds.join('') === ADMIN_PIN) {
-      onSuccess();
-    } else {
+  const validateInitials = (val) => /^[A-Za-z]{2,3}$/.test(val);
+
+  const submit = (ds, inits) => {
+    const pinOk = ds.join('') === ADMIN_PIN;
+    const initialsOk = validateInitials(inits);
+    if (!pinOk) {
       setShake(true);
-      setError(true);
+      setPinError(true);
       setDigits(['', '', '', '']);
       setTimeout(() => {
         setShake(false);
         refs[0].current?.focus();
       }, 500);
+    }
+    if (!initialsOk) {
+      setInitialsError(true);
+    }
+    if (pinOk && initialsOk) {
+      onSuccess(inits.toUpperCase());
     }
   };
 
@@ -129,9 +141,9 @@ function PinModal({ onSuccess, onCancel }) {
     const next = [...digits];
     next[i] = d[d.length - 1];
     setDigits(next);
-    setError(false);
+    setPinError(false);
     if (i < 3) refs[i + 1].current?.focus();
-    else submit(next);
+    else initialsRef.current?.focus();
   };
 
   const handlePaste = (e) => {
@@ -140,10 +152,10 @@ function PinModal({ onSuccess, onCancel }) {
     if (!raw) return;
     const next = ['', '', '', ''].map((_, i) => raw[i] ?? '');
     setDigits(next);
-    setError(false);
+    setPinError(false);
     if (raw.length === 4) {
       refs[3].current?.focus();
-      submit(next);
+      initialsRef.current?.focus();
     } else {
       refs[Math.min(raw.length, 3)].current?.focus();
     }
@@ -161,9 +173,17 @@ function PinModal({ onSuccess, onCancel }) {
         setDigits(next);
         refs[i - 1].current?.focus();
       }
-      setError(false);
+      setPinError(false);
     }
   };
+
+  const handleInitialsChange = (e) => {
+    const val = e.target.value.replace(/[^A-Za-z]/g, '').slice(0, 3);
+    setInitials(val);
+    setInitialsError(false);
+  };
+
+  const canSubmit = digits.every(d => d !== '') && initials.trim().length >= 2;
 
   return (
     <div
@@ -176,10 +196,12 @@ function PinModal({ onSuccess, onCancel }) {
         style={{ maxWidth: 320, textAlign: 'center', padding: '32px 24px' }}
         onClick={e => e.stopPropagation()}
       >
-        <div style={{ fontWeight: 600, fontSize: 17, marginBottom: 6 }}>Admin access</div>
-        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>Enter PIN to continue</div>
+        <div style={{ fontWeight: 600, fontSize: 17, marginBottom: 6 }}>Manager access</div>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>Enter PIN and your initials</div>
+
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'left', marginBottom: 6 }}>PIN</div>
         <div
-          style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 16 }}
+          style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: pinError ? 8 : 20 }}
           className={shake ? 'pin-shake' : ''}
         >
           {digits.map((d, i) => (
@@ -196,7 +218,7 @@ function PinModal({ onSuccess, onCancel }) {
               style={{
                 width: 48, height: 56, textAlign: 'center', fontSize: 24,
                 fontWeight: 700, borderRadius: 8,
-                border: `1.5px solid ${error ? '#dc2626' : 'var(--border-strong)'}`,
+                border: `1.5px solid ${pinError ? '#dc2626' : 'var(--border-strong)'}`,
                 background: 'var(--bg-elevated)',
                 color: 'var(--text-primary)',
                 outline: 'none',
@@ -205,15 +227,41 @@ function PinModal({ onSuccess, onCancel }) {
             />
           ))}
         </div>
-        {error && (
+        {pinError && (
           <div style={{ fontSize: 12, color: '#dc2626', marginBottom: 12 }}>Incorrect PIN</div>
         )}
+
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'left', marginBottom: 6 }}>Your initials</div>
+        <input
+          ref={initialsRef}
+          type="text"
+          value={initials}
+          onChange={handleInitialsChange}
+          onKeyDown={e => { if (e.key === 'Enter' && canSubmit) submit(digits, initials); }}
+          placeholder="e.g. JN"
+          maxLength={3}
+          style={{
+            width: '100%', boxSizing: 'border-box',
+            padding: '10px 12px', fontSize: 20, fontWeight: 700,
+            textAlign: 'center', letterSpacing: 4,
+            borderRadius: 8, marginBottom: initialsError ? 4 : 20,
+            border: `1.5px solid ${initialsError ? '#dc2626' : 'var(--border-strong)'}`,
+            background: 'var(--bg-elevated)',
+            color: 'var(--text-primary)',
+            outline: 'none',
+            textTransform: 'uppercase',
+          }}
+        />
+        {initialsError && (
+          <div style={{ fontSize: 12, color: '#dc2626', marginBottom: 12 }}>2–3 letters required</div>
+        )}
+
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
           <button className="btn" onClick={onCancel}>Cancel</button>
           <button
             className="btn btn-primary"
-            onClick={() => submit(digits)}
-            disabled={digits.some(d => d === '')}
+            onClick={() => submit(digits, initials)}
+            disabled={!canSubmit}
           >
             Unlock
           </button>
@@ -343,7 +391,7 @@ function ImportModal({ importWeekLabel, exportedAt, onConfirm, onCancel }) {
 
 export default function TopBar({ activeTab, setActiveTab }) {
   const {
-    isAdmin, setIsAdmin, theme, setTheme,
+    isAdmin, setIsAdmin, managerInitials, setManagerInitials, theme, setTheme,
     weekLabel, currentWeek, navigateWeek, jumpToWeek, weekIsEmpty, copyFromTwoWeeksAgo, clearWeek,
     data, addLog, applyBulkAssignments, restoreClinicSlots, lastSaved, saveStatus, importWeekData,
   } = useApp();
@@ -506,69 +554,6 @@ export default function TopBar({ activeTab, setActiveTab }) {
     setGenError('');
     setShowGenModal(true);
   };
-
-  /**
-   * Post-generation validation: detects double-bookings in the proposed assignment list
-   * (same personId, or linked-person pair, assigned to 2+ same-day clinics).
-   * OBS takes precedence — non-OBS assignments are dropped and logged.
-   * Returns { safe: Assignment[], dropped: {personId, clinicId, slot, day, location}[] }.
-   */
-  function validateAndRepairAssignments(assignments, clinics, people) {
-    const clinicById = Object.fromEntries(clinics.map(c => [c.id, c]));
-
-    // Build canonical ID map: for linked pairs, both IDs map to the same canonical ID
-    // so conflicts across linked records are detected.
-    const canonical = {};
-    for (const p of people) {
-      if (!canonical[p.id]) canonical[p.id] = p.id;
-      if (p.linkedPersonId) {
-        const lowId = p.id < p.linkedPersonId ? p.id : p.linkedPersonId;
-        canonical[p.id] = lowId;
-        canonical[p.linkedPersonId] = lowId;
-      }
-    }
-
-    // Group: canonical personId → day → list of assignments
-    const groups = {}; // { [canonicalId]: { [day]: [{ assignment, isObs, location }] } }
-    for (const a of assignments) {
-      const clinic = clinicById[a.clinicId];
-      if (!clinic) continue;
-      const cid = canonical[a.personId] ?? a.personId;
-      const isObs = clinic.location?.toLowerCase() === 'obs';
-      if (!groups[cid]) groups[cid] = {};
-      if (!groups[cid][clinic.day]) groups[cid][clinic.day] = [];
-      groups[cid][clinic.day].push({ a, isObs, location: clinic.location, day: clinic.day });
-    }
-
-    const dropKeys = new Set(); // 'clinicId:slot' to drop
-    const dropped = [];
-
-    for (const dayMap of Object.values(groups)) {
-      for (const entries of Object.values(dayMap)) {
-        if (entries.length <= 1) continue;
-        const obsEntries    = entries.filter(e => e.isObs);
-        const nonObsEntries = entries.filter(e => !e.isObs);
-        if (obsEntries.length > 0) {
-          // OBS wins — remove all non-OBS assignments for this person on this day
-          for (const e of nonObsEntries) {
-            dropKeys.add(`${e.a.clinicId}:${e.a.slot}`);
-            dropped.push({ personId: e.a.personId, clinicId: e.a.clinicId, slot: e.a.slot, day: e.day, location: e.location });
-          }
-        } else {
-          // All non-OBS conflicts — keep first, drop the rest
-          for (const e of nonObsEntries.slice(1)) {
-            dropKeys.add(`${e.a.clinicId}:${e.a.slot}`);
-            dropped.push({ personId: e.a.personId, clinicId: e.a.clinicId, slot: e.a.slot, day: e.day, location: e.location });
-          }
-        }
-      }
-    }
-
-    return {
-      safe: assignments.filter(a => !dropKeys.has(`${a.clinicId}:${a.slot}`)),
-      dropped,
-    };
-  }
 
   const handleGenerateConfirm = async () => {
     setShowGenModal(false);
@@ -832,12 +817,13 @@ export default function TopBar({ activeTab, setActiveTab }) {
             onClick={() => {
               if (isAdmin) {
                 setIsAdmin(false);
+                setManagerInitials(null);
               } else {
                 setShowPinModal(true);
               }
             }}
           >
-            Manager
+            {isAdmin && managerInitials ? `Manager · ${managerInitials}` : 'Manager'}
           </button>
         </div>
       </div>
@@ -911,8 +897,8 @@ export default function TopBar({ activeTab, setActiveTab }) {
         />
       )}
       {showPinModal && (
-        <PinModal
-          onSuccess={() => { setShowPinModal(false); setIsAdmin(true); }}
+        <ManagerModal
+          onSuccess={(inits) => { setShowPinModal(false); setIsAdmin(true); setManagerInitials(inits); }}
           onCancel={() => setShowPinModal(false)}
         />
       )}

@@ -43,8 +43,11 @@ export default function ChangeLogDrawer({ onClose }) {
             <div className="day-group-header" style={{ marginBottom: 6 }}>{label}</div>
             {entries.map((entry, i) => (
               <div key={i} style={{ padding: '6px 0', borderBottom: '0.5px solid var(--border)' }}>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>
-                  {formatTimestamp(entry.timestamp)}
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2, display: 'flex', gap: 6, alignItems: 'center' }}>
+                  {entry.initials && (
+                    <span style={{ fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: 0.5 }}>{entry.initials}</span>
+                  )}
+                  <span>{formatTimestamp(entry.timestamp)}</span>
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.4 }}>
                   {entry.action}

@@ -164,10 +164,13 @@ export function generateSchedule(globalData) {
       roles: mappedRoles,
       // Map cleared location names → location IDs; empty = cleared everywhere
       locations: (p.clearedLocations ?? []).map(name => toLocationId(name)),
-      // Linked person IDs: when this person is placed, every linked ID is also
-      // marked used so the solver never places both halves of a linked pair on
-      // the same day. Critical for tech+admin pairs who share a physical person.
-      linkedIds: p.linkedPersonId ? [p.linkedPersonId] : [],
+      // Blocked person IDs: all other records with the same display name.
+      // Name-based identity is the canonical rule — same name = same physical person,
+      // regardless of whether linkedPersonId is set. Placing any one of these records
+      // marks all same-name records as used so the solver never double-books a person.
+      blockedIds: (globalData.people ?? [])
+        .filter(q => q.name.trim().toLowerCase() === p.name.trim().toLowerCase() && q.id !== p.id)
+        .map(q => q.id),
     };
   });
 

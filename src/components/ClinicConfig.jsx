@@ -42,7 +42,7 @@ function patientClass(n) {
 }
 
 export default function ClinicConfig({ clinicId, onClose }) {
-  const { data, updateClinic, removeClinic, addLog } = useApp();
+  const { data, updateClinic, removeClinic, addLog, managerInitials } = useApp();
   const clinic = data.clinics.find(c => c.id === clinicId);
   const [open, setIsOpen] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -143,7 +143,7 @@ export default function ClinicConfig({ clinicId, onClose }) {
                 className="btn btn-danger"
                 style={{ minHeight: 34, fontSize: 13 }}
                 onClick={() => {
-                  addLog({ action: `${clinic.provider} · ${clinic.location} on ${clinic.day} removed`, personName: '', day: clinic.day, detail: '' });
+                  addLog({ action: `${clinic.provider} · ${clinic.location} on ${clinic.day} removed`, personName: '', day: clinic.day, detail: '', initials: managerInitials ?? undefined });
                   removeClinic(clinic.id);
                   onClose();
                 }}
