@@ -309,7 +309,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
   const {
     isAdmin, setIsAdmin, theme, setTheme,
     weekLabel, currentWeek, navigateWeek, jumpToWeek, weekIsEmpty, copyFromTwoWeeksAgo, clearWeek,
-    data, addLog, applyBulkAssignments, restoreClinicSlots, lastSaved,
+    data, addLog, applyBulkAssignments, restoreClinicSlots, lastSaved, saveStatus,
   } = useApp();
   const weekLabelRef = useRef(null);
   const undoTimerRef = useRef(null);
@@ -577,7 +577,17 @@ export default function TopBar({ activeTab, setActiveTab }) {
           >
             <CircleHelp size={20} strokeWidth={1.5} />
           </button>
-          {savedAgoLabel && (
+          {saveStatus === 'error' && (
+            <span className="topbar-mobile-hidden" style={{ fontSize: 11, color: '#dc2626', fontWeight: 500, whiteSpace: 'nowrap' }}>
+              ⚠ Unsaved changes
+            </span>
+          )}
+          {saveStatus === 'saving' && (
+            <span className="topbar-mobile-hidden" style={{ fontSize: 11, color: 'var(--text-muted, var(--text-secondary))', opacity: 0.7, whiteSpace: 'nowrap' }}>
+              Saving…
+            </span>
+          )}
+          {(saveStatus === 'saved' || saveStatus === 'idle') && savedAgoLabel && (
             <span className="topbar-mobile-hidden" style={{ fontSize: 11, color: 'var(--text-muted, var(--text-secondary))', opacity: 0.7, whiteSpace: 'nowrap' }}>
               {savedAgoLabel}
             </span>

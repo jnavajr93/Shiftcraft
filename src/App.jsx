@@ -22,7 +22,7 @@ import UnassignedStaff from './components/UnassignedStaff.jsx';
 import ConflictBanner from './components/ConflictBanner.jsx';
 
 function AppContent() {
-  const { data, isAdmin, isLoading, assignSlot, assignTask, savedToast } = useApp();
+  const { data, isAdmin, isLoading, loadError, saveStatus, assignSlot, assignTask } = useApp();
 
   if (isLoading) {
     return (
@@ -39,6 +39,46 @@ function AppContent() {
           Shiftcraft
         </div>
         <div style={{ fontSize: 14 }}>Loading schedule…</div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        gap: 20,
+        padding: '0 24px',
+      }}>
+        <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.5px', color: 'var(--text-primary)' }}>
+          Shiftcraft
+        </div>
+        <div style={{
+          background: 'var(--bg-elevated)',
+          border: '1.5px solid #fca5a5',
+          borderRadius: 10,
+          padding: '20px 28px',
+          maxWidth: 480,
+          textAlign: 'center',
+        }}>
+          <div style={{ fontWeight: 600, color: '#dc2626', marginBottom: 10, fontSize: 15 }}>
+            Schedule could not be loaded
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+            {loadError}
+          </div>
+        </div>
+        <button
+          className="btn btn-primary"
+          style={{ minHeight: 38 }}
+          onClick={() => window.location.reload()}
+        >
+          Refresh
+        </button>
       </div>
     );
   }
@@ -136,8 +176,18 @@ function AppContent() {
         )}
       </div>
 
-      {savedToast && (
+      {saveStatus === 'saved' && (
         <div className="saved-toast">✓ Saved</div>
+      )}
+      {saveStatus === 'error' && (
+        <div className="saved-toast" style={{
+          background: '#dc2626',
+          color: '#fff',
+          bottom: 'auto',
+          top: 68,
+        }}>
+          ⚠ Change not saved — check connection
+        </div>
       )}
 
       <DragOverlay dropAnimation={null}>

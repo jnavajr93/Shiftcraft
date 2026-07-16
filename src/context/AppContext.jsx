@@ -14,7 +14,6 @@ import {
 
 // localStorage keys kept only for migration and per-device flags
 const STORAGE_KEY = 'shiftcraft.v5';
-const CHANGELOG_KEY_LOCAL = 'shiftcraft.changelog';
 
 const AppContext = createContext(null);
 
@@ -495,19 +494,60 @@ export function AppProvider({ children }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
 
+  // null = no error; string = error message blocking the UI
+  const [loadError, setLoadError] = useState(null);
+
+  // 'idle' | 'saving' | 'saved' | 'error'
+  const [saveStatus, setSaveStatus] = useState('idle');
+  const saveStatusTimerRef = useRef(null);
+
   // null until loaded from Supabase
   const [globalData, setGlobalData] = useState(null);
+
+  // ─── Verified save helper ─────────────────────
+  // Awaits the Supabase write, retries once on failure, updates save indicator.
+  // Returns true on success, false if both attempts fail.
+  const doSaveWeek = useCallback(async (weekStr, map) => {
+    setSaveStatus('saving');
+    let result = await saveWeekSlotMapDB(weekStr, map);
+    if (result.error) {
+      // Retry once after a brief pause
+      await new Promise(r => setTimeout(r, 1200));
+      result = await saveWeekSlotMapDB(weekStr, map);
+    }
+    if (result.error) {
+      setSaveStatus('error');
+      return false;
+    }
+    setLastSaved(Date.now());
+    setSaveStatus('saved');
+    clearTimeout(saveStatusTimerRef.current);
+    saveStatusTimerRef.current = setTimeout(() => setSaveStatus('idle'), 3000);
+    return true;
+  }, []);
 
   // ─── Initial load from Supabase ─────────────
   useEffect(() => {
     let cancelled = false;
 
     async function init() {
-      // 1. Try Supabase for global definitions
-      let data = await loadScheduleDB();
+      // 1. Load global definitions
+      const schedResult = await loadScheduleDB();
 
-      if (!data) {
-        // Migrate from localStorage if present
+      if (schedResult.status === 'error') {
+        if (cancelled) return;
+        setLoadError('Could not load schedule. Check your connection and refresh. Do not make changes until this resolves.');
+        setIsLoading(false);
+        return;
+      }
+
+      let data;
+      if (schedResult.status === 'ok') {
+        // Cloud has real data — use it. Never fall through to localStorage.
+        data = schedResult.data;
+      } else {
+        // status === 'empty': row genuinely does not exist in Supabase.
+        // Safe to seed from localStorage migration or factory defaults.
         const localRaw = localStorage.getItem(STORAGE_KEY)
           ?? localStorage.getItem('shiftcraft.v4')
           ?? localStorage.getItem('shiftcraft.v3');
@@ -515,75 +555,55 @@ export function AppProvider({ children }) {
           try { data = migrateData(JSON.parse(localRaw)); } catch { data = null; }
         }
         if (!data) data = getSeedData();
-        // Save to Supabase (fire-and-forget)
+        // First-time seed: fire-and-forget is acceptable (no existing cloud data to overwrite)
         saveScheduleDB(toDefinitionData(data));
       }
 
       data = runMigrations(data);
 
-      // 2. Try Supabase for current week slots
-      let weekMap = await loadWeekSlotMapDB(nowWeek);
+      // 2. Load this week's slot assignments
+      const weekResult = await loadWeekSlotMapDB(nowWeek);
 
-      if (!weekMap) {
-        // Migrate from localStorage if present
-        weekMap = readLocalWeekSlotMap(nowWeek);
-        if (weekMap) {
-          saveWeekSlotMapDB(nowWeek, weekMap); // migrate up
+      if (weekResult.status === 'error') {
+        // CRITICAL: do NOT write anything to Supabase when we cannot confirm the row is absent.
+        // A transient network/timeout error returns null the same as "no row" in the old code,
+        // which caused blank data to overwrite a full week of assignments.
+        if (cancelled) return;
+        setLoadError('Could not load schedule. Check your connection and refresh. Do not make changes until this resolves.');
+        setIsLoading(false);
+        return;
+      }
+
+      let weekMap;
+      if (weekResult.status === 'ok') {
+        // Cloud has real slot data — use it. Never overwrite with localStorage.
+        weekMap = weekResult.data;
+      } else {
+        // status === 'empty': row genuinely does not exist — safe to seed
+        const localMap = readLocalWeekSlotMap(nowWeek);
+        if (localMap) {
+          // Migrate localStorage data up to Supabase (only when cloud has no row)
+          weekMap = localMap;
+          saveWeekSlotMapDB(nowWeek, localMap);
         } else {
-          weekMap = extractSlotMap(data.clinics, data.additionalTasks);
+          // Brand-new week: seed a blank map
+          weekMap = blankSlotMap(data.clinics, data.additionalTasks);
           saveWeekSlotMapDB(nowWeek, weekMap);
         }
       }
 
-      // One-time cleanup: clear stale slot assignments from shadow clinics across ALL
-      // weeks in Supabase. A shadow clinic is one at a location:day pair that already
-      // appeared earlier in the clinics array — it is hidden on the board (.find picks
-      // the first) but was previously visible in the overlay and hours (.filter saw all).
+      // 3. Shadow clinic cleanup — DISABLED
+      // Previously blanked slot assignments on "shadow" clinics (duplicate location:day entries).
+      // Disabled because it ran on new devices/browsers and risked blanking valid data until
+      // the deduplication logic can be fully verified against production clinic configurations.
+      // Just set the flag so it never runs on any device.
       if (!localStorage.getItem('shiftcraft.migration.clearshadowslots')) {
-        const seenLocDay = new Set();
-        const shadowClinicIds = new Set();
-        for (const c of data.clinics) {
-          const locDayKey = `${c.location}:${c.day}`;
-          if (seenLocDay.has(locDayKey)) shadowClinicIds.add(c.id);
-          else seenLocDay.add(locDayKey);
-        }
-
-        if (shadowClinicIds.size > 0) {
-          try {
-            const { data: weekRows } = await supabase
-              .from('schedule_data')
-              .select('key, value')
-              .like('key', 'shiftcraft_week_%');
-            if (weekRows) {
-              for (const row of weekRows) {
-                const cleanedMap = { ...row.value };
-                let dirty = false;
-                for (const clinicId of shadowClinicIds) {
-                  const shadowSlots = cleanedMap[clinicId];
-                  if (shadowSlots && Object.values(shadowSlots).some(v => getSlotPersonId(v) != null)) {
-                    const clinic = data.clinics.find(c => c.id === clinicId);
-                    cleanedMap[clinicId] = clinic?.location === 'OBS' ? blankObsSlots() : blankStandardSlots();
-                    dirty = true;
-                  }
-                }
-                if (dirty) {
-                  const weekStr = row.key.replace('shiftcraft_week_', '');
-                  saveWeekSlotMapDB(weekStr, cleanedMap);
-                  if (weekStr === nowWeek) weekMap = cleanedMap;
-                }
-              }
-            }
-          } catch (e) {
-            console.warn('[Shiftcraft] Shadow slot cleanup failed:', e);
-          }
-        }
-
         try { localStorage.setItem('shiftcraft.migration.clearshadowslots', '1'); } catch { /* ignore */ }
       }
 
       const applied = applySlotMap(data.clinics, data.additionalTasks, weekMap);
 
-      // 3. Load changelog
+      // 4. Load changelog
       const cl = await loadChangelogDB();
 
       if (cancelled) return;
@@ -604,7 +624,6 @@ export function AppProvider({ children }) {
     if (isLoading || !globalData) return;
     if (isFirstRender.current) { isFirstRender.current = false; return; }
     saveScheduleDB(toDefinitionData(globalData));
-    setLastSaved(Date.now());
   }, [globalData, isLoading]);
 
   // ─── Theme (stays per-device in localStorage) ─
@@ -618,21 +637,6 @@ export function AppProvider({ children }) {
     if (isLoading) return;
     saveChangelogDB(changelog.slice(0, 500));
   }, [changelog, isLoading]);
-
-  // ─── Save toast ──────────────────────────────
-  const [savedToast, setSavedToast] = useState(false);
-  const saveToastTimer = useRef(null);
-  const dismissTimer = useRef(null);
-
-  useEffect(() => {
-    if (isLoading || !globalData) return;
-    clearTimeout(saveToastTimer.current);
-    clearTimeout(dismissTimer.current);
-    saveToastTimer.current = setTimeout(() => {
-      setSavedToast(true);
-      dismissTimer.current = setTimeout(() => setSavedToast(false), 1400);
-    }, 600);
-  }, [globalData, isLoading]);
 
   // ─── Real-time sync ───────────────────────────
   useEffect(() => {
@@ -676,9 +680,10 @@ export function AppProvider({ children }) {
   const navigateWeek = useCallback(async (delta) => {
     if (!globalData) return;
 
-    // Save current week's slots
+    // Save current week before leaving — awaited so navigation never loses in-flight data
     const currentMap = extractSlotMap(globalData.clinics, globalData.additionalTasks);
-    saveWeekSlotMapDB(currentWeek, currentMap);
+    await doSaveWeek(currentWeek, currentMap);
+    // Proceed even if save failed; the error indicator remains visible to the user.
 
     // Compute target week
     const monday = mondayOfWeek(currentWeek);
@@ -694,16 +699,24 @@ export function AppProvider({ children }) {
     const weekNum = Math.ceil(((tmp - yearStart) / 86400000 + 1) / 7);
     const next = `${tmp.getUTCFullYear()}-W${String(weekNum).padStart(2, '0')}`;
 
-    // Load target week from Supabase, fall back to localStorage migration, then blank
-    let map = await loadWeekSlotMapDB(next);
-    if (!map) {
-      map = readLocalWeekSlotMap(next);
-      if (map) {
-        saveWeekSlotMapDB(next, map); // migrate localStorage → Supabase
+    // Load target week — 3-way result: never write blank data on error
+    const weekResult = await loadWeekSlotMapDB(next);
+    let map;
+    if (weekResult.status === 'ok') {
+      map = weekResult.data;
+    } else if (weekResult.status === 'empty') {
+      const localMap = readLocalWeekSlotMap(next);
+      if (localMap) {
+        map = localMap;
+        saveWeekSlotMapDB(next, localMap); // migrate localStorage → Supabase
       } else {
         map = blankSlotMap(globalData.clinics, globalData.additionalTasks);
-        saveWeekSlotMapDB(next, map);
+        saveWeekSlotMapDB(next, map); // seed blank week (safe: confirmed empty)
       }
+    } else {
+      // Load error — do not navigate, keep current week, show error
+      setSaveStatus('error');
+      return;
     }
 
     setCurrentWeek(next);
@@ -711,23 +724,30 @@ export function AppProvider({ children }) {
       const applied = applySlotMap(g.clinics, g.additionalTasks, map);
       return { ...g, ...applied };
     });
-  }, [currentWeek, globalData]);
+  }, [currentWeek, globalData, doSaveWeek]);
 
   const jumpToWeek = useCallback(async (targetWeek) => {
     if (!globalData || currentWeek === targetWeek) return;
 
     const currentMap = extractSlotMap(globalData.clinics, globalData.additionalTasks);
-    saveWeekSlotMapDB(currentWeek, currentMap);
+    await doSaveWeek(currentWeek, currentMap);
 
-    let map = await loadWeekSlotMapDB(targetWeek);
-    if (!map) {
-      map = readLocalWeekSlotMap(targetWeek);
-      if (map) {
-        saveWeekSlotMapDB(targetWeek, map);
+    const weekResult = await loadWeekSlotMapDB(targetWeek);
+    let map;
+    if (weekResult.status === 'ok') {
+      map = weekResult.data;
+    } else if (weekResult.status === 'empty') {
+      const localMap = readLocalWeekSlotMap(targetWeek);
+      if (localMap) {
+        map = localMap;
+        saveWeekSlotMapDB(targetWeek, localMap);
       } else {
         map = blankSlotMap(globalData.clinics, globalData.additionalTasks);
         saveWeekSlotMapDB(targetWeek, map);
       }
+    } else {
+      setSaveStatus('error');
+      return;
     }
 
     setCurrentWeek(targetWeek);
@@ -735,7 +755,7 @@ export function AppProvider({ children }) {
       const applied = applySlotMap(g.clinics, g.additionalTasks, map);
       return { ...g, ...applied };
     });
-  }, [currentWeek, globalData]);
+  }, [currentWeek, globalData, doSaveWeek]);
 
   const weekIsEmpty = useCallback(() => {
     if (!globalData) return true;
@@ -750,120 +770,122 @@ export function AppProvider({ children }) {
     monday.setUTCDate(monday.getUTCDate() - 14);
     const prevWeek = isoWeek(monday);
 
-    let prevMap = await loadWeekSlotMapDB(prevWeek);
-    if (!prevMap) prevMap = readLocalWeekSlotMap(prevWeek);
+    const prevResult = await loadWeekSlotMapDB(prevWeek);
+    let prevMap;
+    if (prevResult.status === 'ok') {
+      prevMap = prevResult.data;
+    } else if (prevResult.status === 'empty') {
+      prevMap = readLocalWeekSlotMap(prevWeek);
+    } else {
+      return null; // load error — do nothing
+    }
     if (!prevMap) return null;
 
-    saveWeekSlotMapDB(currentWeek, prevMap);
+    await doSaveWeek(currentWeek, prevMap);
     setGlobalData(g => {
       const applied = applySlotMap(g.clinics, g.additionalTasks, prevMap);
       return { ...g, ...applied };
     });
     return mondayOfWeek(prevWeek);
-  }, [currentWeek, globalData]);
+  }, [currentWeek, globalData, doSaveWeek]);
 
-  const clearWeek = useCallback(() => {
-    setGlobalData(prev => {
-      const clinics = prev.clinics.map(c => ({
-        ...c,
-        slots: c.location === 'OBS' ? blankObsSlots() : blankStandardSlots(),
-      }));
-      const additionalTasks = (prev.additionalTasks ?? []).map(t => ({ ...t, assignedPersonId: null }));
-      const map = extractSlotMap(clinics, additionalTasks);
-      saveWeekSlotMapDB(currentWeek, map);
-      return { ...prev, clinics, additionalTasks };
-    });
-  }, [currentWeek]);
+  const clearWeek = useCallback(async () => {
+    if (!globalData) return;
+    const clinics = globalData.clinics.map(c => ({
+      ...c,
+      slots: c.location === 'OBS' ? blankObsSlots() : blankStandardSlots(),
+    }));
+    const additionalTasks = (globalData.additionalTasks ?? []).map(t => ({ ...t, assignedPersonId: null }));
+    const map = extractSlotMap(clinics, additionalTasks);
+    setGlobalData(prev => ({ ...prev, clinics, additionalTasks }));
+    await doSaveWeek(currentWeek, map);
+  }, [currentWeek, globalData, doSaveWeek]);
 
   // ─── Clinic mutations ───────────────────────
-  const updateClinic = useCallback((clinicId, changes) => {
-    setGlobalData(prev => {
-      const clinics = prev.clinics.map(c => c.id === clinicId ? { ...c, ...changes } : c);
-      const map = extractSlotMap(clinics, prev.additionalTasks);
-      saveWeekSlotMapDB(currentWeek, map);
-      return { ...prev, clinics };
+  const updateClinic = useCallback(async (clinicId, changes) => {
+    if (!globalData) return;
+    const clinics = globalData.clinics.map(c => c.id === clinicId ? { ...c, ...changes } : c);
+    const map = extractSlotMap(clinics, globalData.additionalTasks);
+    setGlobalData(prev => ({ ...prev, clinics }));
+    await doSaveWeek(currentWeek, map);
+  }, [currentWeek, globalData, doSaveWeek]);
+
+  const assignSlot = useCallback(async (clinicId, slotType, personId) => {
+    if (!globalData) return;
+    const clinics = globalData.clinics.map(c => {
+      if (c.id !== clinicId) return c;
+      const existing = c.slots[slotType];
+      const times = (existing && typeof existing === 'object')
+        ? { start: existing.start, end: existing.end }
+        : { start: null, end: null };
+      return { ...c, slots: { ...c.slots, [slotType]: { personId: personId ?? null, ...times } } };
     });
-  }, [currentWeek]);
+    const map = extractSlotMap(clinics, globalData.additionalTasks);
+    setGlobalData(prev => ({ ...prev, clinics }));
 
-  const assignSlot = useCallback((clinicId, slotType, personId) => {
-    setGlobalData(prev => {
-      const clinics = prev.clinics.map(c => {
-        if (c.id !== clinicId) return c;
-        const existing = c.slots[slotType];
-        const times = (existing && typeof existing === 'object')
-          ? { start: existing.start, end: existing.end }
-          : { start: null, end: null };
-        const newSlotVal = { personId: personId ?? null, ...times };
-        return { ...c, slots: { ...c.slots, [slotType]: newSlotVal } };
-      });
-      const map = extractSlotMap(clinics, prev.additionalTasks);
-      saveWeekSlotMapDB(currentWeek, map);
-      const clinic = clinics.find(c => c.id === clinicId);
-      const person = personId ? prev.people.find(p => p.id === personId) : null;
-      if (clinic) {
-        const action = personId
-          ? `${person?.name} assigned to ${slotType} @ ${clinic.location} (${clinic.provider}) on ${clinic.day}`
-          : `Slot removed: ${slotType} @ ${clinic.location} (${clinic.provider}) on ${clinic.day}`;
-        setChangelog(log => [{
-          timestamp: Date.now(), action,
-          personName: person?.name ?? '—', day: clinic.day, detail: '',
-        }, ...log].slice(0, 500));
-      }
-      return { ...prev, clinics };
+    const clinic = clinics.find(c => c.id === clinicId);
+    const person = personId ? globalData.people.find(p => p.id === personId) : null;
+    if (clinic) {
+      const action = personId
+        ? `${person?.name} assigned to ${slotType} @ ${clinic.location} (${clinic.provider}) on ${clinic.day}`
+        : `Slot removed: ${slotType} @ ${clinic.location} (${clinic.provider}) on ${clinic.day}`;
+      setChangelog(log => [{
+        timestamp: Date.now(), action,
+        personName: person?.name ?? '—', day: clinic.day, detail: '',
+      }, ...log].slice(0, 500));
+    }
+
+    await doSaveWeek(currentWeek, map);
+  }, [currentWeek, globalData, doSaveWeek]);
+
+  const updateSlotTime = useCallback(async (clinicId, slotType, start, end) => {
+    if (!globalData) return;
+    const clinics = globalData.clinics.map(c => {
+      if (c.id !== clinicId) return c;
+      const existing = c.slots[slotType];
+      const personId = (existing && typeof existing === 'object')
+        ? existing.personId
+        : (typeof existing === 'string' ? existing : null);
+      return { ...c, slots: { ...c.slots, [slotType]: { personId, start, end } } };
     });
-  }, [currentWeek]);
+    const map = extractSlotMap(clinics, globalData.additionalTasks);
+    setGlobalData(prev => ({ ...prev, clinics }));
+    await doSaveWeek(currentWeek, map);
+  }, [currentWeek, globalData, doSaveWeek]);
 
-  const updateSlotTime = useCallback((clinicId, slotType, start, end) => {
-    setGlobalData(prev => {
-      const clinics = prev.clinics.map(c => {
-        if (c.id !== clinicId) return c;
-        const existing = c.slots[slotType];
-        const personId = (existing && typeof existing === 'object')
-          ? existing.personId
-          : (typeof existing === 'string' ? existing : null);
-        return { ...c, slots: { ...c.slots, [slotType]: { personId, start, end } } };
-      });
-      const map = extractSlotMap(clinics, prev.additionalTasks);
-      saveWeekSlotMapDB(currentWeek, map);
-      return { ...prev, clinics };
-    });
-  }, [currentWeek]);
+  const assignTask = useCallback(async (taskId, personId) => {
+    if (!globalData) return;
+    const additionalTasks = globalData.additionalTasks.map(t =>
+      t.id === taskId ? { ...t, assignedPersonId: personId } : t
+    );
+    const map = extractSlotMap(globalData.clinics, additionalTasks);
+    setGlobalData(prev => ({ ...prev, additionalTasks }));
 
-  const assignTask = useCallback((taskId, personId) => {
-    setGlobalData(prev => {
-      const additionalTasks = prev.additionalTasks.map(t =>
-        t.id === taskId ? { ...t, assignedPersonId: personId } : t
-      );
-      const map = extractSlotMap(prev.clinics, additionalTasks);
-      saveWeekSlotMapDB(currentWeek, map);
+    const task = additionalTasks.find(t => t.id === taskId);
+    const person = personId ? globalData.people.find(p => p.id === personId) : null;
+    if (task) {
+      const action = personId
+        ? `${person?.name} assigned to ${task.label}${task.locationTag ? ` (${task.locationTag})` : ''} on ${task.day}`
+        : `${task.label} unassigned on ${task.day}`;
+      setChangelog(log => [{
+        timestamp: Date.now(), action,
+        personName: person?.name ?? '—', day: task.day, detail: '',
+      }, ...log].slice(0, 500));
+    }
 
-      const task = additionalTasks.find(t => t.id === taskId);
-      const person = personId ? prev.people.find(p => p.id === personId) : null;
-      if (task) {
-        const action = personId
-          ? `${person?.name} assigned to ${task.label}${task.locationTag ? ` (${task.locationTag})` : ''} on ${task.day}`
-          : `${task.label} unassigned on ${task.day}`;
-        setChangelog(log => [{
-          timestamp: Date.now(), action,
-          personName: person?.name ?? '—', day: task.day, detail: '',
-        }, ...log].slice(0, 500));
-      }
+    await doSaveWeek(currentWeek, map);
+  }, [currentWeek, globalData, doSaveWeek]);
 
-      return { ...prev, additionalTasks };
-    });
-  }, [currentWeek]);
-
-  const addTask = useCallback((task) => {
-    setGlobalData(prev => {
-      const additionalTasks = [...(prev.additionalTasks ?? []), task];
-      const taskTypes = prev.taskTypes.includes(task.label)
-        ? prev.taskTypes
-        : [...prev.taskTypes, task.label];
-      const map = extractSlotMap(prev.clinics, additionalTasks);
-      saveWeekSlotMapDB(currentWeek, map);
-      return { ...prev, additionalTasks, taskTypes };
-    });
-  }, [currentWeek]);
+  const addTask = useCallback(async (task) => {
+    if (!globalData) return;
+    const additionalTasks = [...(globalData.additionalTasks ?? []), task];
+    const taskTypes = globalData.taskTypes.includes(task.label)
+      ? globalData.taskTypes
+      : [...globalData.taskTypes, task.label];
+    const map = extractSlotMap(globalData.clinics, additionalTasks);
+    setGlobalData(prev => ({ ...prev, additionalTasks, taskTypes }));
+    await doSaveWeek(currentWeek, map);
+  }, [currentWeek, globalData, doSaveWeek]);
 
   const removeTask = useCallback((taskId) => {
     setGlobalData(prev => ({
@@ -897,51 +919,47 @@ export function AppProvider({ children }) {
     setGlobalData(prev => ({ ...prev, people: newOrder }));
   }, []);
 
-  const applyBulkAssignments = useCallback((assignments, { clearFirst = false } = {}) => {
-    setGlobalData(prev => {
-      let clinics = prev.clinics;
-      // clearFirst: blank all open clinic slots before applying so stale manual
-      // assignments can't survive when the solver chose a different person for that slot.
-      if (clearFirst) {
-        clinics = clinics.map(c =>
-          c.open
-            ? { ...c, slots: c.location === 'OBS' ? blankObsSlots() : blankStandardSlots() }
-            : c
-        );
-      }
-      for (const { clinicId, slot, personId } of assignments) {
-        clinics = clinics.map(c => {
-          if (c.id !== clinicId) return c;
-          let newSlotVal;
-          if (slot === 'middle' || slot === 'training' || slot === 'scribe') {
-            const existing = c.slots[slot];
-            const times = (existing && typeof existing === 'object')
-              ? { start: existing.start, end: existing.end }
-              : { start: null, end: null };
-            newSlotVal = { personId, ...times };
-          } else {
-            newSlotVal = personId;
-          }
-          return { ...c, slots: { ...c.slots, [slot]: newSlotVal } };
-        });
-      }
-      const map = extractSlotMap(clinics, prev.additionalTasks);
-      saveWeekSlotMapDB(currentWeek, map);
-      return { ...prev, clinics };
-    });
-  }, [currentWeek]);
+  const applyBulkAssignments = useCallback(async (assignments, { clearFirst = false } = {}) => {
+    if (!globalData) return;
+    let clinics = globalData.clinics;
+    if (clearFirst) {
+      clinics = clinics.map(c =>
+        c.open
+          ? { ...c, slots: c.location === 'OBS' ? blankObsSlots() : blankStandardSlots() }
+          : c
+      );
+    }
+    for (const { clinicId, slot, personId } of assignments) {
+      clinics = clinics.map(c => {
+        if (c.id !== clinicId) return c;
+        let newSlotVal;
+        if (slot === 'middle' || slot === 'training' || slot === 'scribe') {
+          const existing = c.slots[slot];
+          const times = (existing && typeof existing === 'object')
+            ? { start: existing.start, end: existing.end }
+            : { start: null, end: null };
+          newSlotVal = { personId, ...times };
+        } else {
+          newSlotVal = personId;
+        }
+        return { ...c, slots: { ...c.slots, [slot]: newSlotVal } };
+      });
+    }
+    const map = extractSlotMap(clinics, globalData.additionalTasks);
+    setGlobalData(prev => ({ ...prev, clinics }));
+    await doSaveWeek(currentWeek, map);
+  }, [currentWeek, globalData, doSaveWeek]);
 
-  const restoreClinicSlots = useCallback((slotSnapshot) => {
-    setGlobalData(prev => {
-      const clinics = prev.clinics.map(c => ({
-        ...c,
-        slots: slotSnapshot[c.id] ?? c.slots,
-      }));
-      const map = extractSlotMap(clinics, prev.additionalTasks);
-      saveWeekSlotMapDB(currentWeek, map);
-      return { ...prev, clinics };
-    });
-  }, [currentWeek]);
+  const restoreClinicSlots = useCallback(async (slotSnapshot) => {
+    if (!globalData) return;
+    const clinics = globalData.clinics.map(c => ({
+      ...c,
+      slots: slotSnapshot[c.id] ?? c.slots,
+    }));
+    const map = extractSlotMap(clinics, globalData.additionalTasks);
+    setGlobalData(prev => ({ ...prev, clinics }));
+    await doSaveWeek(currentWeek, map);
+  }, [currentWeek, globalData, doSaveWeek]);
 
   const deletePerson = useCallback((personId) => {
     // Best-effort: clear this person from all Supabase week rows
@@ -1037,7 +1055,8 @@ export function AppProvider({ children }) {
     <AppContext.Provider value={{
       data,
       isLoading,
-      savedToast,
+      loadError,
+      saveStatus,
       lastSaved,
       isAdmin, setIsAdmin,
       theme, setTheme,
