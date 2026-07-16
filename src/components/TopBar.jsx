@@ -11,7 +11,7 @@ import { useTour } from './Tour.jsx';
 import ChangeLogDrawer from './ChangeLogDrawer.jsx';
 import ChatPanel from './ChatPanel.jsx';
 import { generateSchedule } from '../engine/adapter.js';
-import { validateAndRepairAssignments } from '../engine/validator.js';
+import { validateAndRepairAssignments, findObsViolations } from '../engine/validator.js';
 
 // ─── Generate confirmation modal ─────────────
 function GenerateModal({ weekLabel, keepExisting, onKeepChange, onConfirm, onCancel, isRegen }) {
@@ -584,6 +584,18 @@ export default function TopBar({ activeTab, setActiveTab }) {
       // A generated schedule must never reach the database with a conflict.
       const { safe, dropped } = validateAndRepairAssignments(assignments, data.clinics, data.people);
       assignments = safe;
+
+      // OBS integrity check: if any OBS slot is empty while a qualified person
+      // was placed at a regular clinic, that is a hard violation — the two-phase
+      // solver should prevent it, but we verify here and surface it loudly.
+      const obsViolations = findObsViolations(assignments, data.clinics, data.people);
+      if (obsViolations.length > 0) {
+        const msg = `OBS staffing violation — schedule NOT saved:\n${obsViolations.join('\n')}`;
+        console.error('[Shiftcraft] ' + msg);
+        setGenError(msg);
+        setGenState('error');
+        return;
+      }
 
       // Await the save — generation is complete only when data is on Supabase
       await applyBulkAssignments(assignments, { clearFirst: !keepExisting });

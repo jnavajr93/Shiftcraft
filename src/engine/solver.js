@@ -5,6 +5,18 @@
 // required roles from the eligible people pool while respecting constraints,
 // and flags anything it can't satisfy. Knows nothing about ophthalmology — it
 // only knows roles, locations, people, shifts, and the 6 constraint types.
+//
+// EXECUTION ORDER (per day):
+//   Phase 1 — high-priority shifts (priority > 0, i.e. OBS):
+//     a. MUST_PAIR pre-pass for OBS shifts only → reserve locked people
+//     b. Fill OBS slots; mark placed people + their blockedIds as used
+//   Phase 2 — regular shifts (priority === 0):
+//     a. MUST_PAIR pre-pass for regular shifts only → reserved people who
+//        survived Phase 1 (OBS-placed people are already in `used` and skip)
+//     b. Fill regular slots; OBS-placed people are excluded by `used`
+//
+// This guarantees OBS is ALWAYS filled before any front desk / regular slot,
+// regardless of lockedTo (MUST_PAIR) constraints on regular clinics.
 // ============================================================================
 
 import { CONSTRAINT_TYPES as CT } from './schema.js';
@@ -81,6 +93,84 @@ function exceedsHourCap(personId, additionalHrs, weekHours, cfg) {
   return (weekHours[personId] || 0) + additionalHrs > cap.count;
 }
 
+/**
+ * Fill a single shift — apply pre-reserved people, then fill each required
+ * role from the remaining eligible pool. Mutates `used`, `weekHours`, `cards`,
+ * and `issues` in place, and logs each assignment to the console so callers
+ * can verify execution order.
+ */
+function fillShift(shift, reservations, used, weekHours, cards, issues, idx, cfg, day) {
+  const loc = idx.locations[shift.locationId];
+  const req = staffingFor(shift.locationId, cfg);
+  const hrs = shiftHours(shift);
+
+  const assigned = [];
+
+  // Apply pre-reserved (MUST_PAIR) people — hours credited here.
+  for (const res of (reservations[shift.id] ?? [])) {
+    assigned.push(res);
+    weekHours[res.personId] = (weekHours[res.personId] || 0) + hrs;
+    console.log(
+      `[Shiftcraft fill] ${day} | ${shift.name} @ ${loc?.name ?? shift.locationId}` +
+      ` | ${res.roleId} → ${idx.people[res.personId]?.name ?? res.personId} (MUST_PAIR)`
+    );
+  }
+
+  // Fill each required role up to its minimum.
+  for (const roleId of Object.keys(req)) {
+    const need = req[roleId].min || 0;
+    const have = assigned.filter((a) => a.roleId === roleId).length;
+    for (let i = have; i < need; i++) {
+      const candidate = cfg.people.find(
+        (person) =>
+          !used.has(person.id) &&
+          !exceedsHourCap(person.id, hrs, weekHours, cfg) &&
+          canStaff(person, shift.locationId, roleId, day, cfg)
+      );
+      if (candidate) {
+        assigned.push({ personId: candidate.id, roleId });
+        used.add(candidate.id);
+        for (const lid of (candidate.blockedIds ?? [])) used.add(lid);
+        weekHours[candidate.id] = (weekHours[candidate.id] || 0) + hrs;
+        console.log(
+          `[Shiftcraft fill] ${day} | ${shift.name} @ ${loc?.name ?? shift.locationId}` +
+          ` | ${roleId} → ${idx.people[candidate.id]?.name ?? candidate.id}`
+        );
+      } else {
+        const roleName = idx.roles[roleId]?.name || 'staff';
+        issues.push(`${shift.name}: needs ${need - i} more ${roleName}`);
+        console.warn(
+          `[Shiftcraft fill] ${day} | ${shift.name} @ ${loc?.name ?? shift.locationId}` +
+          ` | ${roleId} → EMPTY (no eligible candidate)`
+        );
+        break;
+      }
+    }
+  }
+
+  const staffing = Object.entries(req).map(([roleId, bounds]) => ({
+    role: idx.roles[roleId]?.name || '?',
+    min: bounds.min || 0,
+    max: bounds.max ?? null,
+    have: assigned.filter((a) => a.roleId === roleId).length,
+  }));
+
+  cards.push({
+    shiftId: shift.id,
+    shiftName: shift.name,
+    location: loc ? loc.name : '—',
+    start: shift.start,
+    end: shift.end,
+    staffing,
+    assigned: assigned.map((a) => ({
+      personId: a.personId,
+      name: idx.people[a.personId]?.name || '?',
+      role: idx.roles[a.roleId]?.name || '?',
+      color: idx.people[a.personId]?.color || '#888',
+    })),
+  });
+}
+
 // Main entry: returns { [day]: { shifts:[...], unplaced:[...], issues:[...] } }
 // week: 'A', 'B', or null (null = include all shifts regardless of week tag)
 export function solve(cfg, week = null) {
@@ -95,106 +185,71 @@ export function solve(cfg, week = null) {
         (s.days || []).includes(day) &&
         (s.week == null || week == null || s.week === week)
     );
-    const cards = [];
-    const issues = [];
 
-    // 1) Global MUST_PAIR pre-pass — reserve paired people before any free
-    //    assignment so they can't be consumed by other shifts processed earlier
-    //    in the sort order. Builds a reservation map: shiftId → [{personId, roleId}].
-    const pairings = cfg.constraints.filter(
+    // Split into two phases by priority.
+    // Phase 1 = high-priority shifts (priority > 0, currently OBS).
+    // Phase 2 = regular shifts (priority === 0).
+    // Within each phase sort by most-constrained location (totalMin) descending.
+    const phase1Shifts = dayShifts
+      .filter((s) => (s.priority ?? 0) > 0)
+      .sort((a, b) => totalMin(b.locationId, cfg) - totalMin(a.locationId, cfg));
+
+    const phase2Shifts = dayShifts
+      .filter((s) => (s.priority ?? 0) === 0)
+      .sort((a, b) => totalMin(b.locationId, cfg) - totalMin(a.locationId, cfg));
+
+    const phase1ShiftIds = new Set(phase1Shifts.map((s) => s.id));
+    const phase2ShiftIds = new Set(phase2Shifts.map((s) => s.id));
+    const allPairings = cfg.constraints.filter(
       (c) => c.enabled && c.type === CT.MUST_PAIR
     );
 
-    // Only consider pairings whose anchor shift is scheduled TODAY — otherwise
-    // a Monday MUST_PAIR for Yadi would be processed on Tuesday, reserving her
-    // for a Monday shift that doesn't exist today and locking her out of Tuesday.
-    const dayShiftIds = new Set(dayShifts.map(s => s.id));
-
+    const cards = [];
+    const issues = [];
     const reservations = {}; // shiftId → [{personId, roleId}]
-    for (const p of pairings) {
-      if (!dayShiftIds.has(p.anchorId)) continue; // skip constraints for other days
+
+    if (phase1Shifts.length > 0) {
+      console.log(`[Shiftcraft fill] ${day} ── Phase 1: OBS (${phase1Shifts.map(s => s.name).join(', ')})`);
+    }
+
+    // ── Phase 1 pre-pass: MUST_PAIR for OBS shifts only ──────────────────────
+    for (const p of allPairings) {
+      if (!phase1ShiftIds.has(p.anchorId)) continue;
       const person = idx.people[p.personId];
       if (!person || used.has(person.id) || isUnavailable(person.id, day, cfg)) continue;
-      // Use constraint.slot if specified (object lockedTo format), otherwise person.roles[0]
       const roleId = p.slot ?? person.roles[0];
       if (!reservations[p.anchorId]) reservations[p.anchorId] = [];
       reservations[p.anchorId].push({ personId: person.id, roleId });
-      used.add(person.id); // mark used NOW so free candidacy on other shifts skips them
-      // Also mark blocked IDs: all same-name records share a physical person — placing
-      // one must block all others from being placed on the same day.
+      used.add(person.id);
       for (const lid of (person.blockedIds ?? [])) used.add(lid);
-      // weekHours credited when the shift card is actually built below
     }
 
-    // Sort shifts: FIX 1 — priority field first (OBS = 10, others = 0) so OBS fills before
-    // regular clinics and doesn't lose OBS-capable staff to regular slots.
-    // Secondary: most-constrained location (largest total min-staff) fills first.
-    const sorted = [...dayShifts].sort((a, b) => {
-      const pa = a.priority ?? 0, pb = b.priority ?? 0;
-      if (pb !== pa) return pb - pa;
-      return totalMin(b.locationId, cfg) - totalMin(a.locationId, cfg);
-    });
+    // ── Phase 1: Fill OBS shifts ──────────────────────────────────────────────
+    for (const shift of phase1Shifts) {
+      fillShift(shift, reservations, used, weekHours, cards, issues, idx, cfg, day);
+    }
 
-    for (const shift of sorted) {
-      const loc = idx.locations[shift.locationId];
-      const req = staffingFor(shift.locationId, cfg);
-      const hrs = shiftHours(shift);
+    if (phase2Shifts.length > 0) {
+      console.log(`[Shiftcraft fill] ${day} ── Phase 2: regular (${phase2Shifts.map(s => s.name).join(', ')})`);
+    }
 
-      // a) Apply pre-reserved people for this shift.
-      const assigned = []; // { personId, roleId }
-      for (const res of (reservations[shift.id] ?? [])) {
-        assigned.push(res);
-        weekHours[res.personId] = (weekHours[res.personId] || 0) + hrs;
-      }
+    // ── Phase 2 pre-pass: MUST_PAIR for regular shifts only ──────────────────
+    // OBS-placed people are already in `used` and will be skipped here,
+    // so a person locked to a regular clinic who was consumed by OBS stays in OBS.
+    for (const p of allPairings) {
+      if (!phase2ShiftIds.has(p.anchorId)) continue;
+      const person = idx.people[p.personId];
+      if (!person || used.has(person.id) || isUnavailable(person.id, day, cfg)) continue;
+      const roleId = p.slot ?? person.roles[0];
+      if (!reservations[p.anchorId]) reservations[p.anchorId] = [];
+      reservations[p.anchorId].push({ personId: person.id, roleId });
+      used.add(person.id);
+      for (const lid of (person.blockedIds ?? [])) used.add(lid);
+    }
 
-      // b) Fill each required role up to its minimum.
-      for (const roleId of Object.keys(req)) {
-        const need = req[roleId].min || 0;
-        const have = assigned.filter((a) => a.roleId === roleId).length;
-        for (let i = have; i < need; i++) {
-          const candidate = cfg.people.find(
-            (person) =>
-              !used.has(person.id) &&
-              !exceedsHourCap(person.id, hrs, weekHours, cfg) &&
-              canStaff(person, shift.locationId, roleId, day, cfg)
-          );
-          if (candidate) {
-            assigned.push({ personId: candidate.id, roleId });
-            used.add(candidate.id);
-            // Mark blocked IDs so the solver never places any same-name record
-            // on the same day (name-based canonical identity).
-            for (const lid of (candidate.blockedIds ?? [])) used.add(lid);
-            weekHours[candidate.id] = (weekHours[candidate.id] || 0) + hrs;
-          } else {
-            const roleName = idx.roles[roleId]?.name || 'staff';
-            issues.push(`${shift.name}: needs ${need - i} more ${roleName}`);
-            break;
-          }
-        }
-      }
-
-      // Staffing summary (computed before assigned is mapped, while roleIds are available)
-      const staffing = Object.entries(req).map(([roleId, bounds]) => ({
-        role: idx.roles[roleId]?.name || '?',
-        min: bounds.min || 0,
-        max: bounds.max ?? null,
-        have: assigned.filter((a) => a.roleId === roleId).length,
-      }));
-
-      cards.push({
-        shiftId: shift.id,
-        shiftName: shift.name,
-        location: loc ? loc.name : '—',
-        start: shift.start,
-        end: shift.end,
-        staffing,
-        assigned: assigned.map((a) => ({
-          personId: a.personId,
-          name: idx.people[a.personId]?.name || '?',
-          role: idx.roles[a.roleId]?.name || '?',
-          color: idx.people[a.personId]?.color || '#888',
-        })),
-      });
+    // ── Phase 2: Fill regular shifts ─────────────────────────────────────────
+    for (const shift of phase2Shifts) {
+      fillShift(shift, reservations, used, weekHours, cards, issues, idx, cfg, day);
     }
 
     const unplaced = cfg.people

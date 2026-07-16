@@ -71,6 +71,88 @@ export function validateAndRepairAssignments(assignments, clinics, people) {
   };
 }
 
+// Role display name → OBS slot key (matches ROLE_TO_SLOT_KEY in adapter.js)
+const OBS_ROLE_FOR_SLOT = {
+  preop:       'Pre-Op/PACU',
+  sterile:     'Sterile Processing',
+  circulator:  'Circulator',
+  scrub:       'Scrub Tech',
+};
+
+/**
+ * Post-generation OBS integrity check.
+ *
+ * On any day with an OBS clinic, every OBS slot that is EMPTY in `assignments`
+ * is a potential violation. It becomes a confirmed violation when at least one
+ * person who is (a) qualified for that OBS slot and (b) not on a day-off was
+ * placed into a regular (non-OBS) clinic instead. That means the solver filled
+ * a regular slot before OBS had a chance — which must never happen.
+ *
+ * Returns an array of human-readable violation strings. An empty array is clean.
+ */
+export function findObsViolations(assignments, clinics, people) {
+  const violations = [];
+  const clinicById = new Map(clinics.map(c => [c.id, c]));
+
+  // Collect OBS clinics per day
+  const obsByDay = {}; // day → clinic
+  for (const c of clinics) {
+    if (c.open && c.location?.toLowerCase() === 'obs') {
+      obsByDay[c.day] = obsByDay[c.day] ?? c; // first OBS per day
+    }
+  }
+  if (Object.keys(obsByDay).length === 0) return [];
+
+  // Index assignments: day → { obs: [{slot, personId}], regular: [{slot, personId}] }
+  const byDay = {};
+  for (const a of assignments) {
+    const clinic = clinicById.get(a.clinicId);
+    if (!clinic) continue;
+    const day = clinic.day;
+    if (!byDay[day]) byDay[day] = { obs: [], regular: [] };
+    if (clinic.location?.toLowerCase() === 'obs') {
+      byDay[day].obs.push(a);
+    } else {
+      byDay[day].regular.push(a);
+    }
+  }
+
+  for (const [day, obsClinic] of Object.entries(obsByDay)) {
+    const filledObsSlots = new Set((byDay[day]?.obs ?? []).map(a => a.slot));
+    const regularAssignedIds = new Set((byDay[day]?.regular ?? []).map(a => a.personId));
+
+    // Check every OBS slot that should be filled
+    for (const slotKey of Object.keys(obsClinic.slots ?? {})) {
+      if (filledObsSlots.has(slotKey)) continue; // filled — OK
+
+      const requiredRole = OBS_ROLE_FOR_SLOT[slotKey];
+      if (!requiredRole) continue; // unknown slot, skip
+
+      // Who is qualified for this OBS slot?
+      const displaced = people.filter(p => {
+        if ((p.daysOff ?? []).includes(day)) return false;
+        if (!(p.roles ?? []).includes(requiredRole)) return false;
+        const cleared = p.clearedLocations ?? [];
+        if (cleared.length > 0 && !cleared.some(l => l.toLowerCase() === 'obs')) return false;
+        // Was this person (or a same-name record) assigned to a regular clinic today?
+        const nameKey = p.name.trim().toLowerCase();
+        return people
+          .filter(q => q.name.trim().toLowerCase() === nameKey)
+          .some(q => regularAssignedIds.has(q.id));
+      });
+
+      if (displaced.length > 0) {
+        const names = [...new Set(displaced.map(p => p.name))].join(', ');
+        violations.push(
+          `${day} OBS ${slotKey} empty — ${names} qualified but placed at a regular clinic`
+        );
+      }
+    }
+  }
+
+  return violations;
+}
+
 // ─── Self-contained tests ───────────────────────────────────────────────────
 // Reproduce the exact Hailey scenario: two same-name records with NO
 // linkedPersonId set, one in OBS and one in FD on the same day.
