@@ -120,6 +120,9 @@ export function solve(cfg, week = null) {
       if (!reservations[p.anchorId]) reservations[p.anchorId] = [];
       reservations[p.anchorId].push({ personId: person.id, roleId });
       used.add(person.id); // mark used NOW so free candidacy on other shifts skips them
+      // Also mark linked IDs: tech+admin pairs share a physical person — placing either
+      // one must block the other from being placed on the same day.
+      for (const lid of (person.linkedIds ?? [])) used.add(lid);
       // weekHours credited when the shift card is actually built below
     }
 
@@ -158,6 +161,9 @@ export function solve(cfg, week = null) {
           if (candidate) {
             assigned.push({ personId: candidate.id, roleId });
             used.add(candidate.id);
+            // Mark linked IDs so the solver never places both halves of a linked
+            // tech+admin pair on the same day.
+            for (const lid of (candidate.linkedIds ?? [])) used.add(lid);
             weekHours[candidate.id] = (weekHours[candidate.id] || 0) + hrs;
           } else {
             const roleName = idx.roles[roleId]?.name || 'staff';

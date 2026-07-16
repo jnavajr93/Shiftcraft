@@ -164,6 +164,10 @@ export function generateSchedule(globalData) {
       roles: mappedRoles,
       // Map cleared location names → location IDs; empty = cleared everywhere
       locations: (p.clearedLocations ?? []).map(name => toLocationId(name)),
+      // Linked person IDs: when this person is placed, every linked ID is also
+      // marked used so the solver never places both halves of a linked pair on
+      // the same day. Critical for tech+admin pairs who share a physical person.
+      linkedIds: p.linkedPersonId ? [p.linkedPersonId] : [],
     };
   });
 
