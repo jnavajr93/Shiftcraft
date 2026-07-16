@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext.jsx';
 import { Trash2, Zap } from 'lucide-react';
-import { DAYS, getSlotPersonId, OBS_SLOT_TYPES } from '../data/seed.js';
+import { DAYS, getSlotPersonId, OBS_SLOT_TYPES, getAssignmentsForPerson } from '../data/seed.js';
 
 const OBS_ROLE_FOR_SLOT = {
   preop: 'Pre-Op/PACU',
@@ -22,41 +22,27 @@ function ineligibleReason(person, clinic, slotType, clinics, additionalTasks, al
   // Day off
   if ((person.daysOff ?? []).includes(clinic.day)) return 'Off this day';
 
-  // Name-based same-person IDs: all records that share this person's display name.
-  // This is the canonical identity — same name = same physical person — so conflict
-  // checks must cover all same-name records, not just this one record ID.
-  const personName = person.name.trim().toLowerCase();
-  const samePersonIds = new Set(
-    (allPeople ?? [])
-      .filter(q => q.name.trim().toLowerCase() === personName)
-      .map(q => q.id)
-  );
+  // Use the single shared function for all "is this person assigned today" checks.
+  // It reads from getBoardClinics() internally — shadow/duplicate clinic records
+  // that are invisible on the board cannot produce phantom conflicts here.
+  const nameKey = person.name.trim().toLowerCase();
+  const dayAssignments = getAssignmentsForPerson(nameKey, clinic.day, allPeople ?? [], clinics);
 
   // OBS precedence: if assigning to a non-OBS slot and person already has an OBS
   // assignment that day (under any same-name record), block with a specific error.
   const isObsSlot = clinic.location?.toLowerCase() === 'obs';
-  const hasObsAssignment = !isObsSlot && clinics.some(c =>
-    c.day === clinic.day &&
-    c.open &&
-    c.location?.toLowerCase() === 'obs' &&
-    Object.values(c.slots).some(sv => samePersonIds.has(getSlotPersonId(sv)))
-  );
-  if (hasObsAssignment) return 'Assigned to OBS this day';
+  if (!isObsSlot && dayAssignments.some(a => a.isObs)) return 'Assigned to OBS this day';
 
-  // Already assigned to any slot on this day (any same-name record), except the exact slot this popover is for
-  const clinicAssigned = clinics.some(c =>
-    c.day === clinic.day &&
-    c.open &&
-    Object.entries(c.slots).some(([st, sv]) =>
-      samePersonIds.has(getSlotPersonId(sv)) &&
-      !(c.id === clinic.id && st === slotType)
-    )
-  );
+  // Already assigned to any board clinic slot today, except the exact slot this popover is for
+  const clinicAssigned = dayAssignments.some(a => !(a.clinicId === clinic.id && a.slotType === slotType));
   if (clinicAssigned) return 'Already assigned today';
 
   // Already assigned to an additional task on this day
+  const samePersonIds = new Set(
+    (allPeople ?? []).filter(q => q.name.trim().toLowerCase() === nameKey).map(q => q.id)
+  );
   const taskAssigned = (additionalTasks ?? []).some(t =>
-    t.day === clinic.day && t.assignedPersonId === person.id
+    t.day === clinic.day && samePersonIds.has(t.assignedPersonId)
   );
   if (taskAssigned) return 'Already assigned today';
 

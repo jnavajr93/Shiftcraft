@@ -254,6 +254,42 @@ export function getBoardClinics(clinics) {
   });
 }
 
+/**
+ * Single source of truth for "is this physical person assigned on this day?"
+ *
+ * Reads ONLY from getBoardClinics() — never from raw clinics — so shadow/duplicate
+ * clinic records that the board doesn't render cannot produce phantom conflicts.
+ *
+ * Identity is name-based: all records with the same display name (trim+lowercase)
+ * are the same physical person regardless of linkedPersonId.
+ *
+ * @param nameKey   person.name.trim().toLowerCase()
+ * @param day       'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri'
+ * @param people    all person records
+ * @param clinics   raw data.clinics (getBoardClinics applied internally)
+ * @returns         Array of { clinicId, slotType, clinic, personId, isObs }
+ */
+export function getAssignmentsForPerson(nameKey, day, people, clinics) {
+  const samePersonIds = new Set(
+    people
+      .filter(q => q.name.trim().toLowerCase() === nameKey)
+      .map(q => q.id)
+  );
+
+  const results = [];
+  for (const c of getBoardClinics(clinics)) {
+    if (c.day !== day || !c.open) continue;
+    const isObs = c.location?.toLowerCase() === 'obs';
+    for (const [slotType, slotVal] of Object.entries(c.slots ?? {})) {
+      const pid = getSlotPersonId(slotVal);
+      if (pid && samePersonIds.has(pid)) {
+        results.push({ clinicId: c.id, slotType, clinic: c, personId: pid, isObs });
+      }
+    }
+  }
+  return results;
+}
+
 export function calcPersonWeeklyHours(personId, clinics, additionalTasks) {
   let total = 0;
   for (const clinic of clinics) {

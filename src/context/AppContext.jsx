@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { getSeedData, migratePerson, generateId, getSlotPersonId, OBS_SLOT_TYPES, getBoardClinics } from '../data/seed.js';
+import { getSeedData, migratePerson, generateId, getSlotPersonId, OBS_SLOT_TYPES, getBoardClinics, getAssignmentsForPerson } from '../data/seed.js';
 import { supabase } from '../supabase.js';
 import {
   saveSchedule as saveScheduleDB,
