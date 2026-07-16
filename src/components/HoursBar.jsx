@@ -24,9 +24,24 @@ export default function HoursBar() {
   const [collapsed, setCollapsed] = useState(false);
 
   const boardClinics = getBoardClinics(data.clinics);
-  const assigned = data.people
-    .map(p => ({ person: p, hours: calcPersonWeeklyHours(p.id, boardClinics, data.additionalTasks) }))
-    .filter(({ hours }) => hours > 0);
+
+  // Build hours list, merging linked person pairs into one entry.
+  // Whichever of the pair appears first in data.people is the display representative.
+  const displayed = new Set();
+  const assigned = [];
+  for (const p of data.people) {
+    if (displayed.has(p.id)) continue;
+    let hours = calcPersonWeeklyHours(p.id, boardClinics, data.additionalTasks);
+    if (p.linkedPersonId) {
+      const linked = data.people.find(q => q.id === p.linkedPersonId);
+      if (linked) {
+        hours += calcPersonWeeklyHours(linked.id, boardClinics, data.additionalTasks);
+        displayed.add(linked.id);
+      }
+    }
+    displayed.add(p.id);
+    if (hours > 0) assigned.push({ person: p, hours });
+  }
 
   const totalHours = assigned.reduce((sum, { hours }) => sum + hours, 0);
 

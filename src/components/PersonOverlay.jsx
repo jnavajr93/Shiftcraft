@@ -8,7 +8,8 @@ function useIsMobile() {
   return window.matchMedia('(max-width: 640px)').matches;
 }
 
-function WeekRows({ person, clinics, additionalTasks }) {
+function WeekRows({ personIds, clinics, additionalTasks }) {
+  const pidSet = new Set(personIds);
   return (
     <div>
       {DAYS.map(day => {
@@ -18,7 +19,7 @@ function WeekRows({ person, clinics, additionalTasks }) {
           .forEach(c => {
             Object.entries(c.slots).forEach(([slotType, slotVal]) => {
               const pid = getSlotPersonId(slotVal);
-              if (pid === person.id) {
+              if (pidSet.has(pid)) {
                 let time;
                 if (slotType === 'scribe') {
                   time = formatScribeTimeDisplay(slotVal) ?? '1st Patient – Close';
@@ -49,7 +50,7 @@ function WeekRows({ person, clinics, additionalTasks }) {
 
         // Add task assignments for this day
         (additionalTasks ?? [])
-          .filter(t => t.day === day && t.assignedPersonId === person.id)
+          .filter(t => t.day === day && pidSet.has(t.assignedPersonId))
           .forEach(t => {
             const label = `${t.label}${t.locationTag ? ' @ ' + t.locationTag : ''}`;
             const time = formatTaskTime(t) ?? '';
@@ -79,7 +80,17 @@ function OverlayInner({ person, onClose }) {
   const { data, isAdmin, deletePerson, addLog } = useApp();
   const [confirming, setConfirming] = useState(false);
   const boardClinics = getBoardClinics(data.clinics);
-  const hours = calcPersonWeeklyHours(person.id, boardClinics, data.additionalTasks);
+
+  // If this person is linked to another record (same person, different staff type),
+  // show both records' assignments combined and sum their hours.
+  const linkedPerson = person.linkedPersonId
+    ? (data.people.find(p => p.id === person.linkedPersonId) ?? null)
+    : null;
+  const personIds = linkedPerson ? [person.id, linkedPerson.id] : [person.id];
+  const hours = personIds.reduce(
+    (sum, id) => sum + calcPersonWeeklyHours(id, boardClinics, data.additionalTasks),
+    0
+  );
 
   const handleRemove = () => {
     addLog({ action: `${person.name} removed from roster by admin`, personName: person.name, day: '', detail: '' });
@@ -102,7 +113,7 @@ function OverlayInner({ person, onClose }) {
         <button className="overlay-close" onClick={onClose}><X size={16} /></button>
       </div>
       <div className="overlay-body">
-        <WeekRows person={person} clinics={boardClinics} additionalTasks={data.additionalTasks} />
+        <WeekRows personIds={personIds} clinics={boardClinics} additionalTasks={data.additionalTasks} />
         {isAdmin && (
           <ArcChart
             hours={hours}

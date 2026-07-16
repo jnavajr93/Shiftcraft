@@ -502,9 +502,10 @@ function PersonCard({ person, providers, locations }) {
 }
 
 // ─── Add Person Modal ────────────────────────
-function AddPersonModal({ onClose, existingNames, providers, locations, defaultStaffType = 'tech' }) {
-  const { addPerson, addLog } = useApp();
+function AddPersonModal({ onClose, existingPeople, providers, locations, defaultStaffType = 'tech' }) {
+  const { addPerson, updatePerson, addLog } = useApp();
 
+  const existingNames = existingPeople.map(p => p.name);
   const defaultColor = PRESET_COLORS.find(c => !existingNames.includes(c)) ?? PRESET_COLORS[0];
 
   const [form, setForm] = useState({
@@ -523,6 +524,17 @@ function AddPersonModal({ onClose, existingNames, providers, locations, defaultS
   });
   const [nameError, setNameError] = useState('');
   const [shake, setShake] = useState(false);
+  const [linkPerson, setLinkPerson] = useState(false);
+
+  // Detect a same-name person in the OTHER staff type (enables the link checkbox)
+  const trimmedNameLower = form.name.trim().toLowerCase();
+  const otherStaffType = form.staffType === 'admin' ? 'tech' : 'admin';
+  const matchingOtherType = trimmedNameLower
+    ? (existingPeople.find(p =>
+        p.name.trim().toLowerCase() === trimmedNameLower &&
+        (p.staffType ?? 'tech') === otherStaffType
+      ) ?? null)
+    : null;
 
   const set = (field, val) => setForm(f => ({ ...f, [field]: val }));
   const setEmploymentType = (et) => setForm(f => ({ ...f, employmentType: et, targetHours: DEFAULT_HOURS[et] ?? 0 }));
@@ -539,8 +551,12 @@ function AddPersonModal({ onClose, existingNames, providers, locations, defaultS
       triggerShake();
       return false;
     }
-    if (existingNames.map(n => n.toLowerCase()).includes(trimmed.toLowerCase())) {
-      setNameError('A staff member with this name already exists');
+    // Duplicate check is scoped to the same staffType — same name is allowed across Tech/Admin
+    const sameTypeNames = existingPeople
+      .filter(p => (p.staffType ?? 'tech') === form.staffType)
+      .map(p => p.name.toLowerCase());
+    if (sameTypeNames.includes(trimmed.toLowerCase())) {
+      setNameError('A staff member with this name already exists in this section');
       triggerShake();
       return false;
     }
@@ -554,8 +570,10 @@ function AddPersonModal({ onClose, existingNames, providers, locations, defaultS
 
   const handleSave = () => {
     if (!validate()) return;
+    const shouldLink = linkPerson && !!matchingOtherType;
+    const newId = generateId();
     const person = {
-      id: generateId(),
+      id: newId,
       name: form.name.trim(),
       color: form.color,
       employmentType: form.employmentType,
@@ -570,9 +588,13 @@ function AddPersonModal({ onClose, existingNames, providers, locations, defaultS
       availabilityWindows: {},
       accommodations: [],
       targetHours: form.targetHours,
+      linkedPersonId: shouldLink ? matchingOtherType.id : null,
     };
     addPerson(person);
-    addLog({ action: `${person.name} added to roster`, personName: person.name, day: '', detail: '' });
+    if (shouldLink) {
+      updatePerson(matchingOtherType.id, { linkedPersonId: newId });
+    }
+    addLog({ action: `${person.name} added to roster (${form.staffType})`, personName: person.name, day: '', detail: '' });
     onClose();
   };
 
@@ -608,6 +630,17 @@ function AddPersonModal({ onClose, existingNames, providers, locations, defaultS
               onChange={e => { set('name', e.target.value); setNameError(''); }}
             />
             {nameError && <div style={{ fontSize: 12, color: 'var(--red)', marginTop: 4 }}>{nameError}</div>}
+            {matchingOtherType && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)' }}>
+                <input
+                  type="checkbox"
+                  checked={linkPerson}
+                  onChange={e => setLinkPerson(e.target.checked)}
+                  style={{ width: 15, height: 15, cursor: 'pointer', flexShrink: 0 }}
+                />
+                Same person as <strong style={{ color: 'var(--text-primary)' }}>{matchingOtherType.name}</strong> in {matchingOtherType.staffType === 'admin' ? 'Admin' : 'Tech'}? Link their hours
+              </label>
+            )}
           </div>
 
           {/* Color */}
@@ -808,7 +841,7 @@ function StaffTab() {
       {showModal && (
         <AddPersonModal
           onClose={() => setShowModal(false)}
-          existingNames={data.people.map(p => p.name)}
+          existingPeople={data.people}
           providers={data.providers}
           locations={data.locations}
           defaultStaffType={staffSubTab}
