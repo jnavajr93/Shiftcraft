@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { X, Send, Loader } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { DAYS, minutesToTime } from '../data/seed.js';
+import { DAYS, minutesToTime, getRenderedSlotEntries, getSlotPersonId } from '../data/seed.js';
 
 // ─── Build system prompt from current schedule state ──────────────────────────
 function buildSystemPrompt(data, weekLabel) {
@@ -24,12 +24,14 @@ function buildSystemPrompt(data, weekLabel) {
         `### ${day}`,
         ...dayClinics.map(c => {
           const status = c.open ? `${minutesToTime(c.startTime)}–${minutesToTime(c.endTime)}, ${c.patientCount ?? '?'} pts` : 'CLOSED';
-          const slots = Object.entries(c.slots)
-            .filter(([, v]) => v)
-            .map(([slot, id]) => {
-              const person = data.people.find(p => p.id === id);
-              return `${slot}: ${person?.name ?? id}`;
-            });
+          const slots = getRenderedSlotEntries(c)
+            .map(([slot, sv]) => {
+              const pid = getSlotPersonId(sv);
+              if (!pid) return null;
+              const person = data.people.find(p => p.id === pid);
+              return `${slot}: ${person?.name ?? pid}`;
+            })
+            .filter(Boolean);
           return `- ${c.provider} @ ${c.location} [${status}]${slots.length ? ': ' + slots.join(', ') : ': (no assignments)'}`;
         }),
       ];
@@ -94,7 +96,7 @@ function useApplyAction() {
           c.id !== action.clinicId &&
           c.day === clinic.day &&
           c.open &&
-          Object.values(c.slots).includes(action.personId)
+          getRenderedSlotEntries(c).some(([, sv]) => getSlotPersonId(sv) === action.personId)
         );
         if (alreadyOn) {
           return { error: `${person?.name ?? action.personId} is already assigned on ${clinic.day}` };

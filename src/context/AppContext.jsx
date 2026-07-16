@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { getSeedData, migratePerson, generateId, getSlotPersonId, OBS_SLOT_TYPES, getBoardClinics, getAssignmentsForPerson } from '../data/seed.js';
+import { getSeedData, migratePerson, generateId, getSlotPersonId, OBS_SLOT_TYPES, getBoardClinics, getAssignmentsForPerson, getRenderedSlotEntries, getActiveFDSlots } from '../data/seed.js';
 import { supabase } from '../supabase.js';
 import {
   saveSchedule as saveScheduleDB,
@@ -602,34 +602,65 @@ export function AppProvider({ children }) {
         }
       }
 
-      // 3. Stale OBS slot cleanup — runs on every load (idempotent, cheap).
-      // Removes any slot keys from OBS clinics in the week map that are not in OBS_SLOT_TYPES.
-      // These leak in when a prior generation run wrote non-OBS slot types (e.g. 'frontDesk')
-      // to an OBS clinic. applySlotMap strips them from in-memory state, but the Supabase row
-      // must also be cleaned so other clients load clean data.
+      // 3. Stale slot cleanup — runs on every load (idempotent, cheap).
+      // Removes two kinds of invalid data from the Supabase week map:
+      //   a) Non-OBS slot keys on OBS clinics (e.g. 'frontDesk' written by a bad generation run)
+      //   b) Personid in inactive FD slots (e.g. plain 'frontDesk' on a Dr. R Mon/Fri clinic,
+      //      where the card renders openingFrontDesk/closingFrontDesk instead)
+      // applySlotMap already strips these from in-memory state, but the Supabase row must also
+      // be cleaned so other clients load clean data and don't get phantom "already assigned" flags.
+      const staleRemovals = [];  // { action, personName, day }
       {
-        const obsClinicIds = new Set(
-          data.clinics.filter(c => c.location?.toLowerCase() === 'obs').map(c => c.id)
-        );
+        const clinicById = new Map(data.clinics.map(c => [c.id, c]));
+        const personById = new Map((data.people ?? []).map(p => [p.id, p]));
+        const ALL_FD = new Set(['openingFrontDesk', 'closingFrontDesk', 'frontDesk']);
         let weekMapDirty = false;
         const cleanedWeekMap = { ...weekMap };
-        for (const clinicId of obsClinicIds) {
-          const slots = cleanedWeekMap[clinicId];
+
+        for (const [clinicId, slots] of Object.entries(cleanedWeekMap)) {
+          if (clinicId.startsWith('task:')) continue;
           if (!slots || typeof slots !== 'object') continue;
-          const invalidKeys = Object.keys(slots).filter(k => !OBS_SLOT_TYPES.includes(k));
-          if (invalidKeys.length > 0) {
-            console.warn(`[Shiftcraft init] OBS clinic ${clinicId}: removing stale Supabase slot keys:`, invalidKeys);
-            const cleaned = Object.fromEntries(
-              Object.entries(slots).filter(([k]) => OBS_SLOT_TYPES.includes(k))
-            );
-            cleanedWeekMap[clinicId] = cleaned;
+          const clinic = clinicById.get(clinicId);
+          if (!clinic) continue;
+
+          const isObs = clinic.location?.toLowerCase() === 'obs';
+          const activeFD = isObs ? null : new Set(getActiveFDSlots(clinic));
+          const cleanSlots = { ...slots };
+          let clinicDirty = false;
+
+          for (const [slotKey, slotVal] of Object.entries(slots)) {
+            const pid = getSlotPersonId(slotVal);
+            let stale = false;
+            if (isObs && !OBS_SLOT_TYPES.includes(slotKey)) {
+              stale = true;  // non-OBS slot key on OBS clinic
+            } else if (!isObs && ALL_FD.has(slotKey) && !activeFD.has(slotKey)) {
+              stale = true;  // inactive FD slot
+            }
+            if (stale) {
+              if (pid) {
+                const personName = personById.get(pid)?.name ?? pid;
+                const msg = `Removed stale hidden assignment: ${personName} from ${slotKey} @ ${clinic.location} ${clinic.day}`;
+                console.warn(`[Shiftcraft init] ${msg}`);
+                staleRemovals.push({ action: msg, personName, day: clinic.day });
+              }
+              // Clear the slot value (preserve shape for OBS object slots)
+              cleanSlots[slotKey] = (typeof slotVal === 'object' && slotVal !== null)
+                ? { ...slotVal, personId: null }
+                : null;
+              clinicDirty = true;
+            }
+          }
+
+          if (clinicDirty) {
+            cleanedWeekMap[clinicId] = cleanSlots;
             weekMapDirty = true;
           }
         }
+
         if (weekMapDirty) {
           weekMap = cleanedWeekMap;
           saveWeekSlotMapDB(nowWeek, weekMap);
-          console.log('[Shiftcraft init] Cleaned stale OBS slot data and saved to Supabase');
+          console.log(`[Shiftcraft init] Cleaned ${staleRemovals.length} stale slot assignment(s) and saved to Supabase`);
         }
       }
 
@@ -644,13 +675,27 @@ export function AppProvider({ children }) {
 
       const applied = applySlotMap(data.clinics, data.additionalTasks, weekMap);
 
-      // 5. Load changelog
+      // 5. Load changelog; prepend any stale-data removal entries from the cleanup above
       const cl = await loadChangelogDB();
 
       if (cancelled) return;
 
+      const removalEntries = staleRemovals.map(r => ({
+        timestamp: Date.now(),
+        action: r.action,
+        personName: r.personName,
+        day: r.day,
+        detail: '',
+      }));
+      const initialChangelog = removalEntries.length > 0
+        ? [...removalEntries, ...cl].slice(0, 500)
+        : cl;
+      if (removalEntries.length > 0) {
+        saveChangelogDB(initialChangelog);
+      }
+
       setGlobalData({ ...data, ...applied });
-      setChangelog(cl);
+      setChangelog(initialChangelog);
       setIsLoading(false);
     }
 
@@ -804,7 +849,10 @@ export function AppProvider({ children }) {
 
   const weekIsEmpty = useCallback(() => {
     if (!globalData) return true;
-    const allSlotPersonIds = globalData.clinics.flatMap(c => Object.values(c.slots).map(sv => getSlotPersonId(sv)));
+    // Only check rendered slots — inactive FD slots hold stale data and must be invisible.
+    const allSlotPersonIds = globalData.clinics.flatMap(c =>
+      getRenderedSlotEntries(c).map(([, sv]) => getSlotPersonId(sv))
+    );
     const allTasks = globalData.additionalTasks.map(t => t.assignedPersonId);
     return [...allSlotPersonIds, ...allTasks].every(v => v == null);
   }, [globalData]);
@@ -892,6 +940,21 @@ export function AppProvider({ children }) {
     const targetClinic = globalData.clinics.find(c => c.id === clinicId);
     if (!targetClinic) return;
     const isObsAssignment = targetClinic.location?.toLowerCase() === 'obs';
+
+    // Guard: block writes to inactive FD slots (e.g. plain frontDesk on Dr. R Mon/Fri).
+    // The popover only renders active slots, so this should never trigger normally —
+    // it catches any code path that bypasses the popover (drag-and-drop, etc.).
+    if (!isObsAssignment) {
+      const ALL_FD = new Set(['openingFrontDesk', 'closingFrontDesk', 'frontDesk']);
+      const activeFD = new Set(getActiveFDSlots(targetClinic));
+      if (ALL_FD.has(slotType) && !activeFD.has(slotType)) {
+        console.error(
+          `[Shiftcraft] assignSlot: BLOCKED write to inactive FD slot "${slotType}" ` +
+          `on ${targetClinic.provider} ${targetClinic.day}. Active: ${[...activeFD].join(', ')}`
+        );
+        return;
+      }
+    }
 
     let clinics = globalData.clinics;
     const logEntries = [];

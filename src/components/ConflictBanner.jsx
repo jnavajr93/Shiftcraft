@@ -1,19 +1,21 @@
 import { useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { getSlotPersonId } from '../data/seed.js';
+import { getSlotPersonId, getRenderedSlotEntries, getBoardClinics } from '../data/seed.js';
 
 export function detectConflicts(clinics, people) {
   // Returns array of { personId, personName, day, clinicA, clinicB }
   const conflicts = [];
   const personMap = Object.fromEntries(people.map(p => [p.id, p]));
 
+  // Only scan board-visible clinics and rendered slots — stale data in shadow clinics
+  // or inactive FD slots must not trigger false conflict banners.
+  const boardClinics = getBoardClinics(clinics);
   for (const person of people) {
-    // For each day, collect all clinics this person is assigned to
     const byDay = {};
-    for (const clinic of clinics) {
+    for (const clinic of boardClinics) {
       if (!clinic.open) continue;
-      for (const [, slotVal] of Object.entries(clinic.slots)) {
+      for (const [, slotVal] of getRenderedSlotEntries(clinic)) {
         if (getSlotPersonId(slotVal) === person.id) {
           if (!byDay[clinic.day]) byDay[clinic.day] = [];
           if (!byDay[clinic.day].some(c => c.id === clinic.id)) {

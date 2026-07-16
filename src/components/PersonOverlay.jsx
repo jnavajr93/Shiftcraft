@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { DAYS, calcPersonWeeklyHours, getBoardClinics, getSlotLabel, getSlotPersonId, getActiveFDSlots, formatVariableSlotTime, formatOpenerTimeDisplay, formatOpeningFDTimeDisplay, formatClosingOverlayDisplay, formatClosingFDOverlayDisplay, formatScribeTimeDisplay, formatTaskTime, OBS_SLOT_TYPES } from '../data/seed.js';
-
-const ALL_FD_SLOT_TYPES = new Set(['openingFrontDesk', 'closingFrontDesk', 'frontDesk']);
+import { DAYS, calcPersonWeeklyHours, getBoardClinics, getSlotLabel, getSlotPersonId, getRenderedSlotEntries, formatVariableSlotTime, formatOpenerTimeDisplay, formatOpeningFDTimeDisplay, formatClosingOverlayDisplay, formatClosingFDOverlayDisplay, formatScribeTimeDisplay, formatTaskTime, OBS_SLOT_TYPES } from '../data/seed.js';
 import ArcChart from './ArcChart.jsx';
 
 function useIsMobile() {
@@ -19,13 +17,9 @@ function WeekRows({ personIds, clinics, additionalTasks }) {
         clinics
           .filter(c => c.day === day && c.open)
           .forEach(c => {
-            const isObs = c.location?.toLowerCase() === 'obs';
-            // Only check FD slots that the board card actually renders for this clinic.
-            // Hidden FD slots exist in the data but are never visible, so skip them here
-            // to keep the overlay 100% in sync with what appears on the board.
-            const activeFDSet = isObs ? null : new Set(getActiveFDSlots(c));
-            Object.entries(c.slots).forEach(([slotType, slotVal]) => {
-              if (!isObs && ALL_FD_SLOT_TYPES.has(slotType) && !activeFDSet.has(slotType)) return;
+            // getRenderedSlotEntries filters to board-visible slots only:
+            // OBS clinics → 4 OBS types; regular → non-FD + active FD only.
+            getRenderedSlotEntries(c).forEach(([slotType, slotVal]) => {
               const pid = getSlotPersonId(slotVal);
               if (pidSet.has(pid)) {
                 let time;

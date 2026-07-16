@@ -239,6 +239,30 @@ export function getActiveFDSlots(clinic) {
   return isDrRMonFri ? ['openingFrontDesk', 'closingFrontDesk'] : ['frontDesk'];
 }
 
+const ALL_FD_SLOT_KEYS = new Set(['openingFrontDesk', 'closingFrontDesk', 'frontDesk']);
+
+/**
+ * Canonical slot iterator — returns [slotType, slotVal] pairs for ONLY the slots
+ * the board card renders for a given clinic:
+ *   OBS clinics  → only the four OBS slot types
+ *   Regular      → all non-FD slots + only the active FD slot(s) per getActiveFDSlots()
+ *
+ * Use this everywhere assignment visibility matters. Never iterate Object.entries(c.slots)
+ * directly in assignment-detection logic — inactive FD slots hold stale data and must
+ * be invisible to all eligibility, conflict, and hours calculations.
+ */
+export function getRenderedSlotEntries(clinic) {
+  if (!clinic) return [];
+  const isObs = clinic.location?.toLowerCase() === 'obs';
+  if (isObs) {
+    return Object.entries(clinic.slots ?? {}).filter(([k]) => OBS_SLOT_TYPES.includes(k));
+  }
+  const activeFD = new Set(getActiveFDSlots(clinic));
+  return Object.entries(clinic.slots ?? {}).filter(([k]) =>
+    !ALL_FD_SLOT_KEYS.has(k) || activeFD.has(k)
+  );
+}
+
 /**
  * Returns the same subset of clinics the board renders:
  * the first clinic per (location, day) in array order.
@@ -280,7 +304,9 @@ export function getAssignmentsForPerson(nameKey, day, people, clinics) {
   for (const c of getBoardClinics(clinics)) {
     if (c.day !== day || !c.open) continue;
     const isObs = c.location?.toLowerCase() === 'obs';
-    for (const [slotType, slotVal] of Object.entries(c.slots ?? {})) {
+    // Use getRenderedSlotEntries so inactive FD slots (e.g. plain frontDesk on Dr. R Mon/Fri)
+    // are never scanned — stale assignments in hidden slots must be invisible to eligibility checks.
+    for (const [slotType, slotVal] of getRenderedSlotEntries(c)) {
       const pid = getSlotPersonId(slotVal);
       if (pid && samePersonIds.has(pid)) {
         results.push({ clinicId: c.id, slotType, clinic: c, personId: pid, isObs });
@@ -294,14 +320,9 @@ export function calcPersonWeeklyHours(personId, clinics, additionalTasks) {
   let total = 0;
   for (const clinic of clinics) {
     if (!clinic.open) continue;
-    const isObs = clinic.location?.toLowerCase() === 'obs';
-    // For standard clinics, only count the FD slots the card actually renders.
-    // The other FD slots exist in the data but are never visible, so any person
-    // assigned there from a stale AI run must not inflate the hours ring.
-    const activeFD = isObs ? null : new Set(getActiveFDSlots(clinic));
-    const FD_ALL = new Set(['openingFrontDesk', 'closingFrontDesk', 'frontDesk']);
-    for (const [slotType, slotVal] of Object.entries(clinic.slots)) {
-      if (!isObs && FD_ALL.has(slotType) && !activeFD.has(slotType)) continue;
+    // getRenderedSlotEntries filters out inactive FD slots and non-OBS keys on OBS clinics,
+    // so stale assignments in hidden slots never inflate the hours ring.
+    for (const [slotType, slotVal] of getRenderedSlotEntries(clinic)) {
       if (getSlotPersonId(slotVal) === personId) {
         total += calcSlotHours(clinic, slotType);
       }
