@@ -2,10 +2,53 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { X, Send, Loader } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { DAYS, minutesToTime, getRenderedSlotEntries, getSlotPersonId } from '../data/seed.js';
-import { computePatterns, buildPatternSummary } from '../data/patterns.js';
+import { computePatterns } from '../data/patterns.js';
+
+// ─── Build pattern section for system prompt ──────────────────────────────────
+function buildPatternSection(activePatterns, dismissedArr) {
+  const lines = [
+    '## Learned Patterns',
+    'These are staff placement patterns learned from history (manual edits weight 3×, generated weight 1×; score ≥ 2 to appear).',
+    'Pattern key format: `personname:day:location:slottype` — all lowercase, spaces in location replaced by underscores.',
+    '',
+  ];
+
+  if (activePatterns.length === 0 && dismissedArr.length === 0) {
+    lines.push('No patterns learned yet — they appear after schedules are generated and edited.');
+  } else {
+    if (activePatterns.length > 0) {
+      lines.push('**Active** (solver uses these as soft tiebreakers):');
+      for (const p of activePatterns) {
+        lines.push(`- ${p.personName} → ${p.slotType} @ ${p.location} on ${p.day}  (score ${p.score}, ${p.weekCount}w)  [key: ${p.key}]`);
+      }
+    } else {
+      lines.push('No active patterns.');
+    }
+    if (dismissedArr.length > 0) {
+      lines.push('');
+      lines.push('**Dismissed** (blocked — solver ignores these):');
+      for (const p of dismissedArr) {
+        lines.push(`- ${p.personName} → ${p.slotType} @ ${p.location} on ${p.day}  [key: ${p.key}]`);
+      }
+    }
+  }
+
+  lines.push('');
+  lines.push('To dismiss a pattern: <action>{"type":"dismissPattern","key":"<key>"}</action>');
+  lines.push('To restore a dismissed pattern: <action>{"type":"restorePattern","key":"<key>"}</action>');
+  lines.push('');
+  lines.push(
+    'When a user says "stop putting [person] at [location] on [day]", "never schedule [person] as [slot]", ' +
+    'or similar — find the matching key above and emit a dismissPattern action. ' +
+    'If the combination isn\'t in the list yet (score < 2 or no history), tell the user there is no learned pattern for it yet. ' +
+    'For queries like "what patterns have you learned about [person]?", answer in plain language from the list above without emitting any action.'
+  );
+
+  return lines.join('\n');
+}
 
 // ─── Build system prompt from current schedule state ──────────────────────────
-function buildSystemPrompt(data, weekLabel, patternSummary) {
+function buildSystemPrompt(data, weekLabel, activePatterns, dismissedArr) {
   const lines = [
     `You are a scheduling assistant for a medical eye clinic. Today's schedule is for the week of ${weekLabel}.`,
     '',
@@ -60,7 +103,8 @@ function buildSystemPrompt(data, weekLabel, patternSummary) {
     'Tasks: ' + data.additionalTasks.map(t => `${t.day}/${t.label}${t.locationTag ? `@${t.locationTag}` : ''}=${t.id}`).join(', '),
     '',
     'Always explain your reasoning before emitting action blocks. Only emit actions when the user asks you to make a change.',
-    ...(patternSummary ? ['', patternSummary] : []),
+    '',
+    buildPatternSection(activePatterns, dismissedArr),
   ];
   return lines.join('\n');
 }
@@ -85,14 +129,13 @@ function stripActions(text) {
 
 // ─── Apply a single action ────────────────────────────────────────────────────
 function useApplyAction() {
-  const { data, assignSlot, assignTask } = useApp();
+  const { data, assignSlot, assignTask, dismissPattern, undismissPattern, addLog, managerInitials } = useApp();
   return useCallback((action) => {
     if (action.type === 'assign') {
       const clinic = data.clinics.find(c => c.id === action.clinicId);
       if (!clinic) return null;
       const currentId = clinic.slots[action.slot];
       if (currentId && currentId !== action.personId) {
-        // Conflict check: would double-book
         const person = data.people.find(p => p.id === action.personId);
         const alreadyOn = data.clinics.some(c =>
           c.id !== action.clinicId &&
@@ -111,8 +154,32 @@ function useApplyAction() {
       assignTask(action.taskId, action.personId);
       return { ok: true };
     }
+    if (action.type === 'dismissPattern') {
+      if (!action.key) return { error: 'No pattern key provided' };
+      dismissPattern(action.key);
+      addLog({
+        action: `Pattern dismissed via AI chat: ${action.key}`,
+        personName: 'AI',
+        day: '',
+        detail: '',
+        initials: managerInitials ?? undefined,
+      });
+      return { ok: true };
+    }
+    if (action.type === 'restorePattern') {
+      if (!action.key) return { error: 'No pattern key provided' };
+      undismissPattern(action.key);
+      addLog({
+        action: `Pattern restored via AI chat: ${action.key}`,
+        personName: 'AI',
+        day: '',
+        detail: '',
+        initials: managerInitials ?? undefined,
+      });
+      return { ok: true };
+    }
     return null;
-  }, [data, assignSlot, assignTask]);
+  }, [data, assignSlot, assignTask, dismissPattern, undismissPattern, addLog, managerInitials]);
 }
 
 // ─── Message bubble ───────────────────────────────────────────────────────────
@@ -140,7 +207,7 @@ function Bubble({ msg }) {
       </div>
       {hasActions && (
         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3, marginLeft: 2 }}>
-          Applied to schedule
+          Changes applied
         </div>
       )}
     </div>
@@ -151,10 +218,13 @@ function Bubble({ msg }) {
 export default function ChatPanel({ onClose }) {
   const { data, weekLabel, placementHistory, dismissedPatterns } = useApp();
 
-  const patternSummary = useMemo(
-    () => buildPatternSummary(computePatterns(placementHistory, dismissedPatterns)),
+  const patterns = useMemo(
+    () => computePatterns(placementHistory, dismissedPatterns),
     [placementHistory, dismissedPatterns]
   );
+  const activePatterns = useMemo(() => patterns.filter(p => !p.dismissed), [patterns]);
+  const dismissedArr  = useMemo(() => patterns.filter(p =>  p.dismissed),  [patterns]);
+
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -188,7 +258,7 @@ export default function ChatPanel({ onClose }) {
     setMessages(prev => [...prev, assistantMsg]);
 
     try {
-      const system = buildSystemPrompt(data, weekLabel, patternSummary);
+      const system = buildSystemPrompt(data, weekLabel, activePatterns, dismissedArr);
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -257,7 +327,7 @@ export default function ChatPanel({ onClose }) {
     } finally {
       setLoading(false);
     }
-  }, [input, loading, messages, data, weekLabel, applyAction, patternSummary]);
+  }, [input, loading, messages, data, weekLabel, activePatterns, dismissedArr, applyAction]);
 
   const handleKey = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
@@ -277,7 +347,7 @@ export default function ChatPanel({ onClose }) {
       >
         {messages.length === 0 && (
           <div style={{ color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', padding: '24px 0' }}>
-            Ask about the schedule or request changes
+            Ask about the schedule, request changes, or say things like "stop putting [name] at [location] on [day]"
           </div>
         )}
         {messages.map((msg, i) => <Bubble key={i} msg={msg} />)}
