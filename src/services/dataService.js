@@ -41,8 +41,10 @@ export async function loadSchedule() {
 
 // ─── Per-week slot maps ───────────────────────
 // Versioned save — uses the upsert_schedule_data RPC for atomic optimistic concurrency.
-// loadedVersion = null   → first write (no version check, safe upsert)
-// loadedVersion = number → conditional update; returns conflict:true if version mismatch
+// Falls back to plain upsert if the RPC doesn't exist yet (pre-migration).
+//
+// loadedVersion = null   → first write (no version check)
+// loadedVersion = number → conditional update; returns conflict:true if mismatch
 //
 // Return shape: { error, newVersion, conflict }
 export async function saveWeekSlotMap(weekStr, map, loadedVersion = null) {
@@ -52,8 +54,19 @@ export async function saveWeekSlotMap(weekStr, map, loadedVersion = null) {
     p_loaded_version: loadedVersion ?? null,
   })
   if (error) {
-    console.error('[Shiftcraft] Save week error:', error)
-    return { error, newVersion: null, conflict: false }
+    // RPC not found (pre-migration) — fall back to unconditional upsert.
+    // No concurrency protection yet, but saves succeed so nothing is lost.
+    const { error: e2 } = await supabase
+      .from('schedule_data')
+      .upsert(
+        { key: weekKey(weekStr), value: map, updated_at: new Date().toISOString() },
+        { onConflict: 'key' },
+      )
+    if (e2) {
+      console.error('[Shiftcraft] Save week error:', e2)
+      return { error: e2, newVersion: null, conflict: false }
+    }
+    return { error: null, newVersion: null, conflict: false }
   }
   // data = new version number, or null when version didn't match (conflict)
   if (data === null || data === undefined) {
@@ -71,11 +84,13 @@ export async function deleteWeekSlotMap(weekStr) {
   return { error: error ?? null }
 }
 
-// Returns { status, data, version } — version is null if column not yet populated
+// Returns { status, data, version } — version is null if column not yet populated.
+// Uses select('*') so PostgREST never errors on a missing version column:
+// the column is simply absent from the result and data.version resolves to null.
 export async function loadWeekSlotMap(weekStr) {
   const { data, error } = await supabase
     .from('schedule_data')
-    .select('value, version')
+    .select('*')
     .eq('key', weekKey(weekStr))
     .single()
   if (error) {
