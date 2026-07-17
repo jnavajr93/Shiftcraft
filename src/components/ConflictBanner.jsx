@@ -1,40 +1,51 @@
 import { useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { getSlotPersonId, getRenderedSlotEntries, getBoardClinics } from '../data/seed.js';
+import { getSlotPersonId, getRenderedSlotEntries, getBoardClinics, slotEffectiveRange, rangesOverlap } from '../data/seed.js';
 
 export function detectConflicts(clinics, people) {
   // Returns array of { personId, personName, day, clinicA, clinicB }
+  // Uses time-range overlap (same logic as popover eligibility and solver):
+  //   - OBS + anything else same day = conflict regardless of time
+  //   - Two non-OBS assignments = conflict only if their effective time ranges overlap
+  //   - Two non-OBS assignments that don't overlap (split-day) = NOT a conflict
   const conflicts = [];
-  const personMap = Object.fromEntries(people.map(p => [p.id, p]));
-
-  // Only scan board-visible clinics and rendered slots — stale data in shadow clinics
-  // or inactive FD slots must not trigger false conflict banners.
   const boardClinics = getBoardClinics(clinics);
+
   for (const person of people) {
+    // Collect { clinic, slotType } per day — need slot to compute effective range
     const byDay = {};
     for (const clinic of boardClinics) {
       if (!clinic.open) continue;
-      for (const [, slotVal] of getRenderedSlotEntries(clinic)) {
+      for (const [slotType, slotVal] of getRenderedSlotEntries(clinic)) {
         if (getSlotPersonId(slotVal) === person.id) {
           if (!byDay[clinic.day]) byDay[clinic.day] = [];
-          if (!byDay[clinic.day].some(c => c.id === clinic.id)) {
-            byDay[clinic.day].push(clinic);
-          }
+          byDay[clinic.day].push({ clinic, slotType });
         }
       }
     }
-    for (const [day, assigned] of Object.entries(byDay)) {
-      if (assigned.length > 1) {
-        // Multiple clinics on the same day = conflict
-        for (let i = 1; i < assigned.length; i++) {
-          conflicts.push({
-            personId: person.id,
-            personName: person.name,
-            day,
-            clinicA: assigned[0],
-            clinicB: assigned[i],
-          });
+
+    for (const [day, entries] of Object.entries(byDay)) {
+      if (entries.length <= 1) continue;
+
+      const obsEntries    = entries.filter(e => e.clinic.location?.toLowerCase() === 'obs');
+      const nonObsEntries = entries.filter(e => e.clinic.location?.toLowerCase() !== 'obs');
+
+      if (obsEntries.length > 0) {
+        // OBS + any other assignment same day = conflict (day-level, regardless of time)
+        for (const nb of nonObsEntries) {
+          conflicts.push({ personId: person.id, personName: person.name, day, clinicA: obsEntries[0].clinic, clinicB: nb.clinic });
+        }
+      } else {
+        // Non-OBS only: flag only if effective time ranges actually overlap
+        for (let i = 0; i < nonObsEntries.length; i++) {
+          for (let j = i + 1; j < nonObsEntries.length; j++) {
+            const a = nonObsEntries[i];
+            const b = nonObsEntries[j];
+            if (rangesOverlap(slotEffectiveRange(a.slotType, a.clinic), slotEffectiveRange(b.slotType, b.clinic))) {
+              conflicts.push({ personId: person.id, personName: person.name, day, clinicA: a.clinic, clinicB: b.clinic });
+            }
+          }
         }
       }
     }
