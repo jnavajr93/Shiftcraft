@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { getSeedData, migratePerson, generateId, getSlotPersonId, OBS_SLOT_TYPES, getBoardClinics, getAssignmentsForPerson, getRenderedSlotEntries, getActiveFDSlots } from '../data/seed.js';
 import { supabase } from '../supabase.js';
 import {
@@ -9,9 +9,14 @@ import {
   deleteWeekSlotMap as deleteWeekSlotMapDB,
   saveChangelog as saveChangelogDB,
   loadChangelog as loadChangelogDB,
+  loadPlacementHistory as loadPlacementHistoryDB,
+  savePlacementHistory as savePlacementHistoryDB,
+  loadDismissedPatterns as loadDismissedPatternsDB,
+  saveDismissedPatterns as saveDismissedPatternsDB,
   weekKey,
   SCHEDULE_KEY,
 } from '../services/dataService.js';
+import { computeHistoryScores } from '../data/patterns.js';
 
 // localStorage keys kept only for migration and per-device flags
 const STORAGE_KEY = 'shiftcraft.v5';
@@ -530,6 +535,12 @@ export function AppProvider({ children }) {
   // null until loaded from Supabase
   const [globalData, setGlobalData] = useState(null);
 
+  // ─── Placement history & patterns ────────────
+  const [placementHistory, setPlacementHistory] = useState([]);
+  const [dismissedPatterns, setDismissedPatterns] = useState([]);
+  // Stable ref so appendHistory doesn't need placementHistory in its deps.
+  const historyRef = useRef([]);
+
   // ─── Verified save helper ─────────────────────
   // Awaits the Supabase write, retries once on failure, updates save indicator.
   // Returns true on success, false if both attempts fail.
@@ -712,6 +723,22 @@ export function AppProvider({ children }) {
 
       setGlobalData({ ...data, ...applied });
       setChangelog(initialChangelog);
+
+      // 6. Load placement history + dismissed patterns (graceful — app works without them)
+      const [historyResult, dismissedResult] = await Promise.all([
+        loadPlacementHistoryDB(),
+        loadDismissedPatternsDB(),
+      ]);
+      if (!cancelled) {
+        if (historyResult.status === 'ok') {
+          historyRef.current = historyResult.data ?? [];
+          setPlacementHistory(historyResult.data ?? []);
+        }
+        if (dismissedResult.status === 'ok') {
+          setDismissedPatterns(dismissedResult.data ?? []);
+        }
+      }
+
       setIsLoading(false);
     }
 
@@ -942,6 +969,35 @@ export function AppProvider({ children }) {
     setGlobalData(prev => ({ ...prev, clinics, additionalTasks }));
   }, [currentWeek, globalData]);
 
+  // ─── History helpers ─────────────────────────
+  const MAX_HISTORY_WEEKS = 52;
+
+  /** Append new history entries, prune to 52-week rolling window, persist. */
+  const appendHistory = useCallback((newEntries) => {
+    if (!newEntries.length) return;
+    const cutoff = isoWeek(new Date(Date.now() - MAX_HISTORY_WEEKS * 7 * 24 * 60 * 60 * 1000));
+    const pruned = [...historyRef.current, ...newEntries].filter(e => (e.weekStr ?? '') >= cutoff);
+    historyRef.current = pruned;
+    setPlacementHistory(pruned);
+    savePlacementHistoryDB(pruned); // fire-and-forget
+  }, []);
+
+  const dismissPattern = useCallback((key) => {
+    setDismissedPatterns(prev => {
+      const next = [...new Set([...prev, key])];
+      saveDismissedPatternsDB(next);
+      return next;
+    });
+  }, []);
+
+  const undismissPattern = useCallback((key) => {
+    setDismissedPatterns(prev => {
+      const next = prev.filter(k => k !== key);
+      saveDismissedPatternsDB(next);
+      return next;
+    });
+  }, []);
+
   // ─── Clinic mutations ───────────────────────
   const updateClinic = useCallback(async (clinicId, changes) => {
     if (!globalData) return;
@@ -1037,7 +1093,25 @@ export function AppProvider({ children }) {
     setChangelog(log => [...allEntries, ...log].slice(0, 500));
 
     await doSaveWeek(currentWeek, map);
-  }, [currentWeek, globalData, doSaveWeek, managerInitials]);
+
+    // Record history entry for manual slot assignments (not for removals).
+    if (personId && targetClinic) {
+      const existingSlotVal = targetClinic.slots[slotType];
+      const previousPersonId = getSlotPersonId(existingSlotVal);
+      const source = previousPersonId && previousPersonId !== personId ? 'manual-edit' : 'manual-add';
+      const loc = (targetClinic.location ?? '').toLowerCase().replace(/\s+/g, '_');
+      appendHistory([{
+        personName:      person?.name ?? personId,
+        day:             targetClinic.day,
+        location:        loc,
+        slotType,
+        weekStr:         currentWeek,
+        source,
+        managerInitials: managerInitials ?? null,
+        createdAt:       new Date().toISOString(),
+      }]);
+    }
+  }, [currentWeek, globalData, doSaveWeek, managerInitials, appendHistory]);
 
   const updateSlotTime = useCallback(async (clinicId, slotType, start, end) => {
     if (!globalData) return;
@@ -1163,7 +1237,31 @@ export function AppProvider({ children }) {
     const map = extractSlotMap(clinics, globalData.additionalTasks);
     setGlobalData(prev => ({ ...prev, clinics }));
     await doSaveWeek(currentWeek, map);
-  }, [currentWeek, globalData, doSaveWeek]);
+
+    // Record generated assignments in history for pattern learning.
+    const clinicById  = new Map(globalData.clinics.map(c => [c.id, c]));
+    const personById  = new Map((globalData.people ?? []).map(p => [p.id, p]));
+    const histEntries = assignments
+      .filter(a => a.personId)
+      .map(a => {
+        const clinic  = clinicById.get(a.clinicId);
+        const person  = personById.get(a.personId);
+        if (!clinic || !person) return null;
+        const loc = (clinic.location ?? '').toLowerCase().replace(/\s+/g, '_');
+        return {
+          personName:      person.name,
+          day:             clinic.day,
+          location:        loc,
+          slotType:        a.slot,
+          weekStr:         currentWeek,
+          source:          'generated',
+          managerInitials: null,
+          createdAt:       new Date().toISOString(),
+        };
+      })
+      .filter(Boolean);
+    appendHistory(histEntries);
+  }, [currentWeek, globalData, doSaveWeek, appendHistory]);
 
   const restoreClinicSlots = useCallback(async (slotSnapshot) => {
     if (!globalData) return;
@@ -1260,6 +1358,9 @@ export function AppProvider({ children }) {
 
   const data = globalData;
 
+  // ─── Derived: history scores for solver tiebreaking ──
+  const historyScores = useMemo(() => computeHistoryScores(placementHistory), [placementHistory]);
+
   // ─── Week label ─────────────────────────────
   const weekMonday = mondayOfWeek(currentWeek);
   const weekLabel = weekMonday.toLocaleDateString('en-US', {
@@ -1284,6 +1385,8 @@ export function AppProvider({ children }) {
       applyBulkAssignments, restoreClinicSlots,
       addClinic, removeClinic, addLocation, removeLocation,
       changelog, clearChangelog, addLog,
+      placementHistory, dismissedPatterns, historyScores,
+      dismissPattern, undismissPattern,
     }}>
       {children}
     </AppContext.Provider>

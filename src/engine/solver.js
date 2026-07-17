@@ -178,9 +178,12 @@ function isAvailableForShift(personId, shift, isObs, usedRanges) {
  * role from the remaining eligible pool. Mutates `usedRanges`, `weekHours`,
  * `cards`, and `issues` in place.
  *
- * @param isObs  True when this is an OBS shift (triggers full-day blocking).
+ * @param isObs    True when this is an OBS shift (triggers full-day blocking).
+ * @param scoreFn  Optional (personName, day, locationId, roleId) → number.
+ *                 When multiple candidates are eligible, the one with the
+ *                 highest score is preferred (soft historical tiebreaker).
  */
-function fillShift(shift, reservations, usedRanges, weekHours, cards, issues, idx, cfg, day, isObs) {
+function fillShift(shift, reservations, usedRanges, weekHours, cards, issues, idx, cfg, day, isObs, scoreFn) {
   const loc = idx.locations[shift.locationId];
   const req = staffingFor(shift.locationId, cfg);
   const hrs = shiftHours(shift);
@@ -203,12 +206,27 @@ function fillShift(shift, reservations, usedRanges, weekHours, cards, issues, id
     const need = req[roleId].min || 0;
     const have = assigned.filter((a) => a.roleId === roleId).length;
     for (let i = have; i < need; i++) {
-      const candidate = cfg.people.find(
+      // Gather all eligible candidates, then pick the one with the highest
+      // historical score (soft tiebreaker). Without scoreFn, first eligible wins.
+      const eligible = cfg.people.filter(
         (person) =>
           isAvailableForShift(person.id, shift, isObs, usedRanges) &&
           !exceedsHourCap(person.id, hrs, weekHours, cfg) &&
           canStaff(person, shift.locationId, roleId, day, cfg)
       );
+      let candidate;
+      if (eligible.length === 0) {
+        candidate = undefined;
+      } else if (eligible.length === 1 || !scoreFn) {
+        candidate = eligible[0];
+      } else {
+        let bestScore = -1;
+        candidate = eligible[0];
+        for (const p of eligible) {
+          const s = scoreFn(p.name, day, shift.locationId, roleId);
+          if (s > bestScore) { bestScore = s; candidate = p; }
+        }
+      }
       if (candidate) {
         assigned.push({ personId: candidate.id, roleId });
         markPlaced(candidate.id, roleId, shift, isObs, usedRanges, candidate.blockedIds);
@@ -255,7 +273,8 @@ function fillShift(shift, reservations, usedRanges, weekHours, cards, issues, id
 // ── Main entry ────────────────────────────────────────────────────────────────
 // Returns { [day]: { shifts:[...], unplaced:[...], issues:[...] } }
 // week: 'A', 'B', or null (null = include all shifts regardless of week tag)
-export function solve(cfg, week = null) {
+// scoreFn: optional (personName, day, locationId, roleId) → number — historical tiebreaker
+export function solve(cfg, week = null, scoreFn = null) {
   const idx = indexConfig(cfg);
   const result = {};
   const weekHours = {}; // cumulative hours per person across all days
@@ -344,7 +363,7 @@ export function solve(cfg, week = null) {
     }
     mustPairPrePass(phase1ShiftIds, /* isObs */ true);
     for (const shift of phase1Shifts) {
-      fillShift(shift, reservations, usedRanges, weekHours, cards, issues, idx, cfg, day, /* isObs */ true);
+      fillShift(shift, reservations, usedRanges, weekHours, cards, issues, idx, cfg, day, /* isObs */ true, scoreFn);
     }
 
     // ── Phase 1.5: Dr. R split-day (AM → PM, same team carries across) ───────
@@ -353,7 +372,7 @@ export function solve(cfg, week = null) {
     }
     mustPairPrePass(phase15ShiftIds, /* isObs */ false);
     for (const shift of phase15Shifts) {
-      fillShift(shift, reservations, usedRanges, weekHours, cards, issues, idx, cfg, day, /* isObs */ false);
+      fillShift(shift, reservations, usedRanges, weekHours, cards, issues, idx, cfg, day, /* isObs */ false, scoreFn);
     }
 
     // ── Phase 2: Regular shifts ───────────────────────────────────────────────
@@ -362,7 +381,7 @@ export function solve(cfg, week = null) {
     }
     mustPairPrePass(phase2ShiftIds, /* isObs */ false);
     for (const shift of phase2Shifts) {
-      fillShift(shift, reservations, usedRanges, weekHours, cards, issues, idx, cfg, day, /* isObs */ false);
+      fillShift(shift, reservations, usedRanges, weekHours, cards, issues, idx, cfg, day, /* isObs */ false, scoreFn);
     }
 
     // Unplaced: people with no time commitments at all today

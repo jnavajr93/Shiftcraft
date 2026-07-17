@@ -71,6 +71,52 @@ export async function loadWeekSlotMap(weekStr) {
   return { status: 'ok', data: data.value }
 }
 
+// ─── Placement history ───────────────────────
+export const HISTORY_KEY   = 'shiftcraft_placement_history';
+export const DISMISSED_KEY = 'shiftcraft_dismissed_patterns';
+
+export async function loadPlacementHistory() {
+  const { data, error } = await supabase
+    .from('schedule_data')
+    .select('value')
+    .eq('key', HISTORY_KEY)
+    .single();
+  if (error) {
+    if (error.code === 'PGRST116') return { status: 'empty' };
+    return { status: 'error', error };
+  }
+  return { status: 'ok', data: data?.value ?? [] };
+}
+
+export async function savePlacementHistory(entries) {
+  const { error } = await supabase
+    .from('schedule_data')
+    .upsert({ key: HISTORY_KEY, value: entries, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+  if (error) console.error('[Shiftcraft] Save history error:', error);
+  return { error: error ?? null };
+}
+
+export async function loadDismissedPatterns() {
+  const { data, error } = await supabase
+    .from('schedule_data')
+    .select('value')
+    .eq('key', DISMISSED_KEY)
+    .single();
+  if (error) {
+    if (error.code === 'PGRST116') return { status: 'empty' };
+    return { status: 'error', error };
+  }
+  return { status: 'ok', data: data?.value ?? [] };
+}
+
+export async function saveDismissedPatterns(keys) {
+  const { error } = await supabase
+    .from('schedule_data')
+    .upsert({ key: DISMISSED_KEY, value: keys, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+  if (error) console.error('[Shiftcraft] Save dismissed patterns error:', error);
+  return { error: error ?? null };
+}
+
 // ─── Changelog ────────────────────────────────
 export async function saveChangelog(entries) {
   const { error } = await supabase

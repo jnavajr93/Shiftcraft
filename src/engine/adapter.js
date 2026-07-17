@@ -141,8 +141,11 @@ function diagnoseSolverGaps(cfg, result) {
 
 // Main export.
 // globalData  — full AppContext data object (people, locations, clinics, etc.)
+// options.historyScores — optional Map<patternKey, score> from computeHistoryScores().
+//   When provided, the solver uses historical frequency as a soft tiebreaker when
+//   multiple candidates are equally eligible for a slot.
 // Returns { assignments: [{clinicId, slot, personId}], issues: string[] }
-export function generateSchedule(globalData) {
+export function generateSchedule(globalData, options = {}) {
   const openClinics = (globalData.clinics ?? []).filter(c => c.open);
 
   // ── 1. Roles — derived from slot keys present in open clinics ──────────────
@@ -329,7 +332,16 @@ export function generateSchedule(globalData) {
   const cfg = { roles, locations, people, shifts, constraints };
 
   // ── 6. Run solver ─────────────────────────────────────────────────────────
-  const result = solve(cfg, null);
+  // Build a scoreFn from historyScores if provided. The key format matches
+  // patternKey() in patterns.js: personName:day:location:slotType (all lowercase).
+  const { historyScores } = options;
+  const scoreFn = historyScores?.size
+    ? (personName, day, locationId, roleId) => {
+        const key = `${(personName ?? '').trim().toLowerCase()}:${(day ?? '').toLowerCase()}:${locationId}:${(roleId ?? '').toLowerCase()}`;
+        return historyScores.get(key) ?? 0;
+      }
+    : null;
+  const result = solve(cfg, null, scoreFn);
 
   // ── 6b. Diagnostics — log why each unfilled slot has no candidate ─────────
   // Runs a second pass after solve() to explain rejections per person.

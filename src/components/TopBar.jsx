@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Calendar, Sun, Moon, ChevronLeft, ChevronRight,
   History, Printer, Sparkles, Wand2, Loader2, X, CircleHelp, RotateCcw,
-  Download, Upload,
+  Download, Upload, TrendingUp,
 } from 'lucide-react';
 import { useApp, isoWeek, mondayOfWeek } from '../context/AppContext.jsx';
 
@@ -10,6 +10,7 @@ const EXPORT_VERSION = 'shiftcraft-v1';
 import { useTour } from './Tour.jsx';
 import ChangeLogDrawer from './ChangeLogDrawer.jsx';
 import ChatPanel from './ChatPanel.jsx';
+import PatternsPanel from './PatternsPanel.jsx';
 import { generateSchedule } from '../engine/adapter.js';
 import { validateAndRepairAssignments, findObsViolations, findInvalidSlotAssignments } from '../engine/validator.js';
 
@@ -394,6 +395,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
     isAdmin, setIsAdmin, managerInitials, setManagerInitials, theme, setTheme,
     weekLabel, currentWeek, navigateWeek, jumpToWeek, weekIsEmpty, copyFromTwoWeeksAgo, clearWeek,
     data, addLog, applyBulkAssignments, restoreClinicSlots, lastSaved, saveStatus, importWeekData,
+    historyScores,
   } = useApp();
   const weekLabelRef = useRef(null);
   const undoTimerRef = useRef(null);
@@ -424,6 +426,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
   const [showClearModal, setShowClearModal] = useState(false);
   const [showLog, setShowLog] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  const [showPatterns, setShowPatterns] = useState(false);
 
   // ─── Export / Import state ───────────────────
   const [pendingImport, setPendingImport] = useState(null); // parsed file data awaiting confirmation
@@ -566,7 +569,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
     }
 
     try {
-      const { assignments: raw, issues } = generateSchedule(data);
+      const { assignments: raw, issues } = generateSchedule(data, { historyScores });
 
       let assignments = raw;
 
@@ -785,6 +788,14 @@ export default function TopBar({ activeTab, setActiveTab }) {
                 <History size={20} strokeWidth={1.5} />
               </button>
               <button
+                className={`btn btn-icon topbar-mobile-hidden${showPatterns ? ' active' : ''}`}
+                onClick={() => setShowPatterns(s => !s)}
+                aria-label="Learned patterns"
+                title="Learned Patterns"
+              >
+                <TrendingUp size={20} strokeWidth={1.5} />
+              </button>
+              <button
                 className={`btn btn-icon topbar-mobile-hidden${showChat ? ' active' : ''}`}
                 onClick={() => setShowChat(s => !s)}
                 aria-label="Schedule assistant"
@@ -910,6 +921,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
         />
       )}
       {showLog && <ChangeLogDrawer onClose={() => setShowLog(false)} />}
+      {showPatterns && <PatternsPanel onClose={() => setShowPatterns(false)} />}
       {showChat && <ChatPanel onClose={() => setShowChat(false)} />}
       {pendingImport && (
         <ImportModal

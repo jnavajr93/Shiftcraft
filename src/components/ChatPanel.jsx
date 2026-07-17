@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { X, Send, Loader } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { DAYS, minutesToTime, getRenderedSlotEntries, getSlotPersonId } from '../data/seed.js';
+import { computePatterns, buildPatternSummary } from '../data/patterns.js';
 
 // ─── Build system prompt from current schedule state ──────────────────────────
-function buildSystemPrompt(data, weekLabel) {
+function buildSystemPrompt(data, weekLabel, patternSummary) {
   const lines = [
     `You are a scheduling assistant for a medical eye clinic. Today's schedule is for the week of ${weekLabel}.`,
     '',
@@ -59,6 +60,7 @@ function buildSystemPrompt(data, weekLabel) {
     'Tasks: ' + data.additionalTasks.map(t => `${t.day}/${t.label}${t.locationTag ? `@${t.locationTag}` : ''}=${t.id}`).join(', '),
     '',
     'Always explain your reasoning before emitting action blocks. Only emit actions when the user asks you to make a change.',
+    ...(patternSummary ? ['', patternSummary] : []),
   ];
   return lines.join('\n');
 }
@@ -147,7 +149,12 @@ function Bubble({ msg }) {
 
 // ─── Main ChatPanel ───────────────────────────────────────────────────────────
 export default function ChatPanel({ onClose }) {
-  const { data, weekLabel } = useApp();
+  const { data, weekLabel, placementHistory, dismissedPatterns } = useApp();
+
+  const patternSummary = useMemo(
+    () => buildPatternSummary(computePatterns(placementHistory, dismissedPatterns)),
+    [placementHistory, dismissedPatterns]
+  );
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -181,7 +188,7 @@ export default function ChatPanel({ onClose }) {
     setMessages(prev => [...prev, assistantMsg]);
 
     try {
-      const system = buildSystemPrompt(data, weekLabel);
+      const system = buildSystemPrompt(data, weekLabel, patternSummary);
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -250,7 +257,7 @@ export default function ChatPanel({ onClose }) {
     } finally {
       setLoading(false);
     }
-  }, [input, loading, messages, data, weekLabel, applyAction]);
+  }, [input, loading, messages, data, weekLabel, applyAction, patternSummary]);
 
   const handleKey = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
