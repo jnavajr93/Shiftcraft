@@ -191,6 +191,21 @@ export function generateSchedule(globalData) {
   });
 
   // ── 4. Shifts — one per open clinic ───────────────────────────────────────
+  // Dr. R split-day detection: any day with 2+ open Dr. R clinics is a split-day.
+  // Those clinics get priority 5 so the solver processes them as a group (after OBS,
+  // before all other regular clinics). Within the group, AM sorts before PM by startTime,
+  // so the same team fills both halves naturally (the AM effective range doesn't overlap
+  // the PM start, leaving everyone eligible for the second half).
+  const drRByDay = {}; // day → count of open Dr. R clinics
+  for (const clinic of openClinics) {
+    if (clinic.provider === 'Dr. R') drRByDay[clinic.day] = (drRByDay[clinic.day] ?? 0) + 1;
+  }
+  const splitDayClinicIds = new Set(
+    openClinics
+      .filter(c => c.provider === 'Dr. R' && (drRByDay[c.day] ?? 0) >= 2)
+      .map(c => c.id)
+  );
+
   const shifts = openClinics.map(clinic => ({
     id: clinic.id,
     name: clinic.provider,
@@ -200,9 +215,13 @@ export function generateSchedule(globalData) {
     end: clinic.endTime,
     week: null,   // already filtered to current week; pass null so solver runs all
     anchor: true,
-    // FIX 1: OBS clinics get high priority so they are processed before regular clinics
-    // on days where both run. Prevents OBS-capable staff from being consumed by regular slots.
-    priority: clinic.location?.toLowerCase() === 'obs' ? 10 : 0,
+    // Priority:
+    //   10 — OBS (full-day block, must be filled before any regular clinic)
+    //    5 — Dr. R split-day pair (processed consecutively AM→PM, natural carry-across)
+    //    0 — all other regular clinics
+    priority: clinic.location?.toLowerCase() === 'obs' ? 10
+            : splitDayClinicIds.has(clinic.id)         ?  5
+            :                                              0,
   }));
 
   // ── 5. Constraints ────────────────────────────────────────────────────────

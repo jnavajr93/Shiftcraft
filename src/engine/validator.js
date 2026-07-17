@@ -16,48 +16,101 @@ export function personKey(personId, people) {
 }
 
 /**
+ * Effective time range for a given slot at a clinic, matching the solver's
+ * effectiveRange() helper and seed.js's calcSlotHours() defaults.
+ * Custom slot start/end overrides are respected when present.
+ */
+function slotEffectiveRange(slot, clinic) {
+  const sv  = clinic.slots?.[slot];
+  const cs  = (sv && typeof sv === 'object') ? (sv.start ?? null) : null;
+  const ce  = (sv && typeof sv === 'object') ? (sv.end   ?? null) : null;
+  const s   = cs ?? (clinic.startTime ?? 0);
+  const e   = ce ?? (clinic.endTime   ?? 0);
+  switch (slot) {
+    case 'scribe':
+    case 'closing':
+    case 'closingFrontDesk':
+      return { start: s, end: ce ?? (e + 75) };
+    case 'opener':
+    case 'openingFrontDesk':
+      return { start: cs ?? (s - 15), end: e };
+    default:
+      return { start: s, end: e };
+  }
+}
+
+/**
  * Detects double-bookings in a proposed assignment list and auto-repairs them.
- * OBS takes precedence: when a physical person has both an OBS and a non-OBS
- * assignment on the same day, all non-OBS assignments are dropped.
- * When there is no OBS involvement, all but the first same-day assignment are dropped.
+ *
+ * Rules (in priority order):
+ *  1. OBS overrides everything: any physical person with an OBS assignment on a
+ *     given day has all non-OBS assignments for that day dropped — regardless of time.
+ *  2. Two non-OBS assignments whose effective time ranges overlap are a conflict:
+ *     keep the first, drop the rest.
+ *  3. Two non-OBS assignments whose effective time ranges do NOT overlap are LEGAL
+ *     (e.g., Dr. R split-day AM + PM). Both are kept.
+ *
+ * Canonical person identity is name-based: two records with the same display name
+ * represent the same physical person.
  *
  * @param assignments  [{clinicId, slot, personId}]
- * @param clinics      all clinic objects (needs .id, .day, .location)
+ * @param clinics      all clinic objects (needs .id, .day, .location, .startTime, .endTime, .slots)
  * @param people       all person objects (needs .id, .name)
  * @returns { safe: Assignment[], dropped: DroppedEntry[] }
  */
 export function validateAndRepairAssignments(assignments, clinics, people) {
   const clinicById = new Map(clinics.map(c => [c.id, c]));
 
-  // Group by: canonical person key (name) → day → entries
-  const groups = {}; // { [personKey]: { [day]: [{ a, isObs, location }] } }
+  // Group by: canonical person key (name) → day → entries (with effective time ranges)
+  const groups = {};
   for (const a of assignments) {
     const clinic = clinicById.get(a.clinicId);
     if (!clinic) continue;
-    const key = personKey(a.personId, people);
+    const key   = personKey(a.personId, people);
     const isObs = clinic.location?.toLowerCase() === 'obs';
+    const range = isObs ? null : slotEffectiveRange(a.slot, clinic);
     if (!groups[key]) groups[key] = {};
     if (!groups[key][clinic.day]) groups[key][clinic.day] = [];
-    groups[key][clinic.day].push({ a, isObs, location: clinic.location, day: clinic.day });
+    groups[key][clinic.day].push({
+      a, isObs, location: clinic.location, day: clinic.day,
+      start: range?.start ?? 0,
+      end:   range?.end   ?? 0,
+    });
   }
 
   const dropKeys = new Set(); // 'clinicId:slot'
-  const dropped = [];         // for changelog
+  const dropped  = [];
 
   for (const dayMap of Object.values(groups)) {
     for (const entries of Object.values(dayMap)) {
-      if (entries.length <= 1) continue; // no conflict
+      if (entries.length <= 1) continue;
+
       const obsEntries    = entries.filter(e => e.isObs);
       const nonObsEntries = entries.filter(e => !e.isObs);
+
       if (obsEntries.length > 0) {
-        // OBS wins — drop every non-OBS assignment for this person+day
+        // Rule 1: OBS wins — drop all non-OBS assignments regardless of time.
         for (const e of nonObsEntries) {
           dropKeys.add(`${e.a.clinicId}:${e.a.slot}`);
           dropped.push({ personId: e.a.personId, clinicId: e.a.clinicId, slot: e.a.slot, day: e.day, location: e.location });
         }
       } else {
-        // All non-OBS: keep first, drop the rest
-        for (const e of nonObsEntries.slice(1)) {
+        // Rules 2 & 3: check pairwise time overlaps among non-OBS assignments.
+        // Two assignments that do NOT overlap in time are both legal (split-day).
+        // Two assignments that DO overlap in time: keep the earlier-appearing one.
+        const toDrop = new Set();
+        for (let i = 0; i < nonObsEntries.length; i++) {
+          if (toDrop.has(i)) continue;
+          for (let j = i + 1; j < nonObsEntries.length; j++) {
+            if (toDrop.has(j)) continue;
+            const ei = nonObsEntries[i];
+            const ej = nonObsEntries[j];
+            const overlaps = ei.start < ej.end && ej.start < ei.end;
+            if (overlaps) toDrop.add(j); // keep i, drop j
+          }
+        }
+        for (const j of toDrop) {
+          const e = nonObsEntries[j];
           dropKeys.add(`${e.a.clinicId}:${e.a.slot}`);
           dropped.push({ personId: e.a.personId, clinicId: e.a.clinicId, slot: e.a.slot, day: e.day, location: e.location });
         }
