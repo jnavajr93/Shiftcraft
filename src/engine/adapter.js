@@ -117,8 +117,9 @@ function diagnoseSolverGaps(cfg, result) {
       for (const s of card.staffing) {
         if (s.have >= s.min) continue; // filled — skip
         const roleId = s.role; // role name === roleId (adapter sets name = id)
-        // Dr. B Closing/Middle/Training are intentionally not generated — skip in diagnostic.
-        if (shift?.name === 'Dr. B' && ['closing', 'middle', 'training'].includes(roleId)) continue;
+        // All Dr. B tech slots are intentionally controlled — skip in diagnostic.
+        // Scribe/Opener: only Yadi/Marisela, no substitutes; Closing/Middle/Training: always empty.
+        if (shift?.name === 'Dr. B' && ['scribe', 'opener', 'closing', 'middle', 'training'].includes(roleId)) continue;
         anyGap = true;
         console.group(`[Shiftcraft gap] ${day} · ${card.shiftName} @ ${card.location} — ${roleId} (have ${s.have}/${s.min})`);
         for (const person of cfg.people) {
@@ -320,18 +321,34 @@ export function generateSchedule(globalData) {
   // solver output: result[day].shifts[].{ shiftId, assigned: [{personId, role}] }
   // role === idx.roles[roleId].name === slotKey (since we set name = id = slotKey)
   //
-  // Post-filter: strip assignments for slots not required by the specific clinic.
+  // Post-filter 1: strip assignments for slots not required by the specific clinic.
   // Necessary because MIN_STAFF constraints are location-based — when Dr. S at Estrella
   // requires 'closing', the 'estrella__closing' constraint causes the solver to also try
-  // to fill closing for Dr. B at Estrella on shared days. Those assignments must be
-  // dropped before saving so Closing stays empty on Dr. B clinics.
+  // to fill closing for Dr. B at Estrella on shared days.
   const requiredSlotsMap = new Map(
     openClinics.map(c => [c.id, new Set(getRequiredSlots(c, globalData.providers ?? []))])
   );
 
-  // Dr. B optional-slot issues: solver may emit "Dr. B: needs N more closing/middle/training"
-  // because of shared location constraints. Filter these out — they are not real gaps.
-  const DR_B_OPTIONAL = ['closing', 'middle', 'training'];
+  // Post-filter 2: Dr. B tech slots are person-locked — no substitutes.
+  // Scribe: only Yadi. Opener: only Marisela.
+  // If either is off/unavailable, the solver may still fill the slot with someone
+  // else (MIN_STAFF constraint exists); strip those assignments so the slot stays empty.
+  // Closing/Middle/Training are stripped entirely by filter 1 (not in requiredSlotsMap).
+  // FD slots are NOT filtered here — they are filled normally.
+  const DR_B_TECH_SLOTS = new Set(['scribe', 'opener', 'closing', 'middle', 'training']);
+  const peopleList = globalData.people ?? [];
+  const yadiIds = new Set(
+    peopleList.filter(p => p.name.trim().toLowerCase() === 'yadi').map(p => p.id)
+  );
+  const mariselaIds = new Set(
+    peopleList.filter(p => p.name.trim().toLowerCase() === 'marisela').map(p => p.id)
+  );
+  // Clinic ID → provider name lookup for Dr. B check
+  const clinicProviderMap = new Map(openClinics.map(c => [c.id, c.provider]));
+
+  // All Dr. B tech slot issues are intentional — suppress from changelog.
+  // Covers: scribe/opener (no-substitute rule), closing/middle/training (always empty).
+  const DR_B_TECH_ISSUE_ROLES = ['scribe', 'opener', 'closing', 'middle', 'training'];
 
   const assignments = [];
   const issues = [];
@@ -339,16 +356,25 @@ export function generateSchedule(globalData) {
   for (const dayResult of Object.values(result)) {
     for (const card of dayResult.shifts) {
       const reqSlots = requiredSlotsMap.get(card.shiftId);
+      const isDrB = clinicProviderMap.get(card.shiftId) === 'Dr. B';
       for (const a of card.assigned) {
         if (!a.personId || !a.role) continue;
-        if (reqSlots && !reqSlots.has(a.role)) continue; // solver filled a non-required slot
+        // Filter 1: slot must be required by this specific clinic
+        if (reqSlots && !reqSlots.has(a.role)) continue;
+        // Filter 2: Dr. B tech slots — only the designated person, no substitutes
+        if (isDrB && DR_B_TECH_SLOTS.has(a.role)) {
+          if (a.role === 'scribe'  && !yadiIds.has(a.personId))    continue;
+          if (a.role === 'opener'  && !mariselaIds.has(a.personId)) continue;
+          // closing/middle/training already blocked by filter 1; explicit guard for safety
+          if (['closing', 'middle', 'training'].includes(a.role))   continue;
+        }
         assignments.push({ clinicId: card.shiftId, slot: a.role, personId: a.personId });
       }
     }
-    // Filter issues for Dr. B slots that are intentionally left empty.
+    // Suppress all Dr. B tech slot issues — empty slots are intentional by design.
     const dayIssues = (dayResult.issues ?? []).filter(issue =>
       !(issue.startsWith('Dr. B:') &&
-        DR_B_OPTIONAL.some(r => issue.includes(`more ${r}`)))
+        DR_B_TECH_ISSUE_ROLES.some(r => issue.includes(`more ${r}`)))
     );
     issues.push(...dayIssues);
   }
