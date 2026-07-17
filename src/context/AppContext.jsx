@@ -15,6 +15,7 @@ import {
   saveDismissedPatterns as saveDismissedPatternsDB,
   weekKey,
   SCHEDULE_KEY,
+  CHANGELOG_KEY,
 } from '../services/dataService.js';
 import { computeHistoryScores } from '../data/patterns.js';
 
@@ -541,21 +542,67 @@ export function AppProvider({ children }) {
   // Stable ref so appendHistory doesn't need placementHistory in its deps.
   const historyRef = useRef([]);
 
+  // ─── Realtime & concurrency ────────────────
+  // Per-week version loaded from DB — used for conditional (optimistic) saves.
+  const weekVersionRef = useRef({}); // { [weekStr]: number | null }
+  // Channel ref so presence can be tracked after manager logs in/out.
+  const rtChannelRef = useRef(null);
+  // Stable ref for manager initials — avoids stale closure in Realtime handler.
+  const managerInitialsRef = useRef(null);
+  // Guard: skip the changelog save useEffect when the update came from Realtime.
+  const changelogFromRemoteRef = useRef(false);
+  // Presence: other managers currently viewing this week.
+  const [presentManagers, setPresentManagers] = useState([]);
+  // Conflict toast: shown when a save is rejected due to a version mismatch.
+  const [conflictToast, setConflictToast] = useState(null);
+  const conflictToastTimerRef = useRef(null);
+
   // ─── Verified save helper ─────────────────────
-  // Awaits the Supabase write, retries once on failure, updates save indicator.
-  // Returns true on success, false if both attempts fail.
+  // Versioned conditional save via upsert_schedule_data RPC.
+  // On conflict (another manager saved between our load and this save):
+  //   - fetches latest, applies to local state, shows conflict toast
+  //   - returns false (caller's pending change is lost — user must redo)
+  // On network error: retries once, then gives up.
+  // Returns true on success, false on conflict or permanent error.
   const doSaveWeek = useCallback(async (weekStr, map) => {
     setSaveStatus('saving');
-    let result = await saveWeekSlotMapDB(weekStr, map);
+
+    const trySave = () =>
+      saveWeekSlotMapDB(weekStr, map, weekVersionRef.current[weekStr] ?? null);
+
+    let result = await trySave();
+
     if (result.error) {
-      // Retry once after a brief pause
+      // Retry once on transient network error (same version — safe if first write failed)
       await new Promise(r => setTimeout(r, 1200));
-      result = await saveWeekSlotMapDB(weekStr, map);
+      result = await trySave();
     }
+
     if (result.error) {
       setSaveStatus('error');
       return false;
     }
+
+    if (result.conflict) {
+      // Version mismatch: another manager wrote ahead of us.
+      // Fetch latest, apply to state so the board shows current truth.
+      const latest = await loadWeekSlotMapDB(weekStr);
+      if (latest.status === 'ok') {
+        weekVersionRef.current[weekStr] = latest.version ?? null;
+        setGlobalData(g => {
+          if (!g) return g;
+          const applied = applySlotMap(g.clinics, g.additionalTasks, latest.data);
+          return { ...g, ...applied };
+        });
+      }
+      setSaveStatus('error');
+      clearTimeout(conflictToastTimerRef.current);
+      setConflictToast('Schedule updated by another manager — board refreshed');
+      conflictToastTimerRef.current = setTimeout(() => setConflictToast(null), 7000);
+      return false;
+    }
+
+    weekVersionRef.current[weekStr] = result.newVersion ?? null;
     setLastSaved(Date.now());
     setSaveStatus('saved');
     clearTimeout(saveStatusTimerRef.current);
@@ -615,17 +662,20 @@ export function AppProvider({ children }) {
       if (weekResult.status === 'ok') {
         // Cloud has real slot data — use it. Never overwrite with localStorage.
         weekMap = weekResult.data;
+        weekVersionRef.current[nowWeek] = weekResult.version ?? null;
       } else {
         // status === 'empty': row genuinely does not exist — safe to seed
         const localMap = readLocalWeekSlotMap(nowWeek);
         if (localMap) {
           // Migrate localStorage data up to Supabase (only when cloud has no row)
           weekMap = localMap;
-          saveWeekSlotMapDB(nowWeek, localMap);
+          const seedResult = await saveWeekSlotMapDB(nowWeek, localMap, null);
+          if (!seedResult.conflict) weekVersionRef.current[nowWeek] = seedResult.newVersion ?? null;
         } else {
           // Brand-new week: seed a blank map
           weekMap = blankSlotMap(data.clinics, data.additionalTasks);
-          saveWeekSlotMapDB(nowWeek, weekMap);
+          const seedResult = await saveWeekSlotMapDB(nowWeek, weekMap, null);
+          if (!seedResult.conflict) weekVersionRef.current[nowWeek] = seedResult.newVersion ?? null;
         }
       }
 
@@ -761,45 +811,143 @@ export function AppProvider({ children }) {
     localStorage.setItem('shiftcraft.theme', theme);
   }, [theme]);
 
+  // ─── Keep stable refs in sync ────────────────
+  useEffect(() => { managerInitialsRef.current = managerInitials; }, [managerInitials]);
+
   // ─── Changelog ────────────────────────────────
   useEffect(() => {
     if (isLoading) return;
+    // Skip saving when this render was triggered by a Realtime push from another client.
+    // Without this guard the save would echo back and trigger a Realtime loop.
+    if (changelogFromRemoteRef.current) {
+      changelogFromRemoteRef.current = false;
+      return;
+    }
     saveChangelogDB(changelog.slice(0, 500));
   }, [changelog, isLoading]);
 
-  // ─── Real-time sync ───────────────────────────
+  // ─── Real-time sync ──────────────────────────
+  // Per-week channel with Presence + postgres_changes + reconnect handling.
+  // Channel is recreated whenever the viewed week changes so Presence is
+  // automatically scoped to people looking at the same week.
   useEffect(() => {
     if (isLoading) return;
 
+    const wk = weekKey(currentWeek);
+    let wasDisconnected = false;
+
     const channel = supabase
-      .channel('schedule_changes')
+      .channel(`shiftcraft:week:${currentWeek}`)
+
+      // ── postgres_changes — slot, definition, and changelog updates ──
       .on('postgres_changes', {
-        event: 'UPDATE',
+        event: '*',
         schema: 'public',
         table: 'schedule_data',
       }, (payload) => {
-        const { key, value } = payload.new;
-        if (key === weekKey(currentWeek)) {
-          // Another user updated this week's slots
+        const { key, value, version } = payload.new ?? {};
+
+        if (key === wk) {
+          // Echo suppression: if our local version is already ≥ remote version,
+          // this is our own broadcast — skip to avoid overwriting in-flight edits.
+          const local = weekVersionRef.current[currentWeek];
+          if (local !== null && local !== undefined && version !== null && version <= local) return;
+          // Apply remote slot update and record the new version.
+          weekVersionRef.current[currentWeek] = version ?? null;
           setGlobalData(g => {
             if (!g) return g;
             const applied = applySlotMap(g.clinics, g.additionalTasks, value);
             return { ...g, ...applied };
           });
         } else if (key === SCHEDULE_KEY) {
-          // Another user updated global definitions (people, clinics)
           setGlobalData(g => {
             if (!g) return g;
             const currentMap = extractSlotMap(g.clinics, g.additionalTasks);
-            const applied = applySlotMap(value.clinics ?? g.clinics, value.additionalTasks ?? g.additionalTasks, currentMap);
+            const applied = applySlotMap(
+              value.clinics ?? g.clinics,
+              value.additionalTasks ?? g.additionalTasks,
+              currentMap,
+            );
             return { ...value, ...applied };
           });
+        } else if (key === CHANGELOG_KEY) {
+          // Merge remote changelog — guard against echo loop in the save useEffect.
+          if (Array.isArray(value) && value.length > 0) {
+            changelogFromRemoteRef.current = true;
+            setChangelog(value.slice(0, 500));
+          }
         }
       })
-      .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+      // ── Presence — who else is viewing this week ──
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState();
+        const mine = managerInitialsRef.current;
+        const others = Object.values(state)
+          .flat()
+          .map(p => p.initials)
+          .filter(i => i && i !== mine);
+        setPresentManagers([...new Set(others)]);
+      })
+      .on('presence', { event: 'join' }, ({ newPresences }) => {
+        const mine = managerInitialsRef.current;
+        setPresentManagers(prev => {
+          const next = new Set(prev);
+          for (const p of newPresences) {
+            if (p.initials && p.initials !== mine) next.add(p.initials);
+          }
+          return [...next];
+        });
+      })
+      .on('presence', { event: 'leave' }, ({ leftPresences }) => {
+        const leaving = new Set(leftPresences.map(p => p.initials));
+        setPresentManagers(prev => prev.filter(i => !leaving.has(i)));
+      })
+
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          if (wasDisconnected) {
+            // Reconnected after sleep/blip — refetch to catch up on missed changes.
+            wasDisconnected = false;
+            const r = await loadWeekSlotMapDB(currentWeek);
+            if (r.status === 'ok') {
+              weekVersionRef.current[currentWeek] = r.version ?? null;
+              setGlobalData(g => {
+                if (!g) return g;
+                const applied = applySlotMap(g.clinics, g.additionalTasks, r.data);
+                return { ...g, ...applied };
+              });
+            }
+          }
+          // Track presence if manager is already logged in.
+          const initials = managerInitialsRef.current;
+          if (initials) channel.track({ initials, joinedAt: Date.now() });
+        } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
+          wasDisconnected = true;
+        }
+      });
+
+    rtChannelRef.current = channel;
+
+    return () => {
+      supabase.removeChannel(channel);
+      rtChannelRef.current = null;
+      setPresentManagers([]);
+    };
+  // currentWeek intentionally in deps: recreate channel on week navigation.
   }, [isLoading, currentWeek]);
+
+  // ── Presence tracking — manager login / logout ──
+  // Runs when admin status changes while the channel is already subscribed.
+  useEffect(() => {
+    const ch = rtChannelRef.current;
+    if (!ch) return;
+    if (isAdmin && managerInitials) {
+      ch.track({ initials: managerInitials, joinedAt: Date.now() });
+    } else {
+      ch.untrack();
+    }
+  }, [isAdmin, managerInitials]);
 
   const addLog = useCallback((entry) => {
     setChangelog(prev => [{
@@ -837,14 +985,17 @@ export function AppProvider({ children }) {
     let map;
     if (weekResult.status === 'ok') {
       map = weekResult.data;
+      weekVersionRef.current[next] = weekResult.version ?? null;
     } else if (weekResult.status === 'empty') {
       const localMap = readLocalWeekSlotMap(next);
       if (localMap) {
         map = localMap;
-        saveWeekSlotMapDB(next, localMap); // migrate localStorage → Supabase
+        const sr = await saveWeekSlotMapDB(next, localMap, null);
+        if (!sr.conflict) weekVersionRef.current[next] = sr.newVersion ?? null;
       } else {
         map = blankSlotMap(globalData.clinics, globalData.additionalTasks);
-        saveWeekSlotMapDB(next, map); // seed blank week (safe: confirmed empty)
+        const sr = await saveWeekSlotMapDB(next, map, null);
+        if (!sr.conflict) weekVersionRef.current[next] = sr.newVersion ?? null;
       }
     } else {
       // Load error — do not navigate, keep current week, show error
@@ -869,14 +1020,17 @@ export function AppProvider({ children }) {
     let map;
     if (weekResult.status === 'ok') {
       map = weekResult.data;
+      weekVersionRef.current[targetWeek] = weekResult.version ?? null;
     } else if (weekResult.status === 'empty') {
       const localMap = readLocalWeekSlotMap(targetWeek);
       if (localMap) {
         map = localMap;
-        saveWeekSlotMapDB(targetWeek, localMap);
+        const sr = await saveWeekSlotMapDB(targetWeek, localMap, null);
+        if (!sr.conflict) weekVersionRef.current[targetWeek] = sr.newVersion ?? null;
       } else {
         map = blankSlotMap(globalData.clinics, globalData.additionalTasks);
-        saveWeekSlotMapDB(targetWeek, map);
+        const sr = await saveWeekSlotMapDB(targetWeek, map, null);
+        if (!sr.conflict) weekVersionRef.current[targetWeek] = sr.newVersion ?? null;
       }
     } else {
       setSaveStatus('error');
@@ -1387,6 +1541,7 @@ export function AppProvider({ children }) {
       changelog, clearChangelog, addLog,
       placementHistory, dismissedPatterns, historyScores,
       dismissPattern, undismissPattern,
+      presentManagers, conflictToast, setConflictToast,
     }}>
       {children}
     </AppContext.Provider>

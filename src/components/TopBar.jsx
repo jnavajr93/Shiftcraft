@@ -395,7 +395,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
     isAdmin, setIsAdmin, managerInitials, setManagerInitials, theme, setTheme,
     weekLabel, currentWeek, navigateWeek, jumpToWeek, weekIsEmpty, copyFromTwoWeeksAgo, clearWeek,
     data, addLog, applyBulkAssignments, restoreClinicSlots, lastSaved, saveStatus, importWeekData,
-    historyScores,
+    historyScores, presentManagers, conflictToast, setConflictToast,
   } = useApp();
   const weekLabelRef = useRef(null);
   const undoTimerRef = useRef(null);
@@ -830,6 +830,25 @@ export default function TopBar({ activeTab, setActiveTab }) {
           >
             <CircleHelp size={20} strokeWidth={1.5} />
           </button>
+          {/* Presence: other managers viewing this week */}
+          {presentManagers.length > 0 && (
+            <div className="topbar-mobile-hidden" style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              {presentManagers.map(initials => (
+                <span
+                  key={initials}
+                  title={`${initials} is also editing this week`}
+                  style={{
+                    padding: '1px 6px', borderRadius: 4, fontSize: 10, fontWeight: 600,
+                    background: 'var(--accent-subtle, rgba(59,130,246,0.12))',
+                    border: '0.5px solid var(--accent, #3b82f6)',
+                    color: 'var(--accent, #3b82f6)', letterSpacing: 0.5,
+                  }}
+                >
+                  {initials}
+                </span>
+              ))}
+            </div>
+          )}
           {saveStatus === 'error' && (
             <span className="topbar-mobile-hidden" style={{ fontSize: 11, color: '#dc2626', fontWeight: 500, whiteSpace: 'nowrap' }}>
               ⚠ Unsaved changes
@@ -880,6 +899,22 @@ export default function TopBar({ activeTab, setActiveTab }) {
 
       {copyToast && (
         <div className="copy-toast">{copyToast}</div>
+      )}
+
+      {/* Conflict toast — shown when a concurrent save was rejected */}
+      {conflictToast && (
+        <div
+          className="copy-toast"
+          style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--amber-bg, #fef3c7)', color: '#92400e', border: '1px solid #fcd34d', maxWidth: 380 }}
+        >
+          <span style={{ flex: 1 }}>⚠ {conflictToast}</span>
+          <button
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', display: 'flex', padding: 2, flexShrink: 0 }}
+            onClick={() => setConflictToast(null)}
+          >
+            <X size={14} />
+          </button>
+        </div>
       )}
 
       {/* Undo toast — top-center so it doesn't cover the hours bar; auto-dismisses after 4 s */}

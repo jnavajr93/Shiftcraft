@@ -40,12 +40,26 @@ export async function loadSchedule() {
 }
 
 // ─── Per-week slot maps ───────────────────────
-export async function saveWeekSlotMap(weekStr, map) {
-  const { error } = await supabase
-    .from('schedule_data')
-    .upsert({ key: weekKey(weekStr), value: map, updated_at: new Date().toISOString() }, { onConflict: 'key' })
-  if (error) console.error('[Shiftcraft] Save week error:', error)
-  return { error: error ?? null }
+// Versioned save — uses the upsert_schedule_data RPC for atomic optimistic concurrency.
+// loadedVersion = null   → first write (no version check, safe upsert)
+// loadedVersion = number → conditional update; returns conflict:true if version mismatch
+//
+// Return shape: { error, newVersion, conflict }
+export async function saveWeekSlotMap(weekStr, map, loadedVersion = null) {
+  const { data, error } = await supabase.rpc('upsert_schedule_data', {
+    p_key:            weekKey(weekStr),
+    p_value:          map,
+    p_loaded_version: loadedVersion ?? null,
+  })
+  if (error) {
+    console.error('[Shiftcraft] Save week error:', error)
+    return { error, newVersion: null, conflict: false }
+  }
+  // data = new version number, or null when version didn't match (conflict)
+  if (data === null || data === undefined) {
+    return { error: null, newVersion: null, conflict: true }
+  }
+  return { error: null, newVersion: data, conflict: false }
 }
 
 export async function deleteWeekSlotMap(weekStr) {
@@ -57,10 +71,11 @@ export async function deleteWeekSlotMap(weekStr) {
   return { error: error ?? null }
 }
 
+// Returns { status, data, version } — version is null if column not yet populated
 export async function loadWeekSlotMap(weekStr) {
   const { data, error } = await supabase
     .from('schedule_data')
-    .select('value')
+    .select('value, version')
     .eq('key', weekKey(weekStr))
     .single()
   if (error) {
@@ -68,7 +83,7 @@ export async function loadWeekSlotMap(weekStr) {
     return { status: 'error', error }
   }
   if (!data?.value) return { status: 'empty' }
-  return { status: 'ok', data: data.value }
+  return { status: 'ok', data: data.value, version: data.version ?? null }
 }
 
 // ─── Placement history ───────────────────────
