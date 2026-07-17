@@ -316,6 +316,38 @@ export function getAssignmentsForPerson(nameKey, day, people, clinics) {
   return results;
 }
 
+/**
+ * Effective time range for a slot at a clinic, with role-based buffers.
+ * Matches the solver's effectiveRange() helper.
+ * Custom per-slot start/end overrides are respected when present.
+ */
+export function slotEffectiveRange(slot, clinic) {
+  const sv  = clinic.slots?.[slot];
+  const cs  = (sv && typeof sv === 'object') ? (sv.start ?? null) : null;
+  const ce  = (sv && typeof sv === 'object') ? (sv.end   ?? null) : null;
+  const s   = cs ?? (clinic.startTime ?? 0);
+  const e   = ce ?? (clinic.endTime   ?? 0);
+  switch (slot) {
+    case 'scribe':
+    case 'closing':
+    case 'closingFrontDesk':
+      return { start: s, end: ce ?? (e + 75) };
+    case 'opener':
+    case 'openingFrontDesk':
+      return { start: cs ?? (s - 15), end: e };
+    default:
+      return { start: s, end: e };
+  }
+}
+
+/**
+ * True if two time ranges overlap (strict — touching boundaries do NOT overlap).
+ * Intentional: allows split-day clinics where AM end === PM start.
+ */
+export function rangesOverlap(a, b) {
+  return a.start < b.end && b.start < a.end;
+}
+
 export function calcPersonWeeklyHours(personId, clinics, additionalTasks) {
   let total = 0;
   for (const clinic of clinics) {

@@ -9,6 +9,7 @@ import {
 } from '@dnd-kit/core';
 
 import { AppProvider, useApp } from './context/AppContext.jsx';
+import { getAssignmentsForPerson, slotEffectiveRange, rangesOverlap } from './data/seed.js';
 import { TourProvider } from './components/Tour.jsx';
 import TopBar from './components/TopBar.jsx';
 import Board from './components/Board.jsx';
@@ -104,12 +105,30 @@ function AppContent() {
     const parts = String(over.id).split(':');
     if (parts.length === 3 && parts[0] === 'slot') {
       // Clinic slot: 'slot:clinicId:slotType'
-      assignSlot(parts[1], parts[2], active.id);
+      const [, clinicId, slotType] = parts;
+      const personId = active.id;
+      const clinic = data.clinics.find(c => c.id === clinicId);
+      if (clinic) {
+        const person = data.people.find(p => p.id === personId);
+        if (person) {
+          const nameKey = person.name.trim().toLowerCase();
+          const isObsTarget = clinic.location?.toLowerCase() === 'obs';
+          const targetRange = isObsTarget ? null : slotEffectiveRange(slotType, clinic);
+          const dayAssignments = getAssignmentsForPerson(nameKey, clinic.day, data.people, data.clinics);
+          const blocked = dayAssignments.some(a => {
+            if (a.clinicId === clinicId && a.slotType === slotType) return false;
+            if (isObsTarget || a.isObs) return true;
+            return rangesOverlap(targetRange, slotEffectiveRange(a.slotType, a.clinic));
+          });
+          if (blocked) return;
+        }
+      }
+      assignSlot(clinicId, slotType, personId);
     } else if (parts.length === 2 && parts[0] === 'task') {
       // Task slot: 'task:taskId'
       assignTask(parts[1], active.id);
     }
-  }, [assignSlot, assignTask]);
+  }, [assignSlot, assignTask, data]);
 
   const openPerson = useCallback((personId) => setSelectedPersonId(personId), []);
 

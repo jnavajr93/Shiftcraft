@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp } from '../context/AppContext.jsx';
 import { Trash2, Zap } from 'lucide-react';
-import { DAYS, getSlotPersonId, OBS_SLOT_TYPES, getAssignmentsForPerson } from '../data/seed.js';
+import { DAYS, getSlotPersonId, OBS_SLOT_TYPES, getAssignmentsForPerson, slotEffectiveRange, rangesOverlap, minutesToTime } from '../data/seed.js';
 
 // ─── Portal positioning hook ──────────────────────────────────────────────────
 // Renders the popover at a fixed viewport position computed from the trigger element.
@@ -82,25 +82,24 @@ function ineligibleReason(person, clinic, slotType, clinics, additionalTasks, al
   const nameKey = person.name.trim().toLowerCase();
   const dayAssignments = getAssignmentsForPerson(nameKey, clinic.day, allPeople ?? [], clinics);
 
-  // OBS precedence: if assigning to a non-OBS slot and person already has an OBS
-  // assignment that day (under any same-name record), block with a specific error.
-  const isObsSlot = clinic.location?.toLowerCase() === 'obs';
-  if (!isObsSlot && dayAssignments.some(a => a.isObs)) {
-    const obs = dayAssignments.filter(a => a.isObs);
-    console.warn(`[Shiftcraft eligibility] ${person.name} blocked (OBS precedence) on ${clinic.day}:`,
-      obs.map(a => ({ clinicId: a.clinicId, location: a.clinic?.location, provider: a.clinic?.provider, slotType: a.slotType, personId: a.personId }))
-    );
-    return 'Assigned to OBS this day';
-  }
+  // OBS is always a full-day block (in both directions).
+  // Non-OBS assignments block only if their effective time ranges overlap.
+  const isObsTarget = clinic.location?.toLowerCase() === 'obs';
+  const targetRange = isObsTarget ? null : slotEffectiveRange(slotType, clinic);
 
-  // Already assigned to any board clinic slot today, except the exact slot this popover is for
-  const blocking = dayAssignments.filter(a => !(a.clinicId === clinic.id && a.slotType === slotType));
-  const clinicAssigned = blocking.length > 0;
-  if (clinicAssigned) {
-    console.warn(`[Shiftcraft eligibility] ${person.name} blocked (already assigned) on ${clinic.day}:`,
-      blocking.map(a => ({ clinicId: a.clinicId, location: a.clinic?.location, provider: a.clinic?.provider, slotType: a.slotType, personId: a.personId, isObs: a.isObs }))
-    );
-    return 'Already assigned today';
+  const blocking = dayAssignments.filter(a => {
+    if (a.clinicId === clinic.id && a.slotType === slotType) return false; // same slot, skip
+    if (isObsTarget || a.isObs) return true; // OBS = day-level block in both directions
+    return rangesOverlap(targetRange, slotEffectiveRange(a.slotType, a.clinic));
+  });
+
+  if (blocking.length > 0) {
+    const b = blocking[0];
+    if (b.isObs) return 'Assigned to OBS this day';
+    if (isObsTarget) return 'Already assigned today';
+    const br = slotEffectiveRange(b.slotType, b.clinic);
+    const label = b.clinic.provider || b.clinic.location;
+    return `Overlaps ${label} ${minutesToTime(br.start)}–${minutesToTime(br.end)}`;
   }
 
   // Already assigned to an additional task on this day

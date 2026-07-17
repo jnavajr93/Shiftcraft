@@ -1,3 +1,5 @@
+import { slotEffectiveRange } from '../data/seed.js';
+
 /**
  * Post-generation schedule validation.
  *
@@ -13,30 +15,6 @@
 export function personKey(personId, people) {
   const p = (people ?? []).find(q => q.id === personId);
   return p ? p.name.trim().toLowerCase() : personId;
-}
-
-/**
- * Effective time range for a given slot at a clinic, matching the solver's
- * effectiveRange() helper and seed.js's calcSlotHours() defaults.
- * Custom slot start/end overrides are respected when present.
- */
-function slotEffectiveRange(slot, clinic) {
-  const sv  = clinic.slots?.[slot];
-  const cs  = (sv && typeof sv === 'object') ? (sv.start ?? null) : null;
-  const ce  = (sv && typeof sv === 'object') ? (sv.end   ?? null) : null;
-  const s   = cs ?? (clinic.startTime ?? 0);
-  const e   = ce ?? (clinic.endTime   ?? 0);
-  switch (slot) {
-    case 'scribe':
-    case 'closing':
-    case 'closingFrontDesk':
-      return { start: s, end: ce ?? (e + 75) };
-    case 'opener':
-    case 'openingFrontDesk':
-      return { start: cs ?? (s - 15), end: e };
-    default:
-      return { start: s, end: e };
-  }
 }
 
 /**

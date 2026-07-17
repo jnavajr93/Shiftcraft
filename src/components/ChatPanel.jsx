@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { X, Send, Loader } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { DAYS, minutesToTime, getRenderedSlotEntries, getSlotPersonId } from '../data/seed.js';
+import { DAYS, minutesToTime, getRenderedSlotEntries, getSlotPersonId, getAssignmentsForPerson, slotEffectiveRange, rangesOverlap } from '../data/seed.js';
 import { computePatterns } from '../data/patterns.js';
 
 // ─── Build pattern section for system prompt ──────────────────────────────────
@@ -134,18 +134,21 @@ function useApplyAction() {
     if (action.type === 'assign') {
       const clinic = data.clinics.find(c => c.id === action.clinicId);
       if (!clinic) return null;
-      const currentId = clinic.slots[action.slot];
-      if (currentId && currentId !== action.personId) {
-        const person = data.people.find(p => p.id === action.personId);
-        const alreadyOn = data.clinics.some(c =>
-          c.id !== action.clinicId &&
-          c.day === clinic.day &&
-          c.open &&
-          getRenderedSlotEntries(c).some(([, sv]) => getSlotPersonId(sv) === action.personId)
-        );
-        if (alreadyOn) {
-          return { error: `${person?.name ?? action.personId} is already assigned on ${clinic.day}` };
-        }
+      const person = data.people.find(p => p.id === action.personId);
+      const nameKey = person ? person.name.trim().toLowerCase() : action.personId;
+      const isObsTarget = clinic.location?.toLowerCase() === 'obs';
+      const targetRange = isObsTarget ? null : slotEffectiveRange(action.slot, clinic);
+      const dayAssignments = getAssignmentsForPerson(nameKey, clinic.day, data.people, data.clinics);
+      const conflicting = dayAssignments.filter(a => {
+        if (a.clinicId === action.clinicId && a.slotType === action.slot) return false;
+        if (isObsTarget || a.isObs) return true;
+        return rangesOverlap(targetRange, slotEffectiveRange(a.slotType, a.clinic));
+      });
+      if (conflicting.length > 0) {
+        const b = conflicting[0];
+        const reason = b.isObs ? 'assigned to OBS this day'
+          : `overlaps ${b.clinic.provider || b.clinic.location}`;
+        return { error: `${person?.name ?? action.personId} is ${reason} on ${clinic.day}` };
       }
       assignSlot(action.clinicId, action.slot, action.personId);
       return { ok: true };
