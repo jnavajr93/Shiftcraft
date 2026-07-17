@@ -218,6 +218,16 @@ export function solve(cfg, week = null) {
       const person = idx.people[p.personId];
       if (!person || used.has(person.id) || isUnavailable(person.id, day, cfg)) continue;
       const roleId = p.slot ?? person.roles[0];
+      // Guard: only reserve if the resolved role is actually required by the target shift.
+      // A stale lockedTo entry with blank provider can match OBS clinics (provider:''),
+      // and an admin's roles[0]='frontDesk' would produce an invalid OBS+frontDesk reservation.
+      const anchorShift = idx.shifts[p.anchorId];
+      if (!anchorShift) continue;
+      const anchorReq = staffingFor(anchorShift.locationId, cfg);
+      if (!anchorReq[roleId]) {
+        console.warn(`[Shiftcraft MUST_PAIR] Skipping ${person.name} → ${anchorShift.name||'OBS'} with role "${roleId}" — not required by that shift (required: ${Object.keys(anchorReq).join(', ')})`);
+        continue;
+      }
       if (!reservations[p.anchorId]) reservations[p.anchorId] = [];
       reservations[p.anchorId].push({ personId: person.id, roleId });
       used.add(person.id);
@@ -241,6 +251,14 @@ export function solve(cfg, week = null) {
       const person = idx.people[p.personId];
       if (!person || used.has(person.id) || isUnavailable(person.id, day, cfg)) continue;
       const roleId = p.slot ?? person.roles[0];
+      // Same guard as Phase 1: skip if the resolved role isn't required by the shift.
+      const anchorShift = idx.shifts[p.anchorId];
+      if (!anchorShift) continue;
+      const anchorReq = staffingFor(anchorShift.locationId, cfg);
+      if (!anchorReq[roleId]) {
+        console.warn(`[Shiftcraft MUST_PAIR] Skipping ${person.name} → ${anchorShift.name||'(empty)'} with role "${roleId}" — not required (required: ${Object.keys(anchorReq).join(', ')})`);
+        continue;
+      }
       if (!reservations[p.anchorId]) reservations[p.anchorId] = [];
       reservations[p.anchorId].push({ personId: person.id, roleId });
       used.add(person.id);

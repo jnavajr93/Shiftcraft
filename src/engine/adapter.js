@@ -251,6 +251,10 @@ export function generateSchedule(globalData) {
     for (const entry of (person.lockedTo ?? [])) {
       const providerName = typeof entry === 'string' ? entry : entry.provider;
       const lockedSlot   = typeof entry === 'string' ? null  : (entry.slot ?? null);
+      // Skip empty provider names — OBS clinics have provider:'', so a lockedTo entry
+      // with blank provider would accidentally lock the person to every OBS clinic and
+      // their roles[0] (often 'frontDesk') would be reserved as the OBS slot.
+      if (!providerName) continue;
       for (const shift of shifts) {
         if (shift.name === providerName) {
           constraints.push({
