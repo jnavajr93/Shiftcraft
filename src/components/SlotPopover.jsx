@@ -1,7 +1,61 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useApp } from '../context/AppContext.jsx';
 import { Trash2, Zap } from 'lucide-react';
 import { DAYS, getSlotPersonId, OBS_SLOT_TYPES, getAssignmentsForPerson } from '../data/seed.js';
+
+// ─── Portal positioning hook ──────────────────────────────────────────────────
+// Renders the popover at a fixed viewport position computed from the trigger element.
+// Flips upward when there isn't enough space below; clamps horizontally to viewport edges.
+// Closes the popover on any scroll event or window resize.
+function usePortalPopover(triggerRef, onClose) {
+  const contentRef = useRef(null);
+  const [popoverStyle, setPopoverStyle] = useState({
+    position: 'fixed', top: -9999, left: -9999, visibility: 'hidden', zIndex: 1000,
+  });
+
+  useLayoutEffect(() => {
+    const trigger = triggerRef?.current;
+    const content = contentRef.current;
+    if (!trigger || !content) return;
+
+    const tr = trigger.getBoundingClientRect();
+    const pr = content.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const GAP = 4;
+    const EDGE = 8;
+
+    // Prefer opening below; flip above if not enough space below
+    const spaceBelow = vh - tr.bottom - GAP;
+    const top = pr.height <= spaceBelow
+      ? tr.bottom + GAP
+      : Math.max(EDGE, tr.top - GAP - pr.height);
+
+    // Align left edge with trigger, clamp to viewport
+    const left = Math.min(Math.max(EDGE, tr.left), vw - pr.width - EDGE);
+
+    setPopoverStyle({
+      position: 'fixed',
+      top: Math.round(top),
+      left: Math.round(left),
+      visibility: 'visible',
+      zIndex: 1000,
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const close = () => onClose();
+    window.addEventListener('scroll', close, { capture: true, passive: true });
+    window.addEventListener('resize', close, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', close, { capture: true });
+      window.removeEventListener('resize', close);
+    };
+  }, [onClose]);
+
+  return { popoverStyle, contentRef };
+}
 
 const OBS_ROLE_FOR_SLOT = {
   preop: 'Pre-Op/PACU',
@@ -90,12 +144,12 @@ function ineligibleReason(person, clinic, slotType, clinics, additionalTasks, al
   return null;
 }
 
-export default function SlotPopover({ clinic, slotType, currentPersonId, onAssign, onRemove, onClose }) {
+export default function SlotPopover({ clinic, slotType, currentPersonId, onAssign, onRemove, onClose, triggerRef }) {
   const { data } = useApp();
-  const ref = useRef(null);
+  const { popoverStyle, contentRef } = usePortalPopover(triggerRef, onClose);
 
   useEffect(() => {
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
+    const handler = (e) => { if (contentRef.current && !contentRef.current.contains(e.target)) onClose(); };
     const keyHandler = (e) => { if (e.key === 'Escape') onClose(); };
     const t = setTimeout(() => {
       document.addEventListener('mousedown', handler);
@@ -106,7 +160,7 @@ export default function SlotPopover({ clinic, slotType, currentPersonId, onAssig
       document.removeEventListener('mousedown', handler);
       document.removeEventListener('keydown', keyHandler);
     };
-  }, [onClose]);
+  }, [onClose]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const gradeOrder = { A: 0, B: 1, C: 2 };
   const currentPerson = currentPersonId ? data.people.find(p => p.id === currentPersonId) : null;
@@ -134,8 +188,8 @@ export default function SlotPopover({ clinic, slotType, currentPersonId, onAssig
   const suggestions = !currentPersonId ? eligible.slice(0, 3) : [];
   const rest = !currentPersonId ? eligible.slice(3) : eligible;
 
-  return (
-    <div ref={ref} className="popover" onClick={e => e.stopPropagation()}>
+  return createPortal(
+    <div ref={contentRef} className="popover" style={popoverStyle} onClick={e => e.stopPropagation()}>
       {currentPerson && (
         <>
           <div className="popover-section-label">Assigned</div>
@@ -200,7 +254,8 @@ export default function SlotPopover({ clinic, slotType, currentPersonId, onAssig
           )}
         </>
       )}
-    </div>
+    </div>,
+    document.body,
   );
 }
 

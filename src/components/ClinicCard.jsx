@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { Pencil, AlertTriangle, Users, Power, Check, X as XIcon } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
@@ -235,7 +235,8 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
 
   const droppableId = `slot:${clinic.id}:${slotType}`;
   const { setNodeRef: setDropRef, isOver } = useDroppable({ id: droppableId });
-  const setRef = useCallback((el) => { setDropRef(el); }, [setDropRef]);
+  const triggerRef = useRef(null);
+  const setRef = useCallback((el) => { setDropRef(el); triggerRef.current = el; }, [setDropRef]);
 
   const isVariable = slotType === 'middle' || slotType === 'training';
   const isScribe = slotType === 'scribe';
@@ -341,6 +342,7 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
             onAssign={(pid) => { assignSlot(clinic.id, slotType, pid); setShowPopover(false); }}
             onRemove={() => { assignSlot(clinic.id, slotType, null); setShowPopover(false); }}
             onClose={() => setShowPopover(false)}
+            triggerRef={triggerRef}
           />
         )}
       </div>
@@ -515,7 +517,8 @@ function ObsSlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSear
 
   const droppableId = `slot:${clinic.id}:${slotType}`;
   const { setNodeRef: setDropRef, isOver } = useDroppable({ id: droppableId });
-  const setRef = useCallback((el) => { setDropRef(el); }, [setDropRef]);
+  const triggerRef = useRef(null);
+  const setRef = useCallback((el) => { setDropRef(el); triggerRef.current = el; }, [setDropRef]);
 
   const hasConflict = person && conflictSet && conflictSet.has(`${person.id}:${clinic.day}`);
   const isHighlighted = hasSearch && person && matchedPersonIds.includes(personId);
@@ -559,6 +562,7 @@ function ObsSlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSear
             onAssign={(pid) => { assignSlot(clinic.id, slotType, pid); setShowPopover(false); }}
             onRemove={() => { assignSlot(clinic.id, slotType, null); setShowPopover(false); }}
             onClose={() => setShowPopover(false)}
+            triggerRef={triggerRef}
           />
         )}
       </div>

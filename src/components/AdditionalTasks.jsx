@@ -1,8 +1,57 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useDroppable } from '@dnd-kit/core';
 import { Plus, X, Trash2, Pencil, Check } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { DAYS, generateId, minutesToTime, minutesToTimeInput, timeInputToMinutes } from '../data/seed.js';
+
+// ─── Portal positioning hook (shared pattern with SlotPopover) ────────────────
+function usePortalPopover(triggerRef, onClose) {
+  const contentRef = useRef(null);
+  const [popoverStyle, setPopoverStyle] = useState({
+    position: 'fixed', top: -9999, left: -9999, visibility: 'hidden', zIndex: 1000,
+  });
+
+  useLayoutEffect(() => {
+    const trigger = triggerRef?.current;
+    const content = contentRef.current;
+    if (!trigger || !content) return;
+
+    const tr = trigger.getBoundingClientRect();
+    const pr = content.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const GAP = 4;
+    const EDGE = 8;
+
+    const spaceBelow = vh - tr.bottom - GAP;
+    const top = pr.height <= spaceBelow
+      ? tr.bottom + GAP
+      : Math.max(EDGE, tr.top - GAP - pr.height);
+
+    const left = Math.min(Math.max(EDGE, tr.left), vw - pr.width - EDGE);
+
+    setPopoverStyle({
+      position: 'fixed',
+      top: Math.round(top),
+      left: Math.round(left),
+      visibility: 'visible',
+      zIndex: 1000,
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const close = () => onClose();
+    window.addEventListener('scroll', close, { capture: true, passive: true });
+    window.addEventListener('resize', close, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', close, { capture: true });
+      window.removeEventListener('resize', close);
+    };
+  }, [onClose]);
+
+  return { popoverStyle, contentRef };
+}
 
 function formatTaskTime(task) {
   const { start, end } = task;
@@ -54,13 +103,13 @@ function TaskTimeEditor({ task, onSave, onClose }) {
 // ─── Task Slot Popover ───────────────────────
 // No role filtering — any staff can be assigned to any task.
 // Sorted by grade A → B → C → ungraded.
-function TaskPopover({ task, currentPersonId, onAssign, onRemove, onClose }) {
+function TaskPopover({ task, currentPersonId, onAssign, onRemove, onClose, triggerRef }) {
   const { data } = useApp();
-  const ref = useRef(null);
+  const { popoverStyle, contentRef } = usePortalPopover(triggerRef, onClose);
 
   useEffect(() => {
     const handler = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) onClose();
+      if (contentRef.current && !contentRef.current.contains(e.target)) onClose();
     };
     const keyH = (e) => { if (e.key === 'Escape') onClose(); };
     const t = setTimeout(() => {
@@ -72,7 +121,7 @@ function TaskPopover({ task, currentPersonId, onAssign, onRemove, onClose }) {
       document.removeEventListener('mousedown', handler);
       document.removeEventListener('keydown', keyH);
     };
-  }, [onClose]);
+  }, [onClose]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const gradeOrder = { A: 0, B: 1, C: 2 };
   const currentPerson = currentPersonId
@@ -83,8 +132,8 @@ function TaskPopover({ task, currentPersonId, onAssign, onRemove, onClose }) {
     (a, b) => (gradeOrder[a.grade] ?? 3) - (gradeOrder[b.grade] ?? 3)
   );
 
-  return (
-    <div ref={ref} className="popover" onClick={e => e.stopPropagation()}>
+  return createPortal(
+    <div ref={contentRef} className="popover" style={popoverStyle} onClick={e => e.stopPropagation()}>
       {currentPerson && (
         <>
           <div className="popover-section-label">Assigned</div>
@@ -115,7 +164,8 @@ function TaskPopover({ task, currentPersonId, onAssign, onRemove, onClose }) {
           {p.grade && <span className={`grade-badge ${p.grade}`}>{p.grade}</span>}
         </div>
       ))}
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -127,6 +177,8 @@ function TaskSlotRow({ task, onPersonClick }) {
 
   const droppableId = `task:${task.id}`;
   const { setNodeRef, isOver } = useDroppable({ id: droppableId });
+  const triggerRef = useRef(null);
+  const combinedRef = useCallback((el) => { setNodeRef(el); triggerRef.current = el; }, [setNodeRef]);
 
   const person = task.assignedPersonId
     ? data.people.find(p => p.id === task.assignedPersonId)
@@ -139,9 +191,9 @@ function TaskSlotRow({ task, onPersonClick }) {
   const timeDisplay = formatTaskTime(task);
 
   return (
-    <div className="task-slot-wrapper" style={{ position: 'relative', zIndex: showPopover ? 10 : undefined }}>
+    <div className="task-slot-wrapper" style={{ position: 'relative' }}>
       <div
-        ref={setNodeRef}
+        ref={combinedRef}
         className={`task-slot${isOver && isAdmin ? ' drop-target' : ''}`}
         onClick={handleRowClick}
         style={{ cursor: isAdmin ? 'pointer' : 'default' }}
@@ -181,6 +233,7 @@ function TaskSlotRow({ task, onPersonClick }) {
             onAssign={(pid) => { assignTask(task.id, pid); setShowPopover(false); }}
             onRemove={() => { assignTask(task.id, null); setShowPopover(false); }}
             onClose={() => setShowPopover(false)}
+            triggerRef={triggerRef}
           />
         )}
       </div>
