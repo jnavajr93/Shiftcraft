@@ -47,6 +47,16 @@ function getRequiredSlots(clinic, providers) {
   // but an in-memory OBS clinic with a stale key would still produce a bad constraint.
   if (isObs) return allSlotKeys.filter(k => OBS_SLOT_TYPES.includes(k));
 
+  // Dr. B (Skibell): only Scribe and Opener are ever auto-generated.
+  // Closing/Middle/Training are intentionally left empty by the solver and filled
+  // manually via drag/drop on the rare high-volume day they're needed.
+  // This overrides any providers.conditionalSlots config so it stays enforced even
+  // when live data in Supabase has an older providers record with the conditional closing.
+  if (clinic.provider === 'Dr. B') {
+    const activeFD = getActiveFDSlots(clinic);
+    return ['scribe', 'opener', ...activeFD].filter(k => allSlotKeys.includes(k));
+  }
+
   const provider = providers.find(p => p.name === clinic.provider);
   if (!provider?.requiredSlots?.length) return allSlotKeys; // fallback: treat everything as required
 
@@ -106,8 +116,10 @@ function diagnoseSolverGaps(cfg, result) {
       const shift = shiftById[card.shiftId];
       for (const s of card.staffing) {
         if (s.have >= s.min) continue; // filled — skip
-        anyGap = true;
         const roleId = s.role; // role name === roleId (adapter sets name = id)
+        // Dr. B Closing/Middle/Training are intentionally not generated — skip in diagnostic.
+        if (shift?.name === 'Dr. B' && ['closing', 'middle', 'training'].includes(roleId)) continue;
+        anyGap = true;
         console.group(`[Shiftcraft gap] ${day} · ${card.shiftName} @ ${card.location} — ${roleId} (have ${s.have}/${s.min})`);
         for (const person of cfg.people) {
           const reasons = [];
@@ -270,6 +282,30 @@ export function generateSchedule(globalData) {
     }
   }
 
+  // Dr. B Opener default: Marisela fills Opener at every Dr. B clinic unless she
+  // is unavailable that day (day off, already placed, OBS, hour cap hit).
+  // Parallel to Yadi → Scribe which is expressed via person.lockedTo in Supabase.
+  // Name-based lookup is canonical: same name = same physical person.
+  {
+    const marisela = (globalData.people ?? []).find(
+      p => p.name.trim().toLowerCase() === 'marisela'
+    );
+    if (marisela) {
+      for (const shift of shifts) {
+        if (shift.name === 'Dr. B') {
+          constraints.push({
+            id: `mustpair_drb_opener_${marisela.id}_${shift.id}`,
+            type: 'must_pair',
+            enabled: true,
+            personId: marisela.id,
+            anchorId: shift.id,
+            slot: 'opener',
+          });
+        }
+      }
+    }
+  }
+
   const cfg = { roles, locations, people, shifts, constraints };
 
   // ── 6. Run solver ─────────────────────────────────────────────────────────
@@ -283,18 +319,38 @@ export function generateSchedule(globalData) {
   // ── 7. Translate back to [{clinicId, slot, personId}] ────────────────────
   // solver output: result[day].shifts[].{ shiftId, assigned: [{personId, role}] }
   // role === idx.roles[roleId].name === slotKey (since we set name = id = slotKey)
+  //
+  // Post-filter: strip assignments for slots not required by the specific clinic.
+  // Necessary because MIN_STAFF constraints are location-based — when Dr. S at Estrella
+  // requires 'closing', the 'estrella__closing' constraint causes the solver to also try
+  // to fill closing for Dr. B at Estrella on shared days. Those assignments must be
+  // dropped before saving so Closing stays empty on Dr. B clinics.
+  const requiredSlotsMap = new Map(
+    openClinics.map(c => [c.id, new Set(getRequiredSlots(c, globalData.providers ?? []))])
+  );
+
+  // Dr. B optional-slot issues: solver may emit "Dr. B: needs N more closing/middle/training"
+  // because of shared location constraints. Filter these out — they are not real gaps.
+  const DR_B_OPTIONAL = ['closing', 'middle', 'training'];
+
   const assignments = [];
   const issues = [];
 
   for (const dayResult of Object.values(result)) {
     for (const card of dayResult.shifts) {
+      const reqSlots = requiredSlotsMap.get(card.shiftId);
       for (const a of card.assigned) {
-        if (a.personId && a.role) {
-          assignments.push({ clinicId: card.shiftId, slot: a.role, personId: a.personId });
-        }
+        if (!a.personId || !a.role) continue;
+        if (reqSlots && !reqSlots.has(a.role)) continue; // solver filled a non-required slot
+        assignments.push({ clinicId: card.shiftId, slot: a.role, personId: a.personId });
       }
     }
-    issues.push(...(dayResult.issues ?? []));
+    // Filter issues for Dr. B slots that are intentionally left empty.
+    const dayIssues = (dayResult.issues ?? []).filter(issue =>
+      !(issue.startsWith('Dr. B:') &&
+        DR_B_OPTIONAL.some(r => issue.includes(`more ${r}`)))
+    );
+    issues.push(...dayIssues);
   }
 
   return { assignments, issues };
