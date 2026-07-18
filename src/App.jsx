@@ -162,15 +162,19 @@ function AppContent() {
                 {(!isAdmin && isMobile) ? (
                   <MobileStaffView onPersonClick={openPerson} />
                 ) : (
-                  <div style={{ flex: 1, overflow: 'auto' }}>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
                     <Board
                       search={search}
                       setSearch={setSearch}
                       onPersonClick={openPerson}
                       onEditClinic={isAdmin ? setConfigClinicId : () => {}}
+                      footer={
+                        <>
+                          {(isAdmin || boardClinics !== null) && <AdditionalTasks onPersonClick={openPerson} />}
+                          {isAdmin && <UnassignedStaff onPersonClick={openPerson} />}
+                        </>
+                      }
                     />
-                    {(isAdmin || boardClinics !== null) && <AdditionalTasks onPersonClick={openPerson} />}
-                    {isAdmin && <UnassignedStaff onPersonClick={openPerson} />}
                   </div>
                 )}
                 {isAdmin && <HoursBar />}

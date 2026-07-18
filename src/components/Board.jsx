@@ -6,7 +6,7 @@ import ClinicCard from './ClinicCard.jsx';
 
 const LOCATION_ORDER = ['Phoenix', 'Chandler', 'Estrella', 'Scottsdale', 'OBS'];
 
-export default function Board({ search, setSearch, onPersonClick, onEditClinic }) {
+export default function Board({ search, setSearch, onPersonClick, onEditClinic, footer }) {
   const { data, isAdmin, boardClinics, currentWeek } = useApp();
   const monday = mondayOfWeek(currentWeek);
 
@@ -150,6 +150,7 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic }
             )}
           </div>
         )}
+        {footer}
       </div>
     </div>
   );
