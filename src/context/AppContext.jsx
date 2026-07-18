@@ -36,6 +36,26 @@ export function isoWeek(date) {
   return `${d.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
 }
 
+/** Default landing week per clinic rollover rule (America/Phoenix, always UTC-7):
+ *  Mon 00:00 – Fri 16:59  → current ISO week
+ *  Fri 17:00 – Sun 23:59  → the following ISO week
+ */
+export function defaultLandingWeek() {
+  // Shift UTC to Phoenix local time using UTC methods so device timezone is irrelevant.
+  const PHOENIX_OFFSET_MS = -7 * 60 * 60 * 1000; // UTC-7, no DST
+  const px = new Date(Date.now() + PHOENIX_OFFSET_MS);
+  const dow  = px.getUTCDay();    // 0=Sun … 6=Sat  (Phoenix local)
+  const hour = px.getUTCHours();  // 0–23             (Phoenix local)
+
+  // Roll forward to next Monday when: Fri ≥ 17:00, Saturday, or Sunday
+  const rollover = (dow === 5 && hour >= 17) || dow === 6 || dow === 0;
+  const daysToMon = rollover ? (dow === 0 ? 1 : 8 - dow) : 0;
+
+  const target = new Date(px.getTime() + daysToMon * 86_400_000);
+  // Reconstruct a clean UTC midnight so isoWeek() works correctly
+  return isoWeek(new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), target.getUTCDate())));
+}
+
 export function mondayOfWeek(weekStr) {
   const [year, wStr] = weekStr.split('-W');
   const y = parseInt(year), w = parseInt(wStr);
@@ -538,7 +558,7 @@ function toDefinitionData(globalData) {
 
 // ─── Provider ─────────────────────────────────
 export function AppProvider({ children }) {
-  const nowWeek = isoWeek(new Date());
+  const nowWeek = defaultLandingWeek();
   const [currentWeek, setCurrentWeek] = useState(nowWeek);
   const [changelog, setChangelog] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
