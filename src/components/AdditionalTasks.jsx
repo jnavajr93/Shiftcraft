@@ -44,12 +44,15 @@ function usePortalPopover(triggerRef, onClose) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    const close = () => onClose();
-    window.addEventListener('scroll', close, { capture: true, passive: true });
-    window.addEventListener('resize', close, { passive: true });
+    const closeOnExternalScroll = (e) => {
+      if (contentRef.current?.contains(e.target)) return;
+      onClose();
+    };
+    window.addEventListener('scroll', closeOnExternalScroll, { capture: true, passive: true });
+    window.addEventListener('resize', onClose, { passive: true });
     return () => {
-      window.removeEventListener('scroll', close, { capture: true });
-      window.removeEventListener('resize', close);
+      window.removeEventListener('scroll', closeOnExternalScroll, { capture: true });
+      window.removeEventListener('resize', onClose);
     };
   }, [onClose]);
 
@@ -88,16 +91,19 @@ function TaskPopover({ task, currentPersonId, onAssign, onRemove, onClose, trigg
 
   useEffect(() => {
     const handler = (e) => {
-      if (contentRef.current && !contentRef.current.contains(e.target)) onClose();
+      if (contentRef.current?.contains(e.target)) return;
+      onClose();
     };
     const keyH = (e) => { if (e.key === 'Escape') onClose(); };
     const t = setTimeout(() => {
       document.addEventListener('mousedown', handler);
+      document.addEventListener('touchstart', handler, { passive: true });
       document.addEventListener('keydown', keyH);
     }, 0);
     return () => {
       clearTimeout(t);
       document.removeEventListener('mousedown', handler);
+      document.removeEventListener('touchstart', handler);
       document.removeEventListener('keydown', keyH);
     };
   }, [onClose]); // eslint-disable-line react-hooks/exhaustive-deps

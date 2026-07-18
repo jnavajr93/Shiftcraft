@@ -45,12 +45,18 @@ function usePortalPopover(triggerRef, onClose) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    const close = () => onClose();
-    window.addEventListener('scroll', close, { capture: true, passive: true });
-    window.addEventListener('resize', close, { passive: true });
+    // Only close on scrolls that originate OUTSIDE the popover.
+    // Scrolls inside the portaled list (e.target is a descendant of contentRef)
+    // must not close it — that's the whole point of a scrollable list.
+    const closeOnExternalScroll = (e) => {
+      if (contentRef.current?.contains(e.target)) return;
+      onClose();
+    };
+    window.addEventListener('scroll', closeOnExternalScroll, { capture: true, passive: true });
+    window.addEventListener('resize', onClose, { passive: true });
     return () => {
-      window.removeEventListener('scroll', close, { capture: true });
-      window.removeEventListener('resize', close);
+      window.removeEventListener('scroll', closeOnExternalScroll, { capture: true });
+      window.removeEventListener('resize', onClose);
     };
   }, [onClose]);
 
@@ -148,15 +154,22 @@ export default function SlotPopover({ clinic, slotType, currentPersonId, onAssig
   const { popoverStyle, contentRef } = usePortalPopover(triggerRef, onClose);
 
   useEffect(() => {
-    const handler = (e) => { if (contentRef.current && !contentRef.current.contains(e.target)) onClose(); };
+    // Treat any pointer-down outside the popover as a close trigger.
+    // touchstart covers mobile scroll-to-dismiss before the 300ms click delay fires.
+    const handler = (e) => {
+      if (contentRef.current?.contains(e.target)) return;
+      onClose();
+    };
     const keyHandler = (e) => { if (e.key === 'Escape') onClose(); };
     const t = setTimeout(() => {
       document.addEventListener('mousedown', handler);
+      document.addEventListener('touchstart', handler, { passive: true });
       document.addEventListener('keydown', keyHandler);
     }, 0);
     return () => {
       clearTimeout(t);
       document.removeEventListener('mousedown', handler);
+      document.removeEventListener('touchstart', handler);
       document.removeEventListener('keydown', keyHandler);
     };
   }, [onClose]); // eslint-disable-line react-hooks/exhaustive-deps
