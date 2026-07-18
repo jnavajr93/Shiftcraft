@@ -172,9 +172,15 @@ function PostConfirmModal({ weekLabel, onConfirm, onCancel }) {
 }
 
 // ─── Exit nudge modal ────────────────────────
-function ExitNudgeModal({ postedSnapshot, onPost, onLeave }) {
+function ExitNudgeModal({ postedSnapshot, onPost, onLeave, onCancel }) {
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') onCancel(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onCancel]);
+
   return (
-    <div className="overlay-backdrop" style={{ zIndex: 300, backdropFilter: 'blur(4px)' }} onClick={e => { if (e.target === e.currentTarget) onLeave(); }}>
+    <div className="overlay-backdrop" style={{ zIndex: 300, backdropFilter: 'blur(4px)' }} onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
       <div className="overlay-modal" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
         <div className="overlay-header">
           <div style={{ fontWeight: 600, fontSize: 15 }}>Unposted changes</div>
@@ -1127,6 +1133,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
           postedSnapshot={postedSnapshot}
           onPost={handleExitPost}
           onLeave={handleExitLeave}
+          onCancel={() => setShowExitNudge(false)}
         />
       )}
     </>
