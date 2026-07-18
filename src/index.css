@@ -357,6 +357,9 @@ html, body, #root {
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border-strong);
   text-align: center;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 .col-header-day {
   font-size: 12px; font-weight: 500; text-transform: uppercase;
