@@ -1,9 +1,11 @@
-import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useDroppable } from '@dnd-kit/core';
 import { Plus, X, Trash2, Pencil, Check } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { DAYS, generateId, minutesToTime, minutesToTimeInput, timeInputToMinutes } from '../data/seed.js';
+import { mondayOfWeek } from '../context/AppContext.jsx';
+import { DAYS, generateId, minutesToTime, minutesToTimeInput, timeInputToMinutes, getAssignmentsForPerson, slotEffectiveRange, rangesOverlap } from '../data/seed.js';
+import { fetchAbsencesForWeek } from '../services/dataService.js';
 
 // ─── Portal positioning hook (shared pattern with SlotPopover) ────────────────
 function usePortalPopover(triggerRef, onClose) {
@@ -170,7 +172,7 @@ function TaskPopover({ task, currentPersonId, onAssign, onRemove, onClose, trigg
 }
 
 // ─── Task Slot Row ───────────────────────────
-function TaskSlotRow({ task, onPersonClick }) {
+function TaskSlotRow({ task, onPersonClick, onEdit }) {
   const { data, isAdmin, assignTask, updateTaskTime, removeTask } = useApp();
   const [showPopover, setShowPopover] = useState(false);
   const [editingTime, setEditingTime] = useState(false);
@@ -209,7 +211,7 @@ function TaskSlotRow({ task, onPersonClick }) {
               onClick={e => { e.stopPropagation(); onPersonClick(person.id); }}
             >
               <div className="dot" style={{ background: person.color }} />
-              {person.name}
+              <span className="person-chip-name">{person.name}</span>
             </div>
           ) : (
             <div className={`slot-empty${isOver && isAdmin ? ' droppable' : ''}`}>
@@ -218,13 +220,22 @@ function TaskSlotRow({ task, onPersonClick }) {
           )}
         </div>
         {isAdmin && (
-          <button
-            className="task-remove-btn"
-            onClick={e => { e.stopPropagation(); removeTask(task.id); }}
-            title="Remove task"
-          >
-            <X size={12} />
-          </button>
+          <div className="task-actions">
+            <button
+              className="task-edit-btn"
+              onClick={e => { e.stopPropagation(); onEdit(); }}
+              title="Edit task"
+            >
+              <Pencil size={11} />
+            </button>
+            <button
+              className="task-remove-btn"
+              onClick={e => { e.stopPropagation(); removeTask(task.id); }}
+              title="Remove task"
+            >
+              <X size={12} />
+            </button>
+          </div>
         )}
         {showPopover && isAdmin && (
           <TaskPopover
@@ -258,53 +269,140 @@ function TaskSlotRow({ task, onPersonClick }) {
   );
 }
 
-// ─── Add Task Form ───────────────────────────
-function AddTaskForm({ day, onAdd, onCancel }) {
-  const { data } = useApp();
-  const [label, setLabel] = useState('');
-  const [customLabel, setCustomLabel] = useState('');
-  const [locationTag, setLocationTag] = useState('');
+// ─── Add / Edit Task Form ────────────────────
+const DAY_OFFSETS = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4 };
 
-  const effectiveLabel = label === '__custom' ? customLabel : label;
+function AddTaskForm({ day, initialTask = null, onSubmit, onCancel }) {
+  const { data, currentWeek } = useApp();
 
-  const handleAdd = () => {
+  // Label state — detect if edit-mode label is custom (not in taskTypes)
+  const presetLabels = data.taskTypes ?? [];
+  const initIsPreset = initialTask ? presetLabels.includes(initialTask.label) : false;
+
+  const [labelMode, setLabelMode] = useState(
+    initialTask ? (initIsPreset ? initialTask.label : '__custom') : ''
+  );
+  const [customLabel, setCustomLabel] = useState(
+    initialTask && !initIsPreset ? (initialTask.label ?? '') : ''
+  );
+  const [locationTag, setLocationTag] = useState(initialTask?.locationTag ?? '');
+  const [staffId, setStaffId] = useState(initialTask?.assignedPersonId ?? '');
+  const [startVal, setStartVal] = useState(
+    initialTask?.start != null ? minutesToTimeInput(initialTask.start) : ''
+  );
+  const [endVal, setEndVal] = useState(
+    initialTask?.end != null && initialTask.end !== 'close'
+      ? minutesToTimeInput(initialTask.end)
+      : ''
+  );
+  const [endIsClose, setEndIsClose] = useState(initialTask?.end === 'close');
+  const [absences, setAbsences] = useState([]);
+
+  useEffect(() => {
+    const monday = mondayOfWeek(currentWeek);
+    fetchAbsencesForWeek(monday).then(r => setAbsences(r.data ?? []));
+  }, [currentWeek]);
+
+  const effectiveLabel = labelMode === '__custom' ? customLabel : labelMode;
+
+  // Date string for this day in the current week
+  const weekMonday = mondayOfWeek(currentWeek);
+  const dayDate = new Date(weekMonday);
+  dayDate.setUTCDate(dayDate.getUTCDate() + (DAY_OFFSETS[day] ?? 0));
+  const dayDateStr = dayDate.toISOString().slice(0, 10);
+
+  // Eligibility per person (absence + time-overlap)
+  const eligibility = useMemo(() => {
+    const taskStart = startVal ? timeInputToMinutes(startVal) : null;
+    const taskEnd = endIsClose ? null : (endVal ? timeInputToMinutes(endVal) : null);
+    const taskRange = (taskStart != null && taskEnd != null) ? { start: taskStart, end: taskEnd } : null;
+
+    const result = {};
+    for (const person of data.people) {
+      const nameKey = person.name.trim().toLowerCase();
+
+      const fullDayAbsent = absences.some(a =>
+        a.person_name === nameKey &&
+        a.start_date <= dayDateStr &&
+        a.end_date >= dayDateStr &&
+        a.type !== 'partial'
+      );
+      if (fullDayAbsent) { result[person.id] = 'On leave'; continue; }
+
+      if (taskRange) {
+        // Partial absence overlap
+        const partialConflict = absences.some(a =>
+          a.person_name === nameKey &&
+          a.start_date <= dayDateStr &&
+          a.end_date >= dayDateStr &&
+          a.type === 'partial' &&
+          a.partial_start != null && a.partial_end != null &&
+          rangesOverlap(taskRange, { start: a.partial_start, end: a.partial_end })
+        );
+        if (partialConflict) { result[person.id] = 'On leave'; continue; }
+
+        // Clinic assignment overlap
+        const assignments = getAssignmentsForPerson(nameKey, day, data.people, data.clinics);
+        const hasConflict = assignments.some(a => {
+          if (a.isObs) return false;
+          const r = slotEffectiveRange(a.slotType, a.clinic);
+          return rangesOverlap(taskRange, r);
+        });
+        if (hasConflict) { result[person.id] = 'Time conflict'; continue; }
+      }
+
+      result[person.id] = null; // eligible
+    }
+    return result;
+  }, [data.people, data.clinics, absences, dayDateStr, day, startVal, endVal, endIsClose]);
+
+  const gradeOrder = { A: 0, B: 1, C: 2 };
+  const sortedPeople = [...data.people].sort(
+    (a, b) => (gradeOrder[a.grade] ?? 3) - (gradeOrder[b.grade] ?? 3)
+  );
+
+  const handleSubmit = () => {
     if (!effectiveLabel.trim()) return;
-    onAdd({
-      id: generateId(),
+    onSubmit({
+      id: initialTask?.id ?? generateId(),
       label: effectiveLabel.trim(),
       day,
       locationTag: locationTag || null,
-      assignedPersonId: null,
+      assignedPersonId: staffId || null,
       isLocationSpecific: !!locationTag,
-      start: null,
-      end: null,
+      start: startVal ? timeInputToMinutes(startVal) : null,
+      end: endIsClose ? 'close' : (endVal ? timeInputToMinutes(endVal) : null),
     });
   };
 
   return (
     <div className="accommodation-form" style={{ margin: '6px 12px 8px' }}>
+      {/* Task */}
       <div className="form-group">
         <label className="form-label">Task</label>
         <select
           className="form-input"
           style={{ fontSize: 13 }}
-          value={label}
-          onChange={e => setLabel(e.target.value)}
+          value={labelMode}
+          onChange={e => setLabelMode(e.target.value)}
         >
           <option value="">Select or type new…</option>
-          {(data.taskTypes ?? []).map(t => <option key={t} value={t}>{t}</option>)}
+          {presetLabels.map(t => <option key={t} value={t}>{t}</option>)}
           <option value="__custom">+ New task type…</option>
         </select>
-        {label === '__custom' && (
+        {labelMode === '__custom' && (
           <input
             className="form-input"
             style={{ marginTop: 4, fontSize: 13 }}
             placeholder="Task name…"
             value={customLabel}
             onChange={e => setCustomLabel(e.target.value)}
+            autoFocus
           />
         )}
       </div>
+
+      {/* Location tag */}
       <div className="form-group">
         <label className="form-label">Location tag (optional)</label>
         <select
@@ -317,13 +415,64 @@ function AddTaskForm({ day, onAdd, onCancel }) {
           {data.locations.map(l => <option key={l}>{l}</option>)}
         </select>
       </div>
+
+      {/* Staff */}
+      <div className="form-group">
+        <label className="form-label">Staff (optional)</label>
+        <select
+          className="form-input"
+          style={{ fontSize: 13 }}
+          value={staffId}
+          onChange={e => setStaffId(e.target.value)}
+        >
+          <option value="">Unassigned</option>
+          {sortedPeople.map(p => {
+            const reason = eligibility[p.id];
+            return (
+              <option key={p.id} value={p.id} disabled={!!reason}>
+                {p.name}{p.grade ? ` (${p.grade})` : ''}{reason ? ` — ${reason}` : ''}
+              </option>
+            );
+          })}
+        </select>
+      </div>
+
+      {/* Time */}
+      <div className="form-group">
+        <label className="form-label">Time (optional)</label>
+        <div className="variable-time-fields">
+          <label className="vte-label">Start</label>
+          <input
+            type="time"
+            className="vte-input"
+            value={startVal}
+            onChange={e => setStartVal(e.target.value)}
+          />
+          <label className="vte-label">End</label>
+          {endIsClose ? (
+            <span className="vte-close-badge">Close</span>
+          ) : (
+            <input
+              type="time"
+              className="vte-input"
+              value={endVal}
+              onChange={e => setEndVal(e.target.value)}
+            />
+          )}
+          <label className="vte-close-toggle">
+            <input type="checkbox" checked={endIsClose} onChange={e => setEndIsClose(e.target.checked)} />
+            <span>Close</span>
+          </label>
+        </div>
+      </div>
+
       <div style={{ display: 'flex', gap: 6 }}>
         <button
           className="btn btn-primary"
           style={{ minHeight: 32, fontSize: 12 }}
-          onClick={handleAdd}
+          onClick={handleSubmit}
           disabled={!effectiveLabel.trim()}
-        >Add</button>
+        >{initialTask ? 'Save' : 'Add'}</button>
         <button
           className="btn"
           style={{ minHeight: 32, fontSize: 12 }}
@@ -336,12 +485,18 @@ function AddTaskForm({ day, onAdd, onCancel }) {
 
 // ─── Additional Tasks Panel ──────────────────
 export default function AdditionalTasks({ onPersonClick }) {
-  const { data, isAdmin, managerInitials, removeTask, addTask, addLog } = useApp();
+  const { data, isAdmin, managerInitials, removeTask, addTask, updateTask, addLog } = useApp();
   const [addingDay, setAddingDay] = useState(null);
+  const [editingTask, setEditingTask] = useState(null);
 
   const handleAdd = (task) => {
     addTask(task);
     setAddingDay(null);
+  };
+
+  const handleUpdate = (task) => {
+    updateTask(task.id, task);
+    setEditingTask(null);
   };
 
   const handleRemove = (task) => {
@@ -354,6 +509,7 @@ export default function AdditionalTasks({ onPersonClick }) {
     });
     removeTask(task.id);
   };
+  void handleRemove;
 
   return (
     <div data-tour="additional-tasks" style={{ padding: '0 16px 16px', flexShrink: 0 }}>
@@ -367,11 +523,22 @@ export default function AdditionalTasks({ onPersonClick }) {
                 {dayTasks.length > 0 && (
                   <div className="task-card">
                     {dayTasks.map(task => (
-                      <TaskSlotRow
-                        key={task.id}
-                        task={task}
-                        onPersonClick={onPersonClick}
-                      />
+                      editingTask?.id === task.id ? (
+                        <AddTaskForm
+                          key={task.id}
+                          day={day}
+                          initialTask={task}
+                          onSubmit={handleUpdate}
+                          onCancel={() => setEditingTask(null)}
+                        />
+                      ) : (
+                        <TaskSlotRow
+                          key={task.id}
+                          task={task}
+                          onPersonClick={onPersonClick}
+                          onEdit={() => { setAddingDay(null); setEditingTask(task); }}
+                        />
+                      )
                     ))}
                   </div>
                 )}
@@ -379,14 +546,14 @@ export default function AdditionalTasks({ onPersonClick }) {
                   addingDay === day ? (
                     <AddTaskForm
                       day={day}
-                      onAdd={handleAdd}
+                      onSubmit={handleAdd}
                       onCancel={() => setAddingDay(null)}
                     />
                   ) : (
                     <button
                       className="btn"
                       style={{ minHeight: 32, fontSize: 12, width: '100%' }}
-                      onClick={() => setAddingDay(day)}
+                      onClick={() => { setEditingTask(null); setAddingDay(day); }}
                     >
                       <Plus size={13} /> Add task
                     </button>

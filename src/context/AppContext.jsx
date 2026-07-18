@@ -1471,6 +1471,35 @@ export function AppProvider({ children }) {
     }));
   }, []);
 
+  const updateTask = useCallback(async (taskId, changes) => {
+    if (!globalData) return;
+    const prev = globalData.additionalTasks.find(t => t.id === taskId);
+    const additionalTasks = globalData.additionalTasks.map(t =>
+      t.id === taskId ? { ...t, ...changes } : t
+    );
+    const taskTypes = changes.label && !globalData.taskTypes.includes(changes.label)
+      ? [...globalData.taskTypes, changes.label]
+      : globalData.taskTypes;
+    const map = extractSlotMap(globalData.clinics, additionalTasks);
+    setGlobalData(g => ({ ...g, additionalTasks, taskTypes }));
+    if ('assignedPersonId' in changes && changes.assignedPersonId !== prev?.assignedPersonId) {
+      const updated = { ...prev, ...changes };
+      const person = changes.assignedPersonId
+        ? globalData.people.find(p => p.id === changes.assignedPersonId)
+        : null;
+      const action = changes.assignedPersonId
+        ? `${person?.name} assigned to ${updated.label}${updated.locationTag ? ` (${updated.locationTag})` : ''} on ${updated.day}`
+        : `${updated.label} unassigned on ${updated.day}`;
+      setChangelog(log => [{
+        timestamp: Date.now(), action,
+        personName: person?.name ?? '—', day: updated.day, detail: '',
+        initials: managerInitials ?? undefined,
+      }, ...log].slice(0, 500));
+    }
+    await doSaveWeek(currentWeek, map);
+    setDirtyWeeks(prev => new Set([...prev, currentWeek]));
+  }, [currentWeek, globalData, doSaveWeek, managerInitials]);
+
   // ─── Person mutations ───────────────────────
   const updatePerson = useCallback((personId, changes) => {
     setGlobalData(prev => ({
@@ -1700,7 +1729,7 @@ export function AppProvider({ children }) {
       currentWeek, weekLabel,
       navigateWeek, jumpToWeek, weekIsEmpty, copyFromTwoWeeksAgo, clearWeek, importWeekData,
       updateClinic, assignSlot, updateSlotTime,
-      assignTask, addTask, removeTask, updateTaskTime,
+      assignTask, addTask, removeTask, updateTask, updateTaskTime,
       updatePerson, addPerson, deletePerson, reorderPeople,
       applyBulkAssignments, restoreClinicSlots,
       addClinic, removeClinic, addLocation, removeLocation,

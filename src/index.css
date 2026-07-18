@@ -886,7 +886,7 @@ html, body, #root {
   align-items: center;
   gap: 8px;
   padding: 6px 12px 6px 12px;
-  padding-right: 32px;
+  padding-right: 56px;
   border-bottom: 0.5px solid var(--border);
   min-height: 36px;
 }
@@ -901,27 +901,37 @@ html, body, #root {
   background: var(--bg-surface); border: 0.5px solid var(--border);
   padding: 1px 5px; border-radius: var(--radius-pill);
 }
-.task-content { flex: 1; display: flex; align-items: center; gap: 6px; }
-.task-remove-btn {
+.task-content { flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; }
+.person-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.task-actions {
   position: absolute;
-  right: 6px;
+  right: 4px;
   top: 50%;
   transform: translateY(-50%);
   display: flex;
+  gap: 2px;
+  align-items: center;
+}
+.task-edit-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px;
+  border: none; background: transparent;
+  color: var(--text-muted); cursor: pointer; border-radius: 4px;
+}
+.task-edit-btn:hover { background: var(--bg-surface); color: var(--text-secondary); }
+.task-remove-btn {
+  display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   border: none;
   background: transparent;
   color: #dc2626;
   cursor: pointer;
   border-radius: 4px;
 }
-
-.task-remove-btn:hover {
-  background: #fee2e2;
-}
+.task-remove-btn:hover { background: #fee2e2; }
 .task-card {
   background: var(--bg-elevated); border: 0.5px solid var(--border);
   border-radius: var(--radius); overflow: visible; margin-bottom: 8px;
