@@ -52,53 +52,42 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic }
   const extraLocations = allLocations.filter(loc => !LOCATION_ORDER.includes(loc)).sort();
   const orderedLocations = [...LOCATION_ORDER, ...extraLocations];
 
-  // Measure the search bar height so col-headers can be offset below it.
-  // Both board-search and col-headers are inside board-scroll (same scroll
-  // container), so the sticky offset for headers = search bar height exactly.
+  // Sync horizontal scroll between the day-header strip and the clinic grid.
+  // Both have min-width:1000px. The header strip uses overflow:hidden to hide
+  // its own scrollbar; we mirror board-scroll's scrollLeft onto it.
   const scrollRef = useRef(null);
-  const searchRef = useRef(null);
+  const headerRef = useRef(null);
   useEffect(() => {
-    const search = searchRef.current;
     const scroll = scrollRef.current;
-    if (!search || !scroll) return;
-    const update = () => scroll.style.setProperty('--search-bar-h', `${search.offsetHeight}px`);
-    update();
-    const obs = new ResizeObserver(update);
-    obs.observe(search);
-    return () => obs.disconnect();
+    const header = headerRef.current;
+    if (!scroll || !header) return;
+    const onScroll = () => { header.scrollLeft = scroll.scrollLeft; };
+    scroll.addEventListener('scroll', onScroll, { passive: true });
+    return () => scroll.removeEventListener('scroll', onScroll);
   }, []);
 
   return (
     <div className="board-wrapper">
-      <div ref={scrollRef} data-tour="week-board" className="board-scroll">
-        {/* Search bar is the first child inside the scroll container so both
-            it and the col-headers are sticky within the same scroll context. */}
-        <div ref={searchRef} className="board-search">
-          <div className="search-wrap">
-            <span className="search-icon"><Search size={15} /></span>
-            <input
-              data-tour="search-bar"
-              className="search-input"
-              type="search"
-              placeholder="Search staff…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
-          </div>
+      {/* Search bar: OUTSIDE board-scroll — never scrolls away. */}
+      <div className="board-search">
+        <div className="search-wrap">
+          <span className="search-icon"><Search size={15} /></span>
+          <input
+            data-tour="search-bar"
+            className="search-input"
+            type="search"
+            placeholder="Search staff…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
         </div>
+      </div>
 
-        {showNotPosted ? (
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            height: 260, color: 'var(--text-muted)', fontSize: 14, flexDirection: 'column', gap: 8,
-          }}>
-            <span style={{ fontSize: 18, opacity: 0.4 }}>📋</span>
-            Schedule not yet posted for this week.
-          </div>
-        ) : (
-          <div className="board-grid">
-
-            {/* Row 0: day headers */}
+      {/* Day-header strip: OUTSIDE board-scroll — never scrolls away vertically.
+          Horizontal scroll is mirrored from board-scroll via the JS listener above. */}
+      {!showNotPosted && (
+        <div ref={headerRef} className="board-day-headers" aria-hidden="true">
+          <div className="board-day-headers-inner">
             {DAYS.map((day, idx) => {
               const d = new Date(monday);
               d.setUTCDate(monday.getUTCDate() + idx);
@@ -111,8 +100,22 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic }
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
 
-            {/* Rows 1…N: one row per location, one cell per day */}
+      {/* Clinic grid: the only thing that scrolls. */}
+      <div ref={scrollRef} data-tour="week-board" className="board-scroll">
+        {showNotPosted ? (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            height: 260, color: 'var(--text-muted)', fontSize: 14, flexDirection: 'column', gap: 8,
+          }}>
+            <span style={{ fontSize: 18, opacity: 0.4 }}>📋</span>
+            Schedule not yet posted for this week.
+          </div>
+        ) : (
+          <div className="board-grid">
             {orderedLocations.flatMap(loc =>
               DAYS.map(day => {
                 const clinic = clinics.find(
@@ -145,7 +148,6 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic }
                 );
               })
             )}
-
           </div>
         )}
       </div>

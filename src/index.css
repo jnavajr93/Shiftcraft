@@ -325,15 +325,14 @@ html, body, #root {
 }
 
 /* ─── Board ─────────────────────────── */
+/* board-wrapper is a flex column. board-search and board-day-headers are
+   flex children OUTSIDE board-scroll, so they are never in the scroll area
+   and never need sticky positioning — they simply don't move. board-scroll
+   is the sole scroll container for the clinic grid. */
 .board-wrapper { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
-/* board-scroll is the ONE scroll container for both search bar and grid.
-   No padding here — board-search uses its own, board-grid uses its own,
-   so neither needs a negative-margin trick to be full-width. */
-.board-scroll { flex: 1; overflow: auto; }
 .board-search {
-  padding: 12px 16px; border-bottom: 0.5px solid var(--border);
+  padding: 12px 16px; border-bottom: 0.5px solid var(--border); flex-shrink: 0;
   display: flex; align-items: center;
-  position: sticky; top: 0; z-index: 20;
   background: var(--bg-base);
 }
 .search-wrap { position: relative; display: inline-flex; align-items: center; width: 100%; max-width: 300px; }
@@ -348,6 +347,22 @@ html, body, #root {
 .search-input:focus { border-color: var(--accent); }
 .search-input::placeholder { color: var(--text-muted); }
 
+/* Day-header strip: sits between search bar and the scrollable clinic grid.
+   overflow:hidden clips content without showing a scrollbar; JS mirrors
+   board-scroll's scrollLeft so columns stay horizontally aligned. */
+.board-day-headers {
+  overflow: hidden; flex-shrink: 0;
+  background: var(--bg-base);
+  border-bottom: 0.5px solid var(--border);
+}
+.board-day-headers-inner {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(200px, 1fr));
+  gap: 10px; min-width: 1000px;
+  padding: 8px 16px;
+}
+
+.board-scroll { flex: 1; overflow: auto; }
 .board-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(200px, 1fr));
@@ -361,9 +376,6 @@ html, body, #root {
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border-strong);
   text-align: center;
-  position: sticky;
-  top: var(--search-bar-h, 0);
-  z-index: 10;
 }
 .col-header-day {
   font-size: 12px; font-weight: 500; text-transform: uppercase;

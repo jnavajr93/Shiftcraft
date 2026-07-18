@@ -25,7 +25,7 @@ function StaffHoverCard({ person, hours, clinics, people, monday, style, onMouse
     if (d) d.setUTCDate(monday.getUTCDate() + idx);
     const dateStr = d ? `${d.getUTCMonth() + 1}/${d.getUTCDate()}` : null;
     const assignments = getAssignmentsForPerson(nameKey, day, people, clinics);
-    if (assignments.length === 0) return { day, text: null };
+    if (assignments.length === 0) return { day, dateStr, text: null };
     assignments.sort((a, b) => slotEffectiveRange(a.slotType, a.clinic).start - slotEffectiveRange(b.slotType, b.clinic).start);
     const text = assignments.map(a => {
       const slotVal = a.clinic.slots?.[a.slotType];
