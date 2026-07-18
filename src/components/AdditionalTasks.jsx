@@ -70,8 +70,8 @@ function TaskTimeEditor({ task, onSave, onClose }) {
   return (
     <div className="variable-time-editor" onClick={e => e.stopPropagation()}>
       <TimeRangePicker
-        defaultStart={task.start ?? 480}
-        defaultEnd={task.end !== 'close' ? (task.end ?? 1020) : null}
+        defaultStart={task.start ?? null}
+        defaultEnd={task.end !== 'close' ? (task.end ?? null) : null}
         defaultEndIsClose={task.end === 'close'}
         onSave={onSave}
         onCancel={onClose}
@@ -84,10 +84,13 @@ function TaskTimeEditor({ task, onSave, onClose }) {
 function taskIneligibleReason(person, task, clinics, allPeople) {
   if ((person.daysOff ?? []).includes(task.day)) return 'Off this day';
 
+  // Timeless tasks are all-shift annotations — no overlap or OBS conflicts apply.
+  if (task.start == null) return null;
+
   const nameKey = person.name.trim().toLowerCase();
   const dayAssignments = getAssignmentsForPerson(nameKey, task.day, allPeople ?? [], clinics);
 
-  const taskRange = (task.start != null && task.end != null && task.end !== 'close')
+  const taskRange = (task.end != null && task.end !== 'close')
     ? { start: task.start, end: task.end }
     : null;
 
@@ -354,10 +357,17 @@ function AddTaskForm({ day, initialTask = null, onSubmit, onCancel }) {
   );
   const [locationTag, setLocationTag] = useState(initialTask?.locationTag ?? '');
   const [taskTime, setTaskTime] = useState({
-    start:      initialTask?.start ?? 480,
-    end:        initialTask?.end !== 'close' ? (initialTask?.end ?? 1020) : null,
+    start:      initialTask?.start ?? null,
+    end:        initialTask?.end !== 'close' ? (initialTask?.end ?? null) : null,
     endIsClose: initialTask?.end === 'close',
   });
+  const [pickerKey, setPickerKey] = useState(0);
+
+  const isTimeSet = taskTime.start != null || taskTime.end != null || taskTime.endIsClose;
+  const clearTime = () => {
+    setTaskTime({ start: null, end: null, endIsClose: false });
+    setPickerKey(k => k + 1);
+  };
 
   const effectiveLabel = labelMode === '__custom' ? customLabel : labelMode;
 
@@ -374,8 +384,8 @@ function AddTaskForm({ day, initialTask = null, onSubmit, onCancel }) {
       locationTag: locationTag || null,
       assignedPersonId: initialTask?.assignedPersonId ?? null,
       isLocationSpecific: !!locationTag,
-      start: taskTime.start,
-      end: taskTime.endIsClose ? 'close' : taskTime.end,
+      start: isTimeSet ? taskTime.start : null,
+      end:   isTimeSet ? (taskTime.endIsClose ? 'close' : taskTime.end) : null,
     });
   };
 
@@ -422,8 +432,25 @@ function AddTaskForm({ day, initialTask = null, onSubmit, onCancel }) {
 
       {/* Time */}
       <div className="form-group">
-        <label className="form-label">Time (optional)</label>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+          <label className="form-label" style={{ marginBottom: 0 }}>Time (optional)</label>
+          {isTimeSet && (
+            <button
+              type="button"
+              style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, padding: 0 }}
+              onClick={clearTime}
+            >
+              <X size={10} /> No time
+            </button>
+          )}
+        </div>
+        {!isTimeSet && (
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic', paddingBottom: 6 }}>
+            All shift — no set time
+          </div>
+        )}
         <TimeRangePicker
+          key={pickerKey}
           defaultStart={taskTime.start}
           defaultEnd={taskTime.end}
           defaultEndIsClose={taskTime.endIsClose}

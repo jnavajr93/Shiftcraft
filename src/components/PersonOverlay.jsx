@@ -55,7 +55,7 @@ export function WeekRows({ personIds, clinics, additionalTasks }) {
           .filter(t => t.day === day && pidSet.has(t.assignedPersonId))
           .forEach(t => {
             const label = `${t.label}${t.locationTag ? ' @ ' + t.locationTag : ''}`;
-            const time = formatTaskTime(t) ?? '';
+            const time = formatTaskTime(t) ?? 'All shift';
             assignments.push({ label, time });
           });
 
