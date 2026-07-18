@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Calendar, Sun, Moon, ChevronLeft, ChevronRight,
-  History, Printer, Sparkles, Wand2, Loader2, X, CircleHelp, RotateCcw,
-  Download, Upload, SendHorizonal, AlertCircle,
+  History, Sparkles, Wand2, Loader2, X, CircleHelp, RotateCcw,
+  SendHorizonal, AlertCircle,
 } from 'lucide-react';
 import { useApp, isoWeek, mondayOfWeek } from '../context/AppContext.jsx';
 
@@ -12,6 +12,7 @@ import ChangeLogDrawer from './ChangeLogDrawer.jsx';
 import ChatPanel from './ChatPanel.jsx';
 import { generateSchedule } from '../engine/adapter.js';
 import { validateAndRepairAssignments, findObsViolations, findInvalidSlotAssignments, getPostViolations } from '../engine/validator.js';
+import { fetchAbsencesForWeek } from '../services/dataService.js';
 
 // ─── Post helpers ────────────────────────────
 function formatPostedTime(isoString) {
@@ -528,50 +529,17 @@ function WeekDatePicker({ currentWeek, onSelectWeek, onClose, triggerRef, dirtyW
   );
 }
 
-// ─── Import confirmation modal ────────────────
-function ImportModal({ importWeekLabel, exportedAt, onConfirm, onCancel }) {
-  return (
-    <div
-      className="overlay-backdrop"
-      style={{ zIndex: 250 }}
-      onClick={e => { if (e.target === e.currentTarget) onCancel(); }}
-    >
-      <div className="overlay-modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()}>
-        <div className="overlay-header">
-          <div style={{ fontWeight: 500, fontSize: 16 }}>Import this week?</div>
-          <button className="overlay-close" onClick={onCancel}><X size={16} /></button>
-        </div>
-        <div className="overlay-body">
-          <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
-            This will replace all assignments for <strong>Week of {importWeekLabel}</strong> with
-            the backup from <strong>{exportedAt}</strong>. Current assignments for that week will be overwritten.
-          </p>
-        </div>
-        <div style={{
-          display: 'flex', gap: 8, justifyContent: 'flex-end',
-          padding: '12px 24px', borderTop: '0.5px solid var(--border)', flexShrink: 0,
-        }}>
-          <button className="btn" onClick={onCancel}>Cancel</button>
-          <button className="btn btn-primary" style={{ minHeight: 40 }} onClick={onConfirm}>
-            <Upload size={14} /> Import
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function TopBar({ activeTab, setActiveTab }) {
   const {
     isAdmin, setIsAdmin, managerInitials, setManagerInitials, theme, setTheme,
     weekLabel, currentWeek, navigateWeek, jumpToWeek, weekIsEmpty, copyFromTwoWeeksAgo, clearWeek,
-    data, addLog, applyBulkAssignments, restoreClinicSlots, lastSaved, saveStatus, importWeekData,
+    data, addLog, applyBulkAssignments, restoreClinicSlots, lastSaved, saveStatus,
     historyScores, presentManagers, conflictToast, setConflictToast,
     isDirty, postedSnapshot, dirtyWeeks, postWeek,
   } = useApp();
   const weekLabelRef = useRef(null);
   const undoTimerRef = useRef(null);
-  const fileInputRef = useRef(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showPinModal, setShowPinModal] = useState(false);
   const { showWelcomeCard } = useTour();
@@ -606,14 +574,13 @@ export default function TopBar({ activeTab, setActiveTab }) {
   const [postState, setPostState] = useState('idle'); // 'idle'|'loading'|'done'|'error'
   const [showExitNudge, setShowExitNudge] = useState(false);
 
-  // ─── Export / Import state ───────────────────
-  const [pendingImport, setPendingImport] = useState(null); // parsed file data awaiting confirmation
-  const [importError, setImportError] = useState('');
 
   // ─── Post flow ───────────────────────────────
-  const handlePostClick = () => {
+  const handlePostClick = async () => {
     if (!data) return;
-    const violations = getPostViolations(data.clinics, data.people);
+    const weekMonday = mondayOfWeek(currentWeek);
+    const { data: absences } = await fetchAbsencesForWeek(weekMonday);
+    const violations = getPostViolations(data.clinics, data.people, absences ?? [], weekMonday);
     if (violations.length > 0) {
       setPostViolations(violations);
       setShowPostModal('violations');
@@ -687,91 +654,9 @@ export default function TopBar({ activeTab, setActiveTab }) {
     handlePostClick();
   };
 
-  const handleExport = () => {
-    if (!data) return;
-    const monday = mondayOfWeek(currentWeek);
-    const slotMap = {};
-    for (const c of data.clinics) slotMap[c.id] = { ...c.slots };
-    for (const t of (data.additionalTasks ?? [])) slotMap[`task:${t.id}`] = t.assignedPersonId;
 
-    const payload = {
-      version: EXPORT_VERSION,
-      weekStr: currentWeek,
-      weekMonday: monday.toISOString().slice(0, 10),
-      exportedAt: new Date().toISOString(),
-      slotMap,
-    };
 
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `shiftcraft-week-${payload.weekMonday}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setCopyToast('Week exported');
-    setTimeout(() => setCopyToast(null), 3000);
-  };
 
-  const handleImportClick = () => {
-    setImportError('');
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const parsed = JSON.parse(ev.target.result);
-        if (
-          !parsed ||
-          parsed.version !== EXPORT_VERSION ||
-          typeof parsed.weekStr !== 'string' ||
-          !parsed.weekStr.match(/^\d{4}-W\d{2}$/) ||
-          !parsed.slotMap ||
-          typeof parsed.slotMap !== 'object'
-        ) {
-          setImportError('Not a valid Shiftcraft week export file');
-          setCopyToast('Not a valid Shiftcraft week export file');
-          setTimeout(() => setCopyToast(null), 4000);
-          return;
-        }
-        setPendingImport(parsed);
-      } catch {
-        setImportError('Not a valid Shiftcraft week export file');
-        setCopyToast('Not a valid Shiftcraft week export file');
-        setTimeout(() => setCopyToast(null), 4000);
-      }
-    };
-    reader.readAsText(file);
-  };
-
-  const handleImportConfirm = async () => {
-    if (!pendingImport) return;
-    const { weekStr, slotMap, weekMonday, exportedAt } = pendingImport;
-    setPendingImport(null);
-
-    const ok = await importWeekData(weekStr, slotMap);
-    if (!ok) {
-      setCopyToast('Import failed — check connection');
-      setTimeout(() => setCopyToast(null), 4000);
-      return;
-    }
-
-    const importedLabel = new Date(weekMonday).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
-    addLog({
-      action: `Week of ${importedLabel} restored from backup (exported ${new Date(exportedAt).toLocaleString()})`,
-      personName: 'Manager',
-      day: '',
-      detail: '',
-    });
-    setCopyToast('Week restored from backup');
-    setTimeout(() => setCopyToast(null), 3000);
-  };
 
   // Generate state
   const [showGenModal, setShowGenModal] = useState(false);
@@ -986,52 +871,21 @@ export default function TopBar({ activeTab, setActiveTab }) {
           )}
           {isAdmin && (
             <>
+              {/* Post button — always shown for muscle memory */}
               <button
-                className="btn btn-pill topbar-mobile-hidden"
-                style={{ fontSize: 12, minHeight: 32, gap: 5 }}
-                onClick={handleExport}
-                title="Export this week as a backup file"
+                className={`btn btn-pill topbar-mobile-hidden${isDirty ? ' btn-post' : ''}${postState === 'error' ? ' generate-error' : postState === 'done' ? ' generate-done' : ''}`}
+                style={{ fontSize: 12, minHeight: 32, gap: 5, opacity: isDirty || postState !== 'idle' ? 1 : 0.45 }}
+                onClick={isDirty && (postState === 'idle' || postState === 'error') ? handlePostClick : undefined}
+                disabled={postState === 'loading' || (!isDirty && postState === 'idle')}
+                title={isDirty ? 'Publish schedule to staff' : postedSnapshot ? `Posted by ${postedSnapshot.posted_by ?? '—'}` : 'Nothing to post yet'}
               >
-                <Download size={13} /> Export
+                {postState === 'loading' ? <><Loader2 size={13} className="spin" /> Posting…</> :
+                 postState === 'done'    ? <>✓ Posted</> :
+                 isDirty && postedSnapshot ? <><SendHorizonal size={13} /> Post changes</> :
+                 isDirty ? <><SendHorizonal size={13} /> Post</> :
+                 postedSnapshot ? <>✓ Posted {formatPostedTime(postedSnapshot.posted_at)}</> :
+                 <><SendHorizonal size={13} /> Post</>}
               </button>
-              <button
-                className="btn btn-pill topbar-mobile-hidden"
-                style={{ fontSize: 12, minHeight: 32, gap: 5 }}
-                onClick={handleImportClick}
-                title="Restore a week from a backup file"
-              >
-                <Upload size={13} /> Import
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".json"
-                style={{ display: 'none' }}
-                onChange={handleFileChange}
-              />
-            </>
-          )}
-          {isAdmin && (
-            <>
-              {/* Post button */}
-              {isDirty ? (
-                <button
-                  className={`btn btn-pill topbar-mobile-hidden btn-post${postState === 'error' ? ' generate-error' : postState === 'done' ? ' generate-done' : ''}`}
-                  style={{ fontSize: 12, minHeight: 32, gap: 5 }}
-                  onClick={postState === 'idle' || postState === 'error' ? handlePostClick : undefined}
-                  disabled={postState === 'loading'}
-                  title="Publish schedule to staff"
-                >
-                  {postState === 'loading' ? <><Loader2 size={13} className="spin" /> Posting…</> :
-                   postState === 'done'    ? <>✓ Posted</> :
-                   postedSnapshot ? <><SendHorizonal size={13} /> Post changes</> :
-                   <><SendHorizonal size={13} /> Post</>}
-                </button>
-              ) : postedSnapshot ? (
-                <span className="topbar-posted-status topbar-mobile-hidden" title={`Posted by ${postedSnapshot.posted_by ?? '—'}`}>
-                  ✓ Posted {formatPostedTime(postedSnapshot.posted_at)}
-                </span>
-              ) : null}
 
               {/* Generate schedule button */}
               <button
@@ -1045,15 +899,6 @@ export default function TopBar({ activeTab, setActiveTab }) {
                 {genButtonContent()}
               </button>
 
-              <button
-                data-tour="print-button"
-                className="btn btn-icon topbar-mobile-hidden"
-                onClick={() => window.print()}
-                aria-label="Print schedule"
-                title="Print"
-              >
-                <Printer size={20} strokeWidth={1.5} />
-              </button>
               <button
                 data-tour="log-button"
                 className="btn btn-icon topbar-mobile-hidden"
@@ -1161,13 +1006,6 @@ export default function TopBar({ activeTab, setActiveTab }) {
               ? `Unposted changes — staff are seeing the version posted ${formatPostedTime(postedSnapshot.posted_at)} by ${postedSnapshot.posted_by ?? '—'}`
               : 'This week has not been posted — staff cannot see it yet.'}
           </span>
-          <button
-            className="btn btn-primary"
-            style={{ minHeight: 26, fontSize: 11, padding: '3px 12px', whiteSpace: 'nowrap', flexShrink: 0 }}
-            onClick={handlePostClick}
-          >
-            Post
-          </button>
         </div>
       )}
 
@@ -1247,14 +1085,6 @@ export default function TopBar({ activeTab, setActiveTab }) {
       )}
       {showLog && <ChangeLogDrawer onClose={() => setShowLog(false)} />}
       {showChat && <ChatPanel onClose={() => setShowChat(false)} />}
-      {pendingImport && (
-        <ImportModal
-          importWeekLabel={new Date(pendingImport.weekMonday).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}
-          exportedAt={new Date(pendingImport.exportedAt).toLocaleString()}
-          onConfirm={handleImportConfirm}
-          onCancel={() => setPendingImport(null)}
-        />
-      )}
       {showPinModal && (
         <ManagerModal
           onSuccess={(inits) => { setShowPinModal(false); setIsAdmin(true); setManagerInitials(inits); }}

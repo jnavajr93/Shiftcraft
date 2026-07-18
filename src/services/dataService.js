@@ -197,3 +197,40 @@ export async function loadChangelog() {
   if (error) return []
   return data?.value || []
 }
+
+// ─── Absence records ─────────────────────────
+// Fetches all absence rows overlapping the Mon–Fri range of the given week.
+// weekMonday is a Date object (UTC midnight of Monday).
+// Degrades gracefully if the absences table doesn't exist yet (42P01).
+export async function fetchAbsencesForWeek(weekMonday) {
+  const startStr = weekMonday.toISOString().slice(0, 10);
+  const friday = new Date(weekMonday);
+  friday.setUTCDate(weekMonday.getUTCDate() + 4);
+  const endStr = friday.toISOString().slice(0, 10);
+
+  const { data, error } = await supabase
+    .from('absences')
+    .select('person_name, start_date, end_date, type, partial_start, partial_end')
+    .lte('start_date', endStr)
+    .gte('end_date', startStr);
+
+  if (error) {
+    if (error.code === '42P01') return { status: 'empty', data: [] };
+    return { status: 'error', error, data: [] };
+  }
+  return { status: 'ok', data: data ?? [] };
+}
+
+// ─── All posted snapshots for a week ─────────
+export async function fetchAllPostedSnapshots(wk) {
+  const { data, error } = await supabase
+    .from('posted_schedules')
+    .select('id, snapshot, posted_at, posted_by')
+    .eq('week_key', wk)
+    .order('posted_at', { ascending: false });
+  if (error) {
+    if (error.code === '42P01' || error.code === 'PGRST116') return { status: 'empty', data: [] };
+    return { status: 'error', error, data: [] };
+  }
+  return { status: 'ok', data: data ?? [] };
+}

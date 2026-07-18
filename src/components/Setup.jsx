@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect } from 'react';
-import { Trash2, Plus, Pencil, GripVertical, X } from 'lucide-react';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { Trash2, Plus, Pencil, GripVertical, X, Upload } from 'lucide-react';
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
 } from '@dnd-kit/core';
@@ -13,6 +13,8 @@ import {
   ACCOMMODATION_TYPES, EARLY_LEAVE_REASONS, accommodationLabel,
 } from '../data/seed.js';
 import ClinicConfig from './ClinicConfig.jsx';
+
+const EXPORT_VERSION = 'shiftcraft-v1';
 
 const GRADE_OPTIONS = ['A', 'B', 'C', 'T'];
 const PRESET_COLORS = [
@@ -1006,6 +1008,110 @@ function LocationsTab() {
   );
 }
 
+// ─── Import panel (in Data subtab) ───────────
+function ImportModal({ importWeekLabel, exportedAt, onConfirm, onCancel }) {
+  return (
+    <div className="overlay-backdrop" style={{ zIndex: 250 }} onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
+      <div className="overlay-modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()}>
+        <div className="overlay-header">
+          <div style={{ fontWeight: 500, fontSize: 16 }}>Import this week?</div>
+          <button className="overlay-close" onClick={onCancel}><X size={16} /></button>
+        </div>
+        <div className="overlay-body">
+          <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
+            This will replace all assignments for <strong>Week of {importWeekLabel}</strong> with
+            the backup from <strong>{exportedAt}</strong>. Current assignments for that week will be overwritten.
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '12px 24px', borderTop: '0.5px solid var(--border)', flexShrink: 0 }}>
+          <button className="btn" onClick={onCancel}>Cancel</button>
+          <button className="btn btn-primary" style={{ minHeight: 40 }} onClick={onConfirm}>
+            <Upload size={14} /> Import
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DataTab() {
+  const { importWeekData, addLog } = useApp();
+  const fileInputRef = useRef(null);
+  const [pendingImport, setPendingImport] = useState(null);
+  const [toast, setToast] = useState('');
+
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 4000); };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const parsed = JSON.parse(ev.target.result);
+        if (
+          !parsed ||
+          parsed.version !== EXPORT_VERSION ||
+          typeof parsed.weekStr !== 'string' ||
+          !parsed.weekStr.match(/^\d{4}-W\d{2}$/) ||
+          !parsed.slotMap ||
+          typeof parsed.slotMap !== 'object'
+        ) {
+          showToast('Not a valid Shiftcraft week export file');
+          return;
+        }
+        setPendingImport(parsed);
+      } catch {
+        showToast('Not a valid Shiftcraft week export file');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleImportConfirm = async () => {
+    if (!pendingImport) return;
+    const { weekStr, slotMap, weekMonday, exportedAt } = pendingImport;
+    setPendingImport(null);
+    const ok = await importWeekData(weekStr, slotMap);
+    if (!ok) { showToast('Import failed — check connection'); return; }
+    const importedLabel = new Date(weekMonday).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+    addLog({
+      action: `Week of ${importedLabel} restored from backup (exported ${new Date(exportedAt).toLocaleString()})`,
+      personName: 'Manager', day: '', detail: '',
+    });
+    showToast('Week restored from backup');
+  };
+
+  return (
+    <div style={{ padding: '24px 0', maxWidth: 480 }}>
+      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8 }}>Import week from backup</div>
+      <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 16 }}>
+        Restore a previously exported week file (.json). This overwrites all assignments for that week.
+      </p>
+      <button
+        className="btn btn-pill"
+        style={{ fontSize: 13, minHeight: 36, gap: 6 }}
+        onClick={() => fileInputRef.current?.click()}
+      >
+        <Upload size={14} /> Choose backup file…
+      </button>
+      <input ref={fileInputRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleFileChange} />
+      {toast && (
+        <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>{toast}</div>
+      )}
+      {pendingImport && (
+        <ImportModal
+          importWeekLabel={new Date(pendingImport.weekMonday).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}
+          exportedAt={new Date(pendingImport.exportedAt).toLocaleString()}
+          onConfirm={handleImportConfirm}
+          onCancel={() => setPendingImport(null)}
+        />
+      )}
+    </div>
+  );
+}
+
 // ─── Main Setup ───────────────────────────────
 export default function Setup() {
   const [subTab, setSubTab] = useState('staff');
@@ -1013,7 +1119,7 @@ export default function Setup() {
   return (
     <div className="setup-page">
       <div className="setup-subtabs">
-        {['staff', 'clinics', 'locations'].map(t => (
+        {['staff', 'clinics', 'locations', 'data'].map(t => (
           <button
             key={t}
             className={`setup-subtab${subTab === t ? ' active' : ''}`}
@@ -1026,6 +1132,7 @@ export default function Setup() {
       {subTab === 'staff'     && <StaffTab />}
       {subTab === 'clinics'   && <ClinicsTab />}
       {subTab === 'locations' && <LocationsTab />}
+      {subTab === 'data'      && <DataTab />}
     </div>
   );
 }

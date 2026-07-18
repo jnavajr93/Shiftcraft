@@ -309,13 +309,139 @@ export function findBoardConflicts(clinics, people) {
 }
 
 /**
- * Combined post gate: timeless slots + time-overlap conflicts.
+ * Finds assignments that conflict with absence records.
+ * absences: array of { person_name (lowercase trimmed), start_date, end_date (YYYY-MM-DD),
+ *                      type (vacation|sick|request|partial), partial_start, partial_end (nullable minutes) }
+ * weekMonday: Date (UTC midnight of Monday)
+ */
+export function findAbsenceViolations(clinics, people, absences, weekMonday) {
+  if (!absences || absences.length === 0 || !weekMonday) return [];
+  const DAYS_LIST = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+  const personById = new Map((people ?? []).map(p => [p.id, p]));
+  const violations = [];
+  const seen = new Set(); // one violation per person-day
+
+  for (const c of clinics) {
+    if (!c.open) continue;
+    const dayIdx = DAYS_LIST.indexOf(c.day);
+    if (dayIdx === -1) continue;
+    const clinicDate = new Date(weekMonday);
+    clinicDate.setUTCDate(weekMonday.getUTCDate() + dayIdx);
+    const dateStr = clinicDate.toISOString().slice(0, 10);
+
+    for (const [slotType, slotVal] of getRenderedSlotEntries(c)) {
+      const pid = getSlotPersonId(slotVal);
+      if (!pid) continue;
+      const person = personById.get(pid);
+      if (!person) continue;
+      const pKey = person.name.trim().toLowerCase();
+      const violKey = `${pid}:${c.day}`;
+      if (seen.has(violKey)) continue;
+
+      const matching = absences.filter(a =>
+        a.person_name === pKey &&
+        a.start_date <= dateStr &&
+        a.end_date >= dateStr
+      );
+
+      for (const absence of matching) {
+        let blocked = false;
+        if (absence.type !== 'partial') {
+          blocked = true;
+        } else if (absence.partial_start != null && absence.partial_end != null) {
+          const slotRange = slotEffectiveRange(slotType, c);
+          if (slotRange.start == null || slotRange.end == null) {
+            blocked = true; // unknown range — be conservative
+          } else {
+            blocked = rangesOverlap(slotRange, { start: absence.partial_start, end: absence.partial_end });
+          }
+        }
+        if (blocked) {
+          const typeLabel = absence.type === 'partial' ? 'partial absence' : absence.type;
+          violations.push({
+            label: `${person.name} — ${c.day} @ ${c.location}: on ${typeLabel} (${dateStr})`,
+            clinicId: c.id,
+            personName: person.name,
+          });
+          seen.add(violKey);
+          break;
+        }
+      }
+    }
+  }
+  return violations;
+}
+
+const OBS_SLOT_LABELS = {
+  preop: 'Pre-Op/PACU', sterile: 'Sterile Processing',
+  circulator: 'Circulator', scrub: 'Scrub Tech',
+};
+
+/**
+ * Finds open clinics missing core staffing:
+ * - Regular clinics: no front desk, no scribe, or no opener+closer
+ *   (Dr. B clinics exempt from scribe/opener/closer; front desk still required)
+ * - OBS clinics: any of the 4 OBS slots empty
+ */
+export function findStaffingGaps(clinics) {
+  const violations = [];
+
+  for (const c of clinics) {
+    if (!c.open) continue;
+    const isObs = c.location?.toLowerCase() === 'obs';
+    const isDrB = c.provider === 'Dr. B';
+
+    if (isObs) {
+      for (const slotType of ['preop', 'sterile', 'circulator', 'scrub']) {
+        if (!getSlotPersonId(c.slots?.[slotType])) {
+          violations.push({
+            label: `OBS ${c.day}: ${OBS_SLOT_LABELS[slotType]} empty`,
+            clinicId: c.id,
+          });
+        }
+      }
+    } else {
+      // Front desk (required for all regular clinics including Dr. B)
+      const isDrRMonFri = c.provider === 'Dr. R' && (c.day === 'Mon' || c.day === 'Fri');
+      if (isDrRMonFri) {
+        if (!getSlotPersonId(c.slots?.openingFrontDesk)) {
+          violations.push({ label: `${c.location} ${c.day} (${c.provider}): no opening front desk`, clinicId: c.id });
+        }
+        if (!getSlotPersonId(c.slots?.closingFrontDesk)) {
+          violations.push({ label: `${c.location} ${c.day} (${c.provider}): no closing front desk`, clinicId: c.id });
+        }
+      } else {
+        if (!getSlotPersonId(c.slots?.frontDesk)) {
+          violations.push({ label: `${c.location} ${c.day} (${c.provider}): no front desk assigned`, clinicId: c.id });
+        }
+      }
+
+      // Tech checks — exempt for Dr. B
+      if (!isDrB) {
+        if (!getSlotPersonId(c.slots?.scribe)) {
+          violations.push({ label: `${c.location} ${c.day} (${c.provider}): no scribe assigned`, clinicId: c.id });
+        }
+        if (!getSlotPersonId(c.slots?.opener) && !getSlotPersonId(c.slots?.closing)) {
+          violations.push({ label: `${c.location} ${c.day} (${c.provider}): no opener or closer assigned`, clinicId: c.id });
+        }
+      }
+    }
+  }
+  return violations;
+}
+
+/**
+ * Combined post gate: timeless slots + time-overlap/OBS conflicts + absence violations + staffing gaps.
+ * absences: pre-fetched from fetchAbsencesForWeek (pass [] if unavailable)
+ * weekMonday: Date (UTC) for absence date calculations
  * Returns array of { label, clinicId, type } — empty means clean to post.
  */
-export function getPostViolations(clinics, people) {
+export function getPostViolations(clinics, people, absences = [], weekMonday = null) {
   const timeless  = findTimelessAssignments(clinics, people).map(v => ({ ...v, type: 'timeless' }));
   const conflicts = findBoardConflicts(clinics, people).map(v => ({ ...v, type: 'conflict' }));
-  return [...timeless, ...conflicts];
+  const absent    = findAbsenceViolations(clinics, people, absences, weekMonday).map(v => ({ ...v, type: 'absence' }));
+  const gaps      = findStaffingGaps(clinics).map(v => ({ ...v, type: 'gap' }));
+  return [...timeless, ...conflicts, ...absent, ...gaps];
 }
 
 // ─── Self-contained tests ───────────────────────────────────────────────────
