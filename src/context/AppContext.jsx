@@ -15,6 +15,11 @@ import {
   saveDismissedPatterns as saveDismissedPatternsDB,
   fetchLatestPostedSnapshot as fetchLatestPostedSnapshotDB,
   savePostedSnapshot as savePostedSnapshotDB,
+  fetchAllAbsences as fetchAllAbsencesDB,
+  saveAbsence as saveAbsenceDB,
+  updateAbsence as updateAbsenceDB,
+  deleteAbsence as deleteAbsenceDB,
+  subscribeAbsences,
   weekKey,
   SCHEDULE_KEY,
   CHANGELOG_KEY,
@@ -621,6 +626,9 @@ export function AppProvider({ children }) {
   const [conflictToast, setConflictToast] = useState(null);
   const conflictToastTimerRef = useRef(null);
 
+  // ─── Absence state ─────────────────────────────
+  const [absences, setAbsences] = useState([]);
+
   // ─── Verified save helper ─────────────────────
   // Versioned conditional save via upsert_schedule_data RPC.
   // On conflict (another manager saved between our load and this save):
@@ -1071,6 +1079,52 @@ export function AppProvider({ children }) {
       ch.untrack();
     }
   }, [isAdmin, managerInitials]);
+
+  // ─── Absence load + realtime ─────────────────
+  useEffect(() => {
+    fetchAllAbsencesDB().then(({ data }) => {
+      if (data) setAbsences(data);
+    });
+    const channel = subscribeAbsences((payload) => {
+      setAbsences(prev => {
+        if (payload.eventType === 'INSERT') {
+          return [...prev, payload.new].sort((a, b) => a.start_date.localeCompare(b.start_date));
+        }
+        if (payload.eventType === 'UPDATE') {
+          return prev.map(a => a.id === payload.new.id ? payload.new : a)
+            .sort((a, b) => a.start_date.localeCompare(b.start_date));
+        }
+        if (payload.eventType === 'DELETE') {
+          return prev.filter(a => a.id !== payload.old.id);
+        }
+        return prev;
+      });
+    });
+    return () => supabase.removeChannel(channel);
+  }, []);
+
+  const addAbsence = useCallback(async (payload) => {
+    const { error, data } = await saveAbsenceDB(payload);
+    if (error) { console.error('[Shiftcraft] addAbsence error:', error); return { error }; }
+    // realtime will update state; set optimistically too for instant feedback
+    setAbsences(prev => [...prev, data].sort((a, b) => a.start_date.localeCompare(b.start_date)));
+    return { error: null, data };
+  }, []);
+
+  const editAbsence = useCallback(async (id, payload) => {
+    const { error, data } = await updateAbsenceDB(id, payload);
+    if (error) { console.error('[Shiftcraft] editAbsence error:', error); return { error }; }
+    setAbsences(prev => prev.map(a => a.id === id ? data : a)
+      .sort((a, b) => a.start_date.localeCompare(b.start_date)));
+    return { error: null, data };
+  }, []);
+
+  const removeAbsence = useCallback(async (id) => {
+    const { error } = await deleteAbsenceDB(id);
+    if (error) { console.error('[Shiftcraft] removeAbsence error:', error); return { error }; }
+    setAbsences(prev => prev.filter(a => a.id !== id));
+    return { error: null };
+  }, []);
 
   const addLog = useCallback((entry) => {
     setChangelog(prev => [{
@@ -1830,6 +1884,7 @@ export function AppProvider({ children }) {
       placementHistory, dismissedPatterns, historyScores,
       dismissPattern, undismissPattern,
       presentManagers, conflictToast, setConflictToast,
+      absences, addAbsence, editAbsence, removeAbsence,
       isDirty, postedSnapshot, dirtyWeeks, boardClinics, postWeek,
     }}>
       {children}

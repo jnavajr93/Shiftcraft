@@ -31,6 +31,7 @@ function todayTargetWeek() {
 import { useTour } from './Tour.jsx';
 import ChangeLogDrawer from './ChangeLogDrawer.jsx';
 import ChatPanel from './ChatPanel.jsx';
+import AbsenceCalendar from './AbsenceCalendar.jsx';
 import { generateSchedule } from '../engine/adapter.js';
 import { validateAndRepairAssignments, findObsViolations, findInvalidSlotAssignments, getPostViolations } from '../engine/validator.js';
 import { fetchAbsencesForWeek } from '../services/dataService.js';
@@ -624,6 +625,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
   const [showClearModal, setShowClearModal] = useState(false);
   const [showLog, setShowLog] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  const [showAbsences, setShowAbsences] = useState(false);
 
   // ─── Post state ──────────────────────────────
   // 'idle' | 'violations' | 'confirm' — which post modal to show
@@ -948,6 +950,14 @@ export default function TopBar({ activeTab, setActiveTab }) {
               </button>
 
               <button
+                className={`btn btn-icon topbar-mobile-hidden${showAbsences ? ' active' : ''}`}
+                onClick={() => setShowAbsences(s => !s)}
+                aria-label="Absence calendar"
+                title="Absence calendar"
+              >
+                <Calendar size={20} strokeWidth={1.5} />
+              </button>
+              <button
                 data-tour="log-button"
                 className="btn btn-icon topbar-mobile-hidden"
                 onClick={() => setShowLog(s => !s)}
@@ -1153,6 +1163,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
       )}
       {showLog && <ChangeLogDrawer onClose={() => setShowLog(false)} />}
       {showChat && <ChatPanel onClose={() => setShowChat(false)} />}
+      {showAbsences && <AbsenceCalendar onClose={() => setShowAbsences(false)} />}
       {showPinModal && (
         <ManagerModal
           onSuccess={(inits) => { setShowPinModal(false); setIsAdmin(true); setManagerInitials(inits); }}

@@ -198,7 +198,53 @@ export async function loadChangelog() {
   return data?.value || []
 }
 
-// ─── Absence records ─────────────────────────
+// ─── Absence CRUD ────────────────────────────
+export async function fetchAllAbsences() {
+  const { data, error } = await supabase
+    .from('absences')
+    .select('id, person_name, start_date, end_date, type, partial_start, partial_end, note, entered_by, created_at')
+    .order('start_date', { ascending: true });
+  if (error) {
+    if (error.code === '42P01') return { status: 'empty', data: [] };
+    return { status: 'error', error, data: [] };
+  }
+  return { status: 'ok', data: data ?? [] };
+}
+
+export async function saveAbsence(payload) {
+  const { data, error } = await supabase
+    .from('absences')
+    .insert(payload)
+    .select('id, person_name, start_date, end_date, type, partial_start, partial_end, note, entered_by, created_at')
+    .single();
+  if (error) return { error };
+  return { error: null, data };
+}
+
+export async function updateAbsence(id, payload) {
+  const { data, error } = await supabase
+    .from('absences')
+    .update(payload)
+    .eq('id', id)
+    .select('id, person_name, start_date, end_date, type, partial_start, partial_end, note, entered_by, created_at')
+    .single();
+  if (error) return { error };
+  return { error: null, data };
+}
+
+export async function deleteAbsence(id) {
+  const { error } = await supabase.from('absences').delete().eq('id', id);
+  return { error };
+}
+
+export function subscribeAbsences(callback) {
+  return supabase
+    .channel('absences-realtime')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'absences' }, callback)
+    .subscribe();
+}
+
+// ─── Absence records (week-scoped, for post gate) ─
 // Fetches all absence rows overlapping the Mon–Fri range of the given week.
 // weekMonday is a Date object (UTC midnight of Monday).
 // Degrades gracefully if the absences table doesn't exist yet (42P01).
