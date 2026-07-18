@@ -4,7 +4,7 @@ import {
   History, Sparkles, Wand2, Loader2, X, CircleHelp, RotateCcw,
   SendHorizonal, AlertCircle, Save,
 } from 'lucide-react';
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useApp, isoWeek, mondayOfWeek } from '../context/AppContext.jsx';
 import {
@@ -695,8 +695,12 @@ export default function TopBar({ activeTab, setActiveTab }) {
     URL.revokeObjectURL(url);
 
     // PDF download
-    const pdfFilename = `shiftcraft_week_${monday.toISOString().slice(0, 10)}.pdf`;
-    generateSchedulePDF(data, weekLabel, monday, managerInitials, pdfFilename);
+    try {
+      const pdfFilename = `shiftcraft_week_${monday.toISOString().slice(0, 10)}.pdf`;
+      generateSchedulePDF(data, weekLabel, monday, managerInitials, pdfFilename);
+    } catch (pdfErr) {
+      console.error('[Shiftcraft] PDF generation failed:', pdfErr);
+    }
 
     setPostState('done');
     setTimeout(() => setPostState('idle'), 3000);
