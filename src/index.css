@@ -900,34 +900,37 @@ html, body, #root {
   position: relative;
   overflow: visible;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px 6px 12px;
-  padding-right: 56px;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 12px;
   border-bottom: 0.5px solid var(--border);
   min-height: 36px;
 }
 .task-slot:last-child { border-bottom: none; }
 .task-slot.drop-target { background: var(--accent-subtle); }
+/* Row 1 inside .task-slot: label left, actions right */
+.task-slot-row1 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 .task-label {
   font-size: 12px; font-weight: 500; color: var(--text-secondary);
-  flex-shrink: 0;
+  flex: 1;
 }
 .task-location-tag {
   font-size: 10px; color: var(--text-muted);
   background: var(--bg-surface); border: 0.5px solid var(--border);
   padding: 1px 5px; border-radius: var(--radius-pill);
 }
-.task-content { flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; }
+/* Row 2: chip gets full row width */
+.task-content { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .person-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .task-actions {
-  position: absolute;
-  right: 4px;
-  top: 50%;
-  transform: translateY(-50%);
   display: flex;
   gap: 2px;
   align-items: center;
+  flex-shrink: 0;
 }
 .task-edit-btn {
   display: flex; align-items: center; justify-content: center;

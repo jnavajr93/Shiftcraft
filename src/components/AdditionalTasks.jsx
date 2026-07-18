@@ -267,7 +267,29 @@ function TaskSlotRow({ task, onPersonClick, onEdit }) {
         onClick={() => { if (isAdmin) setShowPopover(s => !s); }}
         style={{ cursor: isAdmin ? 'pointer' : 'default' }}
       >
-        <div className="task-label">{task.label}</div>
+        {/* Row 1: label + actions */}
+        <div className="task-slot-row1">
+          <div className="task-label">{task.label}</div>
+          {isAdmin && (
+            <div className="task-actions">
+              <button
+                className="task-edit-btn"
+                onClick={e => { e.stopPropagation(); onEdit(); }}
+                title="Edit task"
+              >
+                <Pencil size={11} />
+              </button>
+              <button
+                className="task-remove-btn"
+                onClick={e => { e.stopPropagation(); removeTask(task.id); }}
+                title="Remove task"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          )}
+        </div>
+        {/* Row 2: assignee chip */}
         <div className="task-content">
           {person ? (
             <div
@@ -283,24 +305,6 @@ function TaskSlotRow({ task, onPersonClick, onEdit }) {
             </div>
           )}
         </div>
-        {isAdmin && (
-          <div className="task-actions">
-            <button
-              className="task-edit-btn"
-              onClick={e => { e.stopPropagation(); onEdit(); }}
-              title="Edit task"
-            >
-              <Pencil size={11} />
-            </button>
-            <button
-              className="task-remove-btn"
-              onClick={e => { e.stopPropagation(); removeTask(task.id); }}
-              title="Remove task"
-            >
-              <X size={12} />
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Popover lives OUTSIDE .task-slot so its clicks don't bubble to the toggle handler */}
@@ -325,6 +329,7 @@ function TaskSlotRow({ task, onPersonClick, onEdit }) {
         ) : (
           <div
             className={`variable-time-row${isAdmin ? ' editable' : ''}`}
+            style={{ paddingLeft: 12, paddingRight: 12 }}
             onClick={isAdmin ? (e) => { e.stopPropagation(); setEditingTime(true); } : undefined}
           >
             {task.locationTag && (
