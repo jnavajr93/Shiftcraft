@@ -265,10 +265,10 @@ function TaskSlotRow({ task, onPersonClick, onEdit }) {
         style={{ cursor: isAdmin ? 'pointer' : 'default' }}
       >
         <div className="task-label">{task.label}</div>
-        {task.locationTag && (
-          <div className="task-location-tag">{task.locationTag}</div>
-        )}
         <div className="task-content">
+          {task.locationTag && (
+            <div className="task-location-tag">{task.locationTag}</div>
+          )}
           {person ? (
             <div
               className="person-chip"

@@ -911,7 +911,7 @@ html, body, #root {
 .task-slot.drop-target { background: var(--accent-subtle); }
 .task-label {
   font-size: 12px; font-weight: 500; color: var(--text-secondary);
-  flex-shrink: 0; min-width: 100px;
+  flex-shrink: 0;
 }
 .task-location-tag {
   font-size: 10px; color: var(--text-muted);
