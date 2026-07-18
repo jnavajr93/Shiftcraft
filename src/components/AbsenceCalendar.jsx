@@ -8,9 +8,13 @@ export const ABSENCE_TYPES = [
   { key: 'Callout',  label: 'Last-minute callout', short: 'Callout',  color: '#ef4444' },
   { key: 'Approved', label: 'Approved time off',   short: 'Approved', color: '#22c55e' },
   { key: 'Sick',     label: 'Sick',                short: 'Sick',     color: '#3b82f6' },
-  { key: 'Request',  label: 'Request / pending',   short: 'Request',  color: '#f59e0b' },
+  // Request/pending is retired — hidden from form/legend but kept for rendering old DB rows
+  { key: 'Request',  label: 'Request / pending',   short: 'Request',  color: '#f59e0b', hidden: true },
   { key: 'Partial',  label: 'Partial day',         short: 'Partial',  color: '#8b5cf6' },
 ];
+
+// Types available for selection in the add/edit form and shown in the legend
+const SELECTABLE_TYPES = ABSENCE_TYPES.filter(t => !t.hidden);
 
 const TYPE_MAP  = new Map(ABSENCE_TYPES.map(t => [t.key, t]));
 const colorOf   = (key) => TYPE_MAP.get(key)?.color ?? '#6b7280';
@@ -67,7 +71,7 @@ function buildGrid(year, month) {
 function Legend() {
   return (
     <div className="absence-legend">
-      {ABSENCE_TYPES.map(t => (
+      {SELECTABLE_TYPES.map(t => (
         <div key={t.key} className="absence-legend-item">
           <span className="absence-legend-dot" style={{ background: t.color }} />
           <span>{t.label}</span>
@@ -82,7 +86,11 @@ function Legend() {
 function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, managerInitials, onSave, onDelete, onClose }) {
   const isEdit = mode === 'edit';
   const [personKey, setPersonKey] = useState(absence?.person_name ?? '');
-  const [type,      setType]      = useState(absence?.type ?? 'Approved');
+  // If editing an absence with a retired type (e.g. 'Request'), reset to '' so user must pick a current type
+  const [type,      setType]      = useState(() => {
+    const t = absence?.type ?? 'Approved';
+    return SELECTABLE_TYPES.some(s => s.key === t) ? t : '';
+  });
   const [startD,    setStartD]    = useState(absence?.start_date ?? initStart ?? '');
   const [endD,      setEndD]      = useState(absence?.end_date   ?? initEnd   ?? '');
   const [pStart,    setPStart]    = useState(absence?.partial_start ?? '08:00');
@@ -129,7 +137,7 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, man
   };
 
   const person = people.find(p => p.name.trim().toLowerCase() === personKey);
-  const canSubmit = personKey && startD && endD && startD <= endD;
+  const canSubmit = personKey && startD && endD && startD <= endD && SELECTABLE_TYPES.some(s => s.key === type);
 
   return (
     <div className="overlay-backdrop" style={{ zIndex: 310 }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
@@ -155,7 +163,7 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, man
           <div>
             <label className="setup-label">Category</label>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {ABSENCE_TYPES.map(t => (
+              {SELECTABLE_TYPES.map(t => (
                 <button
                   key={t.key}
                   type="button"
@@ -445,7 +453,7 @@ function AbsenceHistory({ absences, people, personByKey, onAbsenceClick }) {
 
         {/* Category filter */}
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-          {ABSENCE_TYPES.map(t => (
+          {SELECTABLE_TYPES.map(t => (
             <button
               key={t.key}
               className="absence-type-filter-btn"
@@ -538,6 +546,13 @@ export default function AbsenceCalendar({ onClose }) {
   const [viewMonth, setViewMonth] = useState(todayDate.getUTCMonth());
   const [modal,     setModal]     = useState(null);
 
+  // Close on Escape (only when no sub-modal is open)
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape' && !modal) onClose(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [modal, onClose]);
+
   // Drag state
   const [dragStart, setDragStart] = useState(null);
   const [dragEnd,   setDragEnd]   = useState(null);
@@ -627,7 +642,7 @@ export default function AbsenceCalendar({ onClose }) {
   }, [modal, removeAbsence, addLog, personByKey]);
 
   return (
-    <div className="absence-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="absence-overlay">
       <div className="absence-panel">
 
         {/* ── Header ── */}

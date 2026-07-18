@@ -902,7 +902,21 @@ export default function TopBar({ activeTab, setActiveTab }) {
             onClick={() => setShowDatePicker(s => !s)}
             aria-label="Jump to week"
           >
-            <Calendar size={13} style={{ opacity: 0.45, flexShrink: 0 }} />
+            {isAdmin ? (
+              <span
+                className={`topbar-absence-cal-icon${showAbsences ? ' topbar-absence-cal-icon--active' : ''}`}
+                role="button"
+                tabIndex={0}
+                title="Absence calendar"
+                aria-label="Absence calendar"
+                onClick={e => { e.stopPropagation(); setShowAbsences(s => !s); }}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); setShowAbsences(s => !s); } }}
+              >
+                <Calendar size={19} strokeWidth={1.5} style={{ flexShrink: 0 }} />
+              </span>
+            ) : (
+              <Calendar size={13} style={{ opacity: 0.45, flexShrink: 0 }} />
+            )}
             {isCurrentWeek && <span className="topbar-week-dot" title="Current week" />}
             Week of {weekLabel}
           </button>
@@ -949,14 +963,6 @@ export default function TopBar({ activeTab, setActiveTab }) {
                 {genButtonContent()}
               </button>
 
-              <button
-                className={`btn btn-icon topbar-mobile-hidden${showAbsences ? ' active' : ''}`}
-                onClick={() => setShowAbsences(s => !s)}
-                aria-label="Absence calendar"
-                title="Absence calendar"
-              >
-                <Calendar size={20} strokeWidth={1.5} />
-              </button>
               <button
                 data-tour="log-button"
                 className="btn btn-icon topbar-mobile-hidden"

@@ -1531,14 +1531,13 @@ html, body, #root {
 /* ─── Absence Calendar ──────────────────────── */
 .absence-overlay {
   position: fixed; inset: 0; z-index: 200;
-  background: rgba(0,0,0,0.45);
-  display: flex; align-items: center; justify-content: center;
+  background: var(--bg-base);
+  display: flex; flex-direction: column; overflow: hidden;
 }
 .absence-panel {
-  width: min(1120px, 96vw); height: min(720px, 94vh);
-  background: var(--bg-base); border-radius: var(--radius-lg);
+  flex: 1; min-height: 0;
+  background: var(--bg-base);
   display: flex; flex-direction: column; overflow: hidden;
-  box-shadow: 0 24px 64px rgba(0,0,0,0.35);
 }
 .absence-header {
   display: flex; align-items: center; gap: 6px;
@@ -1605,7 +1604,7 @@ html, body, #root {
   overflow: hidden; text-overflow: ellipsis; min-width: 0;
 }
 .absence-upcoming-section {
-  width: 236px; flex-shrink: 0;
+  width: 280px; flex-shrink: 0;
   border-left: 0.5px solid var(--border);
   display: flex; flex-direction: column; overflow: hidden;
 }
@@ -1691,6 +1690,21 @@ html, body, #root {
 .mobile-my-schedule-body .day-schedule-off {
   font-size: 13px;
   color: var(--text-muted);
+}
+
+/* Absence calendar trigger icon inside the week pill */
+.topbar-absence-cal-icon {
+  display: inline-flex; align-items: center;
+  border-radius: 5px; padding: 3px;
+  cursor: pointer; opacity: 0.55;
+  transition: opacity 120ms, background 120ms;
+  flex-shrink: 0;
+}
+.topbar-absence-cal-icon:hover,
+.topbar-absence-cal-icon--active {
+  opacity: 1;
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--accent);
 }
 
 /* Hide TopBar mobile-hidden elements on mobile */
