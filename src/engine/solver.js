@@ -35,6 +35,7 @@
 // ============================================================================
 
 import { CONSTRAINT_TYPES as CT } from './schema.js';
+import { lunchDeduct } from '../data/seed.js';
 
 // Build fast lookup maps from the config arrays.
 function indexConfig(cfg) {
@@ -140,10 +141,10 @@ function effectiveRange(roleId, shift) {
   }
 }
 
-/** Hours for a specific role at a shift, including role-specific buffers. */
+/** Hours for a specific role at a shift, including role-specific buffers and lunch deduction. */
 function roleHours(roleId, shift) {
   const r = effectiveRange(roleId, shift);
-  return Math.max(0, (r.end - r.start) / 60);
+  return lunchDeduct(Math.max(0, (r.end - r.start) / 60));
 }
 
 /**

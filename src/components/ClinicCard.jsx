@@ -5,7 +5,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { getSlotLabel, getSlotTimeLabel, getSlotPersonId, getSlotTimeObj, formatVariableSlotTime, formatOpenerTimeDisplay, formatOpeningFDTimeDisplay, formatClosingFDOverlayDisplay, formatScribeTimeDisplay, formatClosingOverlayDisplay, minutesToTime, minutesToTimeInput, timeInputToMinutes, SLOT_TYPES, OBS_SLOT_TYPES, SLOT_DISPLAY_LABELS, calcSlotHours, calcPersonWeeklyHours } from '../data/seed.js';
 
 function fmtHours(h) {
-  return `${Number(h.toFixed(2))}h`;
+  return `~${Number(h.toFixed(2))}h`;
 }
 
 function HoursPill({ slotHrs }) {

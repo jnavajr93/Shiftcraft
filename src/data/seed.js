@@ -147,7 +147,13 @@ export function formatTaskTime(task) {
   return `${minutesToTime(task.start)} – ${endStr}`;
 }
 
-export function calcSlotHours(clinic, slotType) {
+export function lunchDeduct(h) {
+  if (h < 5) return h;
+  if (h <= 9) return h - 0.5;
+  return h - 1;
+}
+
+function rawSlotHours(clinic, slotType) {
   const { startTime, endTime } = clinic;
   switch (slotType) {
     case 'openingFrontDesk': {
@@ -224,6 +230,10 @@ export function calcSlotHours(clinic, slotType) {
     }
     default: return 0;
   }
+}
+
+export function calcSlotHours(clinic, slotType) {
+  return lunchDeduct(rawSlotHours(clinic, slotType));
 }
 
 /**
