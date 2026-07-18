@@ -496,6 +496,23 @@ html, body, #root {
 .vte-close-toggle input { cursor: pointer; width: 11px; height: 11px; }
 .variable-time-actions { display: flex; gap: 4px; }
 
+/* ─── Time Range Picker — preset chips ─── */
+.trp-row {
+  display: flex; align-items: center; gap: 5px;
+  flex-wrap: wrap; margin-bottom: 5px;
+}
+.trp-presets { display: flex; gap: 3px; flex-wrap: wrap; }
+.trp-chip {
+  padding: 2px 7px; font-size: 10px; line-height: 1.5;
+  border: 0.5px solid var(--border); border-radius: var(--radius-pill);
+  background: var(--bg-elevated); color: var(--text-secondary);
+  cursor: pointer; white-space: nowrap;
+  transition: background 80ms, border-color 80ms, color 80ms;
+}
+.trp-chip:hover { background: var(--bg-surface); border-color: var(--border-strong); }
+.trp-chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.trp-error { font-size: 10px; color: var(--red, #dc2626); margin: 1px 0 5px; }
+
 /* ─── Person Chip ─────────────────────────── */
 .person-chip {
   display: inline-flex; align-items: center; gap: 5px;

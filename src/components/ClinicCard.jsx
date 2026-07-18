@@ -3,6 +3,7 @@ import { useDroppable } from '@dnd-kit/core';
 import { Pencil, AlertTriangle, Users, Power, Check, X as XIcon } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { getSlotLabel, getSlotTimeLabel, getSlotPersonId, getSlotTimeObj, formatVariableSlotTime, formatOpenerTimeDisplay, formatOpeningFDTimeDisplay, formatClosingFDOverlayDisplay, formatScribeTimeDisplay, formatClosingOverlayDisplay, minutesToTime, minutesToTimeInput, timeInputToMinutes, SLOT_TYPES, OBS_SLOT_TYPES, SLOT_DISPLAY_LABELS, calcSlotHours, calcPersonWeeklyHours } from '../data/seed.js';
+import { TimeRangePicker } from './TimeRangePicker.jsx';
 
 function fmtHours(h) {
   return `~${Number(h.toFixed(2))}h`;
@@ -26,59 +27,20 @@ function PatientBadge({ count }) {
   );
 }
 
-function VariableTimeEditor({ slotType, slotVal, clinicId, onClose }) {
+function VariableTimeEditor({ slotType, slotVal, clinic, clinicId, onClose }) {
   const { updateSlotTime } = useApp();
   const timeObj = getSlotTimeObj(slotVal);
-  const [startVal, setStartVal] = useState(timeObj.start != null ? minutesToTimeInput(timeObj.start) : '');
-  const [endVal, setEndVal] = useState(timeObj.end != null && timeObj.end !== 'close' ? minutesToTimeInput(timeObj.end) : '');
-  const [endIsClose, setEndIsClose] = useState(timeObj.end === 'close');
-
-  const handleSave = () => {
-    const s = startVal ? timeInputToMinutes(startVal) : null;
-    const e = endIsClose ? 'close' : endVal ? timeInputToMinutes(endVal) : null;
-    updateSlotTime(clinicId, slotType, s, e);
-    onClose();
-  };
-
+  // Smart defaults: clinic start time; End = Close when not yet set
+  const defaultEndIsClose = timeObj.end == null || timeObj.end === 'close';
   return (
     <div className="variable-time-editor" onClick={e => e.stopPropagation()}>
-      <div className="variable-time-fields">
-        <label className="vte-label">Start</label>
-        <input
-          type="time"
-          className="vte-input"
-          value={startVal}
-          onChange={e => setStartVal(e.target.value)}
-          autoFocus
-        />
-        <label className="vte-label">End</label>
-        {endIsClose ? (
-          <span className="vte-close-badge">Close</span>
-        ) : (
-          <input
-            type="time"
-            className="vte-input"
-            value={endVal}
-            onChange={e => setEndVal(e.target.value)}
-          />
-        )}
-        <label className="vte-close-toggle">
-          <input
-            type="checkbox"
-            checked={endIsClose}
-            onChange={e => setEndIsClose(e.target.checked)}
-          />
-          <span>Close</span>
-        </label>
-      </div>
-      <div className="variable-time-actions">
-        <button className="btn btn-primary" style={{ minHeight: 26, fontSize: 11, padding: '3px 10px' }} onClick={handleSave}>
-          <Check size={11} /> Save
-        </button>
-        <button className="btn" style={{ minHeight: 26, fontSize: 11, padding: '3px 8px' }} onClick={onClose}>
-          <XIcon size={11} />
-        </button>
-      </div>
+      <TimeRangePicker
+        defaultStart={timeObj.start ?? clinic?.startTime ?? null}
+        defaultEnd={!defaultEndIsClose ? timeObj.end : null}
+        defaultEndIsClose={defaultEndIsClose}
+        onSave={(s, e) => { updateSlotTime(clinicId, slotType, s, e); onClose(); }}
+        onCancel={onClose}
+      />
     </div>
   );
 }
@@ -371,6 +333,7 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
           <VariableTimeEditor
             slotType={slotType}
             slotVal={slotVal}
+            clinic={clinic}
             clinicId={clinic.id}
             onClose={() => setEditingTime(false)}
           />
@@ -456,6 +419,7 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
           <VariableTimeEditor
             slotType={slotType}
             slotVal={slotVal}
+            clinic={clinic}
             clinicId={clinic.id}
             onClose={() => setEditingTime(false)}
           />

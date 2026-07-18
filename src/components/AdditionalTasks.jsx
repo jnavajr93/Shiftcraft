@@ -6,6 +6,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { mondayOfWeek } from '../context/AppContext.jsx';
 import { DAYS, generateId, minutesToTime, minutesToTimeInput, timeInputToMinutes, getAssignmentsForPerson, slotEffectiveRange, rangesOverlap } from '../data/seed.js';
 import { fetchAbsencesForWeek } from '../services/dataService.js';
+import { TimeRangePicker } from './TimeRangePicker.jsx';
 
 // ─── Portal positioning hook (shared pattern with SlotPopover) ────────────────
 function usePortalPopover(triggerRef, onClose) {
@@ -64,40 +65,16 @@ function formatTaskTime(task) {
 }
 
 function TaskTimeEditor({ task, onSave, onClose }) {
-  const [startVal, setStartVal] = useState(task.start != null ? minutesToTimeInput(task.start) : '');
-  const [endVal, setEndVal] = useState(task.end != null && task.end !== 'close' ? minutesToTimeInput(task.end) : '');
-  const [endIsClose, setEndIsClose] = useState(task.end === 'close');
-
-  const handleSave = () => {
-    const s = startVal ? timeInputToMinutes(startVal) : null;
-    const e = endIsClose ? 'close' : endVal ? timeInputToMinutes(endVal) : null;
-    onSave(s, e);
-  };
-
+  // Smart defaults: 8:00 AM start, 5:00 PM end — only applied when field is null
   return (
     <div className="variable-time-editor" onClick={e => e.stopPropagation()}>
-      <div className="variable-time-fields">
-        <label className="vte-label">Start</label>
-        <input type="time" className="vte-input" value={startVal} onChange={e => setStartVal(e.target.value)} autoFocus />
-        <label className="vte-label">End</label>
-        {endIsClose ? (
-          <span className="vte-close-badge">Close</span>
-        ) : (
-          <input type="time" className="vte-input" value={endVal} onChange={e => setEndVal(e.target.value)} />
-        )}
-        <label className="vte-close-toggle">
-          <input type="checkbox" checked={endIsClose} onChange={e => setEndIsClose(e.target.checked)} />
-          <span>Close</span>
-        </label>
-      </div>
-      <div className="variable-time-actions">
-        <button className="btn btn-primary" style={{ minHeight: 26, fontSize: 11, padding: '3px 10px' }} onClick={handleSave}>
-          <Check size={11} /> Save
-        </button>
-        <button className="btn" style={{ minHeight: 26, fontSize: 11, padding: '3px 8px' }} onClick={onClose}>
-          <X size={11} />
-        </button>
-      </div>
+      <TimeRangePicker
+        defaultStart={task.start ?? 480}
+        defaultEnd={task.end !== 'close' ? (task.end ?? 1020) : null}
+        defaultEndIsClose={task.end === 'close'}
+        onSave={onSave}
+        onCancel={onClose}
+      />
     </div>
   );
 }
@@ -287,15 +264,12 @@ function AddTaskForm({ day, initialTask = null, onSubmit, onCancel }) {
   );
   const [locationTag, setLocationTag] = useState(initialTask?.locationTag ?? '');
   const [staffId, setStaffId] = useState(initialTask?.assignedPersonId ?? '');
-  const [startVal, setStartVal] = useState(
-    initialTask?.start != null ? minutesToTimeInput(initialTask.start) : ''
-  );
-  const [endVal, setEndVal] = useState(
-    initialTask?.end != null && initialTask.end !== 'close'
-      ? minutesToTimeInput(initialTask.end)
-      : ''
-  );
-  const [endIsClose, setEndIsClose] = useState(initialTask?.end === 'close');
+  // Smart defaults: 8 AM start, 5 PM end — only applied when field is null
+  const [taskTime, setTaskTime] = useState({
+    start:      initialTask?.start ?? 480,
+    end:        initialTask?.end !== 'close' ? (initialTask?.end ?? 1020) : null,
+    endIsClose: initialTask?.end === 'close',
+  });
   const [absences, setAbsences] = useState([]);
 
   useEffect(() => {
@@ -313,9 +287,9 @@ function AddTaskForm({ day, initialTask = null, onSubmit, onCancel }) {
 
   // Eligibility per person (absence + time-overlap)
   const eligibility = useMemo(() => {
-    const taskStart = startVal ? timeInputToMinutes(startVal) : null;
-    const taskEnd = endIsClose ? null : (endVal ? timeInputToMinutes(endVal) : null);
-    const taskRange = (taskStart != null && taskEnd != null) ? { start: taskStart, end: taskEnd } : null;
+    const taskRange = (!taskTime.endIsClose && taskTime.start != null && taskTime.end != null)
+      ? { start: taskTime.start, end: taskTime.end }
+      : null;
 
     const result = {};
     for (const person of data.people) {
@@ -354,15 +328,19 @@ function AddTaskForm({ day, initialTask = null, onSubmit, onCancel }) {
       result[person.id] = null; // eligible
     }
     return result;
-  }, [data.people, data.clinics, absences, dayDateStr, day, startVal, endVal, endIsClose]);
+  }, [data.people, data.clinics, absences, dayDateStr, day, taskTime]);
 
   const gradeOrder = { A: 0, B: 1, C: 2 };
   const sortedPeople = [...data.people].sort(
     (a, b) => (gradeOrder[a.grade] ?? 3) - (gradeOrder[b.grade] ?? 3)
   );
 
+  const timeError = !taskTime.endIsClose &&
+    taskTime.start != null && taskTime.end != null &&
+    taskTime.end <= taskTime.start;
+
   const handleSubmit = () => {
-    if (!effectiveLabel.trim()) return;
+    if (!effectiveLabel.trim() || timeError) return;
     onSubmit({
       id: initialTask?.id ?? generateId(),
       label: effectiveLabel.trim(),
@@ -370,8 +348,8 @@ function AddTaskForm({ day, initialTask = null, onSubmit, onCancel }) {
       locationTag: locationTag || null,
       assignedPersonId: staffId || null,
       isLocationSpecific: !!locationTag,
-      start: startVal ? timeInputToMinutes(startVal) : null,
-      end: endIsClose ? 'close' : (endVal ? timeInputToMinutes(endVal) : null),
+      start: taskTime.start,
+      end: taskTime.endIsClose ? 'close' : taskTime.end,
     });
   };
 
@@ -440,30 +418,12 @@ function AddTaskForm({ day, initialTask = null, onSubmit, onCancel }) {
       {/* Time */}
       <div className="form-group">
         <label className="form-label">Time (optional)</label>
-        <div className="variable-time-fields">
-          <label className="vte-label">Start</label>
-          <input
-            type="time"
-            className="vte-input"
-            value={startVal}
-            onChange={e => setStartVal(e.target.value)}
-          />
-          <label className="vte-label">End</label>
-          {endIsClose ? (
-            <span className="vte-close-badge">Close</span>
-          ) : (
-            <input
-              type="time"
-              className="vte-input"
-              value={endVal}
-              onChange={e => setEndVal(e.target.value)}
-            />
-          )}
-          <label className="vte-close-toggle">
-            <input type="checkbox" checked={endIsClose} onChange={e => setEndIsClose(e.target.checked)} />
-            <span>Close</span>
-          </label>
-        </div>
+        <TimeRangePicker
+          defaultStart={taskTime.start}
+          defaultEnd={taskTime.end}
+          defaultEndIsClose={taskTime.endIsClose}
+          onChange={(s, e, eic) => setTaskTime({ start: s, end: e, endIsClose: eic })}
+        />
       </div>
 
       <div style={{ display: 'flex', gap: 6 }}>
@@ -471,7 +431,7 @@ function AddTaskForm({ day, initialTask = null, onSubmit, onCancel }) {
           className="btn btn-primary"
           style={{ minHeight: 32, fontSize: 12 }}
           onClick={handleSubmit}
-          disabled={!effectiveLabel.trim()}
+          disabled={!effectiveLabel.trim() || !!timeError}
         >{initialTask ? 'Save' : 'Add'}</button>
         <button
           className="btn"
