@@ -193,7 +193,7 @@ function ExitNudgeModal({ postedSnapshot, onPost, onLeave, onCancel }) {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '12px 24px', borderTop: '0.5px solid var(--border)', flexShrink: 0 }}>
-          <button className="btn" style={{ gap: 6, color: 'var(--amber)', borderColor: 'var(--amber)' }} onClick={onLeave}><Save size={14} /> Save and Close</button>
+          <button className="btn" style={{ gap: 6, background: 'transparent', color: 'var(--amber)', border: '1px solid var(--amber)' }} onClick={onLeave}><Save size={14} /> Save and Close</button>
           <button className="btn btn-post" style={{ minHeight: 38, gap: 6 }} onClick={onPost}>
             <SendHorizonal size={13} /> Post
           </button>
