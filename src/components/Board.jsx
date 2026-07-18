@@ -1,5 +1,6 @@
+import { useState, useEffect } from 'react';
 import { Search } from 'lucide-react';
-import { useApp, mondayOfWeek } from '../context/AppContext.jsx';
+import { useApp, mondayOfWeek, isoWeek } from '../context/AppContext.jsx';
 import { DAYS } from '../data/seed.js';
 import ClinicCard from './ClinicCard.jsx';
 
@@ -8,6 +9,33 @@ const LOCATION_ORDER = ['Phoenix', 'Chandler', 'Estrella', 'Scottsdale', 'OBS'];
 export default function Board({ search, setSearch, onPersonClick, onEditClinic }) {
   const { data, isAdmin, boardClinics, currentWeek } = useApp();
   const monday = mondayOfWeek(currentWeek);
+
+  // Midnight rollover — tick increments at midnight so todayDay re-evaluates
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const now = new Date();
+    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0);
+    const t = setTimeout(() => setTick(n => n + 1), midnight - now);
+    return () => clearTimeout(t);
+  }, [tick]);
+
+  // Today's column — Mon–Fri only, only when this is the current week
+  const todayDay = (() => {
+    const now = new Date();
+    if (currentWeek !== isoWeek(now)) return null;
+    const dow = now.getDay(); // 0=Sun,1=Mon..5=Fri,6=Sat
+    return (dow >= 1 && dow <= 5) ? DAYS[dow - 1] : null;
+  })();
+
+  // Scroll today's column into view when navigating to the current week
+  useEffect(() => {
+    if (!todayDay) return;
+    const t = setTimeout(() => {
+      const el = document.querySelector('.col-header--today');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }, 60);
+    return () => clearTimeout(t);
+  }, [currentWeek, todayDay]);
 
   // Staff view: boardClinics is null when the week has never been posted
   const showNotPosted = !isAdmin && boardClinics === null;
@@ -57,8 +85,9 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic }
               const d = new Date(monday);
               d.setUTCDate(monday.getUTCDate() + idx);
               const dateLabel = `${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
+              const isToday = day === todayDay;
               return (
-                <div key={day} className="col-header">
+                <div key={day} className={`col-header${isToday ? ' col-header--today' : ''}`}>
                   <div className="col-header-day">{day}</div>
                   <div className="col-header-date">{dateLabel}</div>
                 </div>
@@ -71,6 +100,7 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic }
                 const clinic = clinics.find(
                   c => c.day === day && c.location === loc && (isAdmin || c.open)
                 );
+                const isToday = day === todayDay;
                 if (clinic) {
                   return (
                     <ClinicCard
@@ -80,13 +110,17 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic }
                       onEditClinic={onEditClinic}
                       matchedPersonIds={matchedPersonIds}
                       hasSearch={search.trim().length > 0}
+                      isToday={isToday}
                     />
                   );
                 }
                 return (
                   <div
                     key={`empty-${loc}-${day}`}
-                    className={isAdmin ? 'clinic-row-placeholder' : 'clinic-row-placeholder clinic-row-placeholder--staff'}
+                    className={[
+                      isAdmin ? 'clinic-row-placeholder' : 'clinic-row-placeholder clinic-row-placeholder--staff',
+                      isToday ? 'col-today-cell' : '',
+                    ].filter(Boolean).join(' ')}
                   >
                     {isAdmin ? loc : null}
                   </div>

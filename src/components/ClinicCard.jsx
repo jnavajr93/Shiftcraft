@@ -617,7 +617,7 @@ function ObsSlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSear
   );
 }
 
-export default function ClinicCard({ clinic, onPersonClick, onEditClinic, matchedPersonIds, hasSearch }) {
+export default function ClinicCard({ clinic, onPersonClick, onEditClinic, matchedPersonIds, hasSearch, isToday }) {
   const { data, isAdmin, updateClinic } = useApp();
   const showMiddleHint = isAdmin && clinic.open && (clinic.patientCount ?? 0) >= 68 && !getSlotPersonId(clinic.slots.middle);
   const conflictSet = isAdmin ? getConflictPersonDays(data.clinics, data.people) : null;
@@ -625,7 +625,7 @@ export default function ClinicCard({ clinic, onPersonClick, onEditClinic, matche
   if (!clinic.open && !isAdmin) return null;
 
   return (
-    <div data-tour="clinic-card" data-clinic-id={clinic.id} className={`clinic-card${!clinic.open ? ' closed' : ''}`}>
+    <div data-tour="clinic-card" data-clinic-id={clinic.id} className={`clinic-card${!clinic.open ? ' closed' : ''}${isToday ? ' col-today-cell' : ''}`}>
       <div className="clinic-card-header">
         <div>
           <div className="clinic-card-title">{clinic.provider}</div>

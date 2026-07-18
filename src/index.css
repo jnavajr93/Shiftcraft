@@ -359,6 +359,26 @@ html, body, #root {
   font-size: 11px; color: var(--text-muted); margin-top: 1px;
 }
 
+/* ─── Today column highlight ─────────────── */
+.col-header--today {
+  border-bottom: 2px solid var(--accent, #3b82f6);
+}
+.col-header--today .col-header-day {
+  color: var(--accent, #3b82f6);
+  font-weight: 700;
+}
+.col-header--today .col-header-date {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+/* Subtle tint on cards and placeholders in today's column */
+.col-today-cell {
+  background: rgba(59, 130, 246, 0.04) !important;
+}
+[data-theme="dark"] .col-today-cell {
+  background: rgba(99, 155, 255, 0.06) !important;
+}
+
 /* ─── Clinic Card ─────────────────────────── */
 .clinic-card {
   background: var(--bg-elevated); border: 0.5px solid var(--border);

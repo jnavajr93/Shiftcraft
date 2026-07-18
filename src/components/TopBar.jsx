@@ -7,6 +7,19 @@ import {
 import { useApp, isoWeek, mondayOfWeek } from '../context/AppContext.jsx';
 
 const EXPORT_VERSION = 'shiftcraft-v1';
+
+// Returns the week to navigate to when "Today" is clicked:
+// weekdays → current week; weekends → the upcoming Monday's week.
+function todayTargetWeek() {
+  const now = new Date();
+  const dow = now.getDay(); // 0=Sun, 6=Sat
+  if (dow === 0 || dow === 6) {
+    const next = new Date(now);
+    next.setDate(now.getDate() + (dow === 0 ? 1 : 2));
+    return isoWeek(next);
+  }
+  return isoWeek(now);
+}
 import { useTour } from './Tour.jsx';
 import ChangeLogDrawer from './ChangeLogDrawer.jsx';
 import ChatPanel from './ChatPanel.jsx';
@@ -561,7 +574,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
     return `Saved ${mins}m ago`;
   })();
 
-  const isCurrentWeek = currentWeek === isoWeek(new Date());
+  const isCurrentWeek = currentWeek === todayTargetWeek();
   const [copyToast, setCopyToast] = useState(null);
   const [showClearModal, setShowClearModal] = useState(false);
   const [showLog, setShowLog] = useState(false);
@@ -824,7 +837,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
           {!isCurrentWeek && (
             <button
               className="btn topbar-today-btn"
-              onClick={() => jumpToWeek(isoWeek(new Date()))}
+              onClick={() => jumpToWeek(todayTargetWeek())}
               title="Go to current week"
             >
               Today
@@ -1016,7 +1029,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
           <ChevronLeft size={16} />
         </button>
         {!isCurrentWeek && (
-          <button className="btn topbar-today-btn" onClick={() => jumpToWeek(isoWeek(new Date()))} title="Go to current week">
+          <button className="btn topbar-today-btn" onClick={() => jumpToWeek(todayTargetWeek())} title="Go to current week">
             Today
           </button>
         )}
