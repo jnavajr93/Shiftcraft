@@ -1,7 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import { useApp } from '../context/AppContext.jsx';
-import { calcPersonWeeklyHours, getBoardClinics, DAYS, getAssignmentsForPerson, getSlotLabel } from '../data/seed.js';
+import {
+  calcPersonWeeklyHours, getBoardClinics, DAYS,
+  getAssignmentsForPerson, getSlotLabel, OBS_SLOT_TYPES,
+  formatVariableSlotTime, formatOpenerTimeDisplay, formatOpeningFDTimeDisplay,
+  formatClosingOverlayDisplay, formatClosingFDOverlayDisplay, formatScribeTimeDisplay,
+} from '../data/seed.js';
 
 // ─── Staff Hover Card ─────────────────────────────────────────────────────────
 
@@ -13,14 +18,36 @@ function StaffHoverCard({ person, hours, clinics, people, style, onMouseEnter, o
     : person.employmentType === 'Part-time' ? 'PT'
     : (person.employmentType ?? '');
 
-  // Week-at-a-glance: one line per day
+  // Week-at-a-glance: one line per day with times matching the personal overlay
   const weekRows = DAYS.map(day => {
     const assignments = getAssignmentsForPerson(nameKey, day, people, clinics);
-    if (assignments.length === 0) return { day, label: null };
-    const label = assignments
-      .map(a => getSlotLabel(a.slotType, a.clinic.location))
-      .join(' + ');
-    return { day, label };
+    if (assignments.length === 0) return { day, text: null };
+    const text = assignments.map(a => {
+      const slotVal = a.clinic.slots?.[a.slotType];
+      let time;
+      if (a.slotType === 'scribe') {
+        time = formatScribeTimeDisplay(slotVal) ?? '1st Patient – Close';
+      } else if (a.slotType === 'opener') {
+        time = formatOpenerTimeDisplay(a.clinic, slotVal);
+      } else if (a.slotType === 'openingFrontDesk') {
+        time = formatOpeningFDTimeDisplay(slotVal);
+      } else if (a.slotType === 'closing') {
+        time = formatClosingOverlayDisplay(slotVal);
+      } else if (a.slotType === 'closingFrontDesk') {
+        time = formatClosingFDOverlayDisplay(slotVal);
+      } else if (a.slotType === 'frontDesk') {
+        time = formatVariableSlotTime(slotVal) ?? 'Open – Close';
+      } else if (a.slotType === 'middle' || a.slotType === 'training') {
+        time = formatVariableSlotTime(slotVal) ?? 'Time not set';
+      } else if (OBS_SLOT_TYPES.includes(a.slotType)) {
+        time = 'Open – Close';
+      } else {
+        time = '';
+      }
+      const label = getSlotLabel(a.slotType, a.clinic.location);
+      return time ? `${label} · ${time}` : label;
+    }).join(' + ');
+    return { day, text };
   });
 
   return (
@@ -44,11 +71,11 @@ function StaffHoverCard({ person, hours, clinics, people, style, onMouseEnter, o
 
       {/* Week at a glance */}
       <div className="staff-hovercard-section">
-        {weekRows.map(({ day, label }) => (
+        {weekRows.map(({ day, text }) => (
           <div key={day} className="hovercard-week-row">
             <span className="hovercard-week-day">{day}</span>
-            {label
-              ? <span className="hovercard-week-assignment">{label}</span>
+            {text
+              ? <span className="hovercard-week-assignment">{text}</span>
               : <span className="hovercard-week-off">Off</span>
             }
           </div>
@@ -107,7 +134,7 @@ function PersonCard({ person, onPersonClick, clinics }) {
     showTimer.current = setTimeout(() => {
       const rect = rowRef.current?.getBoundingClientRect();
       if (!rect) return;
-      const approxCardH = 320;
+      const approxCardH = 420; // taller now that times are included
       const top = Math.max(8, Math.min(rect.top, window.innerHeight - approxCardH - 16));
       setCardPos({ top, left: rect.right + 8 });
     }, 400);
