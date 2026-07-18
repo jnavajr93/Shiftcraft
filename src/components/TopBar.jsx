@@ -4,7 +4,15 @@ import {
   History, Sparkles, Wand2, Loader2, X, CircleHelp, RotateCcw,
   SendHorizonal, AlertCircle, Save,
 } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { useApp, isoWeek, mondayOfWeek } from '../context/AppContext.jsx';
+import {
+  getRenderedSlotEntries, SLOT_DISPLAY_LABELS, OBS_SLOT_TYPES,
+  formatOpenerTimeDisplay, formatOpeningFDTimeDisplay,
+  formatClosingOverlayDisplay, formatClosingFDOverlayDisplay,
+  formatScribeTimeDisplay, formatVariableSlotTime,
+} from '../data/seed.js';
 
 const EXPORT_VERSION = 'shiftcraft-v1';
 
@@ -34,8 +42,8 @@ function formatPostedTime(isoString) {
   return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
-// Open a print window with a formatted schedule grid
-function generatePrintWindow(data, weekLabel, weekMonday, postedBy) {
+// Generate and download a PDF schedule grid (landscape letter)
+function generateSchedulePDF(data, weekLabel, weekMonday, postedBy, filename) {
   const DAYS_LIST = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
   const LOC_ORDER = ['Phoenix', 'Chandler', 'Estrella', 'Scottsdale', 'OBS'];
   const personById = new Map((data.people ?? []).map(p => [p.id, p]));
@@ -50,59 +58,90 @@ function generatePrintWindow(data, weekLabel, weekMonday, postedBy) {
   const extras = allLocs.filter(l => !LOC_ORDER.includes(l)).sort();
   const locations = [...LOC_ORDER, ...extras].filter(l => allLocs.includes(l));
 
-  const getPersonId = (sv) => {
-    if (!sv) return null;
-    if (typeof sv === 'string') return sv;
-    return sv.personId ?? null;
+  const slotTimeStr = (clinic, slotType, slotVal) => {
+    if (slotType === 'scribe')           return formatScribeTimeDisplay(slotVal) ?? '1st Patient – Close';
+    if (slotType === 'opener')           return formatOpenerTimeDisplay(clinic, slotVal);
+    if (slotType === 'openingFrontDesk') return formatOpeningFDTimeDisplay(slotVal);
+    if (slotType === 'closing')          return formatClosingOverlayDisplay(slotVal, clinic);
+    if (slotType === 'closingFrontDesk') return formatClosingFDOverlayDisplay(slotVal);
+    if (['frontDesk', 'middle', 'training'].includes(slotType))
+      return formatVariableSlotTime(slotVal) ?? null;
+    if (OBS_SLOT_TYPES.includes(slotType)) return 'Open – Close';
+    return null;
   };
 
-  let rows = '';
-  for (const loc of locations) {
-    let cells = `<td class="lc">${loc}</td>`;
+  const head = [['Location', ...dayDates]];
+
+  const body = locations.map(loc => {
+    const row = [loc];
     for (const day of DAYS_LIST) {
       const clinic = data.clinics.find(c => c.day === day && c.location === loc && c.open);
-      if (!clinic) { cells += '<td></td>'; continue; }
-      let content = clinic.provider ? `<div class="pv">${clinic.provider}</div>` : '';
-      for (const [st, sv] of Object.entries(clinic.slots ?? {})) {
-        const pid = getPersonId(sv);
+      if (!clinic) { row.push(''); continue; }
+
+      const lines = [];
+      if (clinic.provider) lines.push(`[${clinic.provider}]`);
+
+      for (const [slotType, slotVal] of getRenderedSlotEntries(clinic)) {
+        const pid = typeof slotVal === 'string' ? slotVal : slotVal?.personId;
         if (!pid) continue;
         const p = personById.get(pid);
         if (!p) continue;
-        const lbl = st.replace(/([A-Z])/g, ' $1').trim();
-        content += `<div class="sl"><span class="sr">${lbl}:</span> ${p.name}</div>`;
+        const label = SLOT_DISPLAY_LABELS[slotType] ?? slotType;
+        const time  = slotTimeStr(clinic, slotType, slotVal);
+        lines.push(time ? `${label}: ${p.name}\n  ${time}` : `${label}: ${p.name}`);
       }
-      if (!content) content = '<span class="em">—</span>';
-      cells += `<td>${content}</td>`;
+
+      row.push(lines.length ? lines.join('\n') : '');
     }
-    rows += `<tr>${cells}</tr>`;
-  }
+    return row;
+  });
 
-  const generatedAt = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
-  const html = `<!DOCTYPE html><html><head><title>Shiftcraft — Week of ${weekLabel}</title>
-<style>
-@media print{@page{size:landscape;margin:0.4in}}
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,Arial,sans-serif;font-size:9px;color:#111}
-h1{font-size:13px;font-weight:700;margin-bottom:8px}
-table{border-collapse:collapse;width:100%;table-layout:fixed}
-th,td{border:0.5px solid #bbb;padding:4px 5px;vertical-align:top}
-th{background:#f3f4f6;font-weight:600;text-align:center;font-size:9px}
-.lc{font-weight:700;background:#f9fafb;width:72px}
-.pv{font-weight:600;font-size:8.5px;margin-bottom:2px;color:#444}
-.sl{font-size:8px;line-height:1.45}
-.sr{color:#777}
-.em{color:#aaa;font-style:italic}
-footer{margin-top:8px;font-size:7.5px;color:#666;display:flex;justify-content:space-between}
-</style></head><body>
-<h1>Shiftcraft — Week of ${weekLabel}</h1>
-<table><thead><tr><th style="width:72px">Location</th>${dayDates.map(d => `<th>${d}</th>`).join('')}</tr></thead>
-<tbody>${rows}</tbody></table>
-<footer><span>Generated ${generatedAt}</span><span>Posted by ${postedBy ?? '—'}</span></footer>
-<script>window.onload=function(){window.print()}</script>
-</body></html>`;
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
+  const pageW = doc.internal.pageSize.width;
+  const pageH = doc.internal.pageSize.height;
 
-  const win = window.open('', '_blank');
-  if (win) { win.document.write(html); win.document.close(); }
+  // Title
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.text(`Shiftcraft — Week of ${weekLabel}`, 36, 30);
+
+  autoTable(doc, {
+    head,
+    body,
+    startY: 42,
+    margin: { left: 36, right: 36 },
+    styles: {
+      fontSize: 7,
+      cellPadding: { top: 3, right: 4, bottom: 3, left: 4 },
+      lineColor: [190, 190, 190],
+      lineWidth: 0.3,
+      valign: 'top',
+      overflow: 'linebreak',
+    },
+    headStyles: {
+      fillColor: [243, 244, 246],
+      textColor: [30, 30, 30],
+      fontStyle: 'bold',
+      halign: 'center',
+      fontSize: 7.5,
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', fillColor: [249, 250, 251], halign: 'center', cellWidth: 62 },
+    },
+    theme: 'grid',
+  });
+
+  // Footer
+  const genAt = new Date().toLocaleString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
+  });
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(120);
+  doc.text(`Generated ${genAt}`, 36, pageH - 16);
+  doc.text(`Posted by ${postedBy ?? '—'}`, pageW - 36, pageH - 16, { align: 'right' });
+
+  doc.save(filename);
 }
 
 // ─── Post validation modal ───────────────────
@@ -655,8 +694,9 @@ export default function TopBar({ activeTab, setActiveTab }) {
     a.click();
     URL.revokeObjectURL(url);
 
-    // PDF print window
-    generatePrintWindow(data, weekLabel, monday, managerInitials);
+    // PDF download
+    const pdfFilename = `shiftcraft_week_${monday.toISOString().slice(0, 10)}.pdf`;
+    generateSchedulePDF(data, weekLabel, monday, managerInitials, pdfFilename);
 
     setPostState('done');
     setTimeout(() => setPostState('idle'), 3000);

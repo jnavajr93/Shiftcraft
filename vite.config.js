@@ -15,4 +15,10 @@ export default defineConfig({
   define: {
     __GIT_SHA__: JSON.stringify(gitSha),
   },
+  build: {
+    // jsPDF optionally imports these for SVG/HTML-canvas features we don't use
+    rollupOptions: {
+      external: ['canvg', 'html2canvas', 'dompurify'],
+    },
+  },
 })
