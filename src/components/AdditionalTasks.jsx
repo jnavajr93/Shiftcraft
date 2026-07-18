@@ -266,9 +266,6 @@ function TaskSlotRow({ task, onPersonClick, onEdit }) {
       >
         <div className="task-label">{task.label}</div>
         <div className="task-content">
-          {task.locationTag && (
-            <div className="task-location-tag">{task.locationTag}</div>
-          )}
           {person ? (
             <div
               className="person-chip"
@@ -315,7 +312,7 @@ function TaskSlotRow({ task, onPersonClick, onEdit }) {
         />
       )}
 
-      {(isAdmin || timeDisplay) && (
+      {(isAdmin || timeDisplay || task.locationTag) && (
         editingTime ? (
           <TaskTimeEditor
             task={task}
@@ -327,7 +324,12 @@ function TaskSlotRow({ task, onPersonClick, onEdit }) {
             className={`variable-time-row${isAdmin ? ' editable' : ''}`}
             onClick={isAdmin ? (e) => { e.stopPropagation(); setEditingTime(true); } : undefined}
           >
-            <span>{timeDisplay ?? (isAdmin ? 'Set time…' : '')}</span>
+            {task.locationTag && (
+              <div className="task-location-tag" style={{ flexShrink: 0 }}>{task.locationTag}</div>
+            )}
+            {(timeDisplay || isAdmin) && (
+              <span>{timeDisplay ?? (isAdmin ? 'Set time…' : '')}</span>
+            )}
             {isAdmin && <Pencil size={9} style={{ opacity: 0.5 }} />}
           </div>
         )
