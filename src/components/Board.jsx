@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Search } from 'lucide-react';
 import { useApp, mondayOfWeek, isoWeek } from '../context/AppContext.jsx';
 import { DAYS } from '../data/seed.js';
@@ -52,32 +52,50 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic }
   const extraLocations = allLocations.filter(loc => !LOCATION_ORDER.includes(loc)).sort();
   const orderedLocations = [...LOCATION_ORDER, ...extraLocations];
 
+  // Measure the search bar height so col-headers can be offset below it.
+  // Both board-search and col-headers are inside board-scroll (same scroll
+  // container), so the sticky offset for headers = search bar height exactly.
+  const scrollRef = useRef(null);
+  const searchRef = useRef(null);
+  useEffect(() => {
+    const search = searchRef.current;
+    const scroll = scrollRef.current;
+    if (!search || !scroll) return;
+    const update = () => scroll.style.setProperty('--search-bar-h', `${search.offsetHeight}px`);
+    update();
+    const obs = new ResizeObserver(update);
+    obs.observe(search);
+    return () => obs.disconnect();
+  }, []);
+
   return (
     <div className="board-wrapper">
-      <div className="board-search">
-        <div className="search-wrap">
-          <span className="search-icon"><Search size={15} /></span>
-          <input
-            data-tour="search-bar"
-            className="search-input"
-            type="search"
-            placeholder="Search staff…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
+      <div ref={scrollRef} data-tour="week-board" className="board-scroll">
+        {/* Search bar is the first child inside the scroll container so both
+            it and the col-headers are sticky within the same scroll context. */}
+        <div ref={searchRef} className="board-search">
+          <div className="search-wrap">
+            <span className="search-icon"><Search size={15} /></span>
+            <input
+              data-tour="search-bar"
+              className="search-input"
+              type="search"
+              placeholder="Search staff…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
         </div>
-      </div>
 
-      {showNotPosted ? (
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          height: 260, color: 'var(--text-muted)', fontSize: 14, flexDirection: 'column', gap: 8,
-        }}>
-          <span style={{ fontSize: 18, opacity: 0.4 }}>📋</span>
-          Schedule not yet posted for this week.
-        </div>
-      ) : (
-        <div data-tour="week-board" className="board-scroll">
+        {showNotPosted ? (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            height: 260, color: 'var(--text-muted)', fontSize: 14, flexDirection: 'column', gap: 8,
+          }}>
+            <span style={{ fontSize: 18, opacity: 0.4 }}>📋</span>
+            Schedule not yet posted for this week.
+          </div>
+        ) : (
           <div className="board-grid">
 
             {/* Row 0: day headers */}
@@ -129,8 +147,8 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic }
             )}
 
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

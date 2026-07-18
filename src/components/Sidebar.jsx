@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useDraggable } from '@dnd-kit/core';
-import { useApp } from '../context/AppContext.jsx';
+import { useApp, mondayOfWeek } from '../context/AppContext.jsx';
 import {
   calcPersonWeeklyHours, getBoardClinics, DAYS,
   getAssignmentsForPerson, getSlotLabel, OBS_SLOT_TYPES,
@@ -11,7 +11,7 @@ import {
 
 // ─── Staff Hover Card ─────────────────────────────────────────────────────────
 
-function StaffHoverCard({ person, hours, clinics, people, style, onMouseEnter, onMouseLeave }) {
+function StaffHoverCard({ person, hours, clinics, people, monday, style, onMouseEnter, onMouseLeave }) {
   const daysOff = person.daysOff ?? [];
   const nameKey = person.name.trim().toLowerCase();
 
@@ -20,7 +20,10 @@ function StaffHoverCard({ person, hours, clinics, people, style, onMouseEnter, o
     : (person.employmentType ?? '');
 
   // Week-at-a-glance: one line per day with times matching the personal overlay
-  const weekRows = DAYS.map(day => {
+  const weekRows = DAYS.map((day, idx) => {
+    const d = monday ? new Date(monday) : null;
+    if (d) d.setUTCDate(monday.getUTCDate() + idx);
+    const dateStr = d ? `${d.getUTCMonth() + 1}/${d.getUTCDate()}` : null;
     const assignments = getAssignmentsForPerson(nameKey, day, people, clinics);
     if (assignments.length === 0) return { day, text: null };
     assignments.sort((a, b) => slotEffectiveRange(a.slotType, a.clinic).start - slotEffectiveRange(b.slotType, b.clinic).start);
@@ -49,7 +52,7 @@ function StaffHoverCard({ person, hours, clinics, people, style, onMouseEnter, o
       const label = getSlotLabel(a.slotType, a.clinic.location);
       return time ? `${label} · ${time}` : label;
     }).join(' + ');
-    return { day, text };
+    return { day, dateStr, text };
   });
 
   return (
@@ -73,9 +76,11 @@ function StaffHoverCard({ person, hours, clinics, people, style, onMouseEnter, o
 
       {/* Week at a glance */}
       <div className="staff-hovercard-section">
-        {weekRows.map(({ day, text }) => (
+        {weekRows.map(({ day, dateStr, text }) => (
           <div key={day} className="hovercard-week-row">
-            <span className="hovercard-week-day">{day}</span>
+            <span className="hovercard-week-day">
+              {day.toUpperCase()}{dateStr ? ` ${dateStr}` : ''}
+            </span>
             {text
               ? <span className="hovercard-week-assignment">{text}</span>
               : <span className="hovercard-week-off">Off</span>
@@ -105,7 +110,7 @@ function StaffHoverCard({ person, hours, clinics, people, style, onMouseEnter, o
 
 // ─── Person Card ──────────────────────────────────────────────────────────────
 
-function PersonCard({ person, onPersonClick, clinics }) {
+function PersonCard({ person, onPersonClick, clinics, monday }) {
   const { data, isAdmin } = useApp();
   const linkedPerson = person.linkedPersonId
     ? (data.people.find(p => p.id === person.linkedPersonId) ?? null)
@@ -190,6 +195,7 @@ function PersonCard({ person, onPersonClick, clinics }) {
           hours={hours}
           clinics={clinics}
           people={data.people}
+          monday={monday}
           style={{ top: cardPos.top, left: cardPos.left }}
           onMouseEnter={cancelClose}
           onMouseLeave={closeCard}
@@ -204,7 +210,8 @@ function PersonCard({ person, onPersonClick, clinics }) {
 const GRADE_ORDER = { A: 0, B: 1, C: 2, T: 3 };
 
 export default function Sidebar({ onPersonClick }) {
-  const { data } = useApp();
+  const { data, currentWeek } = useApp();
+  const monday = mondayOfWeek(currentWeek);
 
   // Sort by grade A → B → C → ungraded; stable within each group (preserves Setup order)
   const sorted = [...data.people].sort(
@@ -225,7 +232,9 @@ export default function Sidebar({ onPersonClick }) {
             person={person}
             onPersonClick={onPersonClick}
             clinics={boardClinics}
+            monday={monday}
           />
+
         ))}
       </div>
     </div>
