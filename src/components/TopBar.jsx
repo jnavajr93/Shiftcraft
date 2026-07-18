@@ -187,7 +187,7 @@ function ExitNudgeModal({ postedSnapshot, onPost, onLeave }) {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '12px 24px', borderTop: '0.5px solid var(--border)', flexShrink: 0 }}>
-          <button className="btn" style={{ gap: 6 }} onClick={onLeave}><Save size={14} /> Save and close</button>
+          <button className="btn" style={{ gap: 6 }} onClick={onLeave}><Save size={14} /> Save and Close</button>
           <button className="btn btn-post" style={{ minHeight: 38, gap: 6 }} onClick={onPost}>
             <SendHorizonal size={13} /> Post
           </button>
@@ -940,7 +940,23 @@ export default function TopBar({ activeTab, setActiveTab }) {
           >
             <CircleHelp size={20} strokeWidth={1.5} />
           </button>
-          {/* Post button — after help, before manager badge */}
+          {/* Saved status — left of Post button */}
+          {saveStatus === 'error' && (
+            <span className="topbar-mobile-hidden" style={{ fontSize: 11, color: '#dc2626', fontWeight: 500, whiteSpace: 'nowrap' }}>
+              ⚠ Unsaved changes
+            </span>
+          )}
+          {saveStatus === 'saving' && (
+            <span className="topbar-mobile-hidden" style={{ fontSize: 11, color: 'var(--text-muted, var(--text-secondary))', opacity: 0.7, whiteSpace: 'nowrap' }}>
+              Saving…
+            </span>
+          )}
+          {(saveStatus === 'saved' || saveStatus === 'idle') && savedAgoLabel && (
+            <span className="topbar-mobile-hidden" style={{ fontSize: 11, color: 'var(--text-muted, var(--text-secondary))', opacity: 0.7, whiteSpace: 'nowrap' }}>
+              {savedAgoLabel}
+            </span>
+          )}
+          {/* Post button */}
           {isAdmin && (
             <button
               className={`btn btn-pill topbar-mobile-hidden btn-post${!isDirty ? ' btn-post--clean' : ''}${postState === 'error' ? ' generate-error' : postState === 'done' ? ' generate-done' : ''}`}
@@ -976,21 +992,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
               ))}
             </div>
           )}
-          {saveStatus === 'error' && (
-            <span className="topbar-mobile-hidden" style={{ fontSize: 11, color: '#dc2626', fontWeight: 500, whiteSpace: 'nowrap' }}>
-              ⚠ Unsaved changes
-            </span>
-          )}
-          {saveStatus === 'saving' && (
-            <span className="topbar-mobile-hidden" style={{ fontSize: 11, color: 'var(--text-muted, var(--text-secondary))', opacity: 0.7, whiteSpace: 'nowrap' }}>
-              Saving…
-            </span>
-          )}
-          {(saveStatus === 'saved' || saveStatus === 'idle') && savedAgoLabel && (
-            <span className="topbar-mobile-hidden" style={{ fontSize: 11, color: 'var(--text-muted, var(--text-secondary))', opacity: 0.7, whiteSpace: 'nowrap' }}>
-              {savedAgoLabel}
-            </span>
-          )}
+          {/* Manager pill — amber in active mode, floppy + initials signals save-and-exit */}
           <button
             data-tour="admin-button"
             className={`btn btn-pill btn-admin ${isAdmin ? 'active' : ''}`}
@@ -1007,7 +1009,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
               }
             }}
           >
-            {isAdmin && managerInitials ? `Manager · ${managerInitials}` : 'Manager'}
+            {isAdmin && managerInitials ? <><Save size={13} /> {managerInitials}</> : 'Manager'}
           </button>
         </div>
       </div>
