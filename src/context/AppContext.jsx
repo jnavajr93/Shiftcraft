@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { getSeedData, migratePerson, generateId, getSlotPersonId, OBS_SLOT_TYPES, getBoardClinics, getAssignmentsForPerson, getRenderedSlotEntries, getActiveFDSlots } from '../data/seed.js';
+import { getSeedData, migratePerson, generateId, getSlotPersonId, OBS_SLOT_TYPES, getBoardClinics, getAssignmentsForPerson, getRenderedSlotEntries, getActiveFDSlots, minutesToTime, SLOT_DISPLAY_LABELS } from '../data/seed.js';
 import { supabase } from '../supabase.js';
 import {
   saveSchedule as saveScheduleDB,
@@ -1290,11 +1290,20 @@ export function AppProvider({ children }) {
   // ─── Clinic mutations ───────────────────────
   const updateClinic = useCallback(async (clinicId, changes) => {
     if (!globalData) return;
+    const prev = globalData.clinics.find(c => c.id === clinicId);
     const clinics = globalData.clinics.map(c => c.id === clinicId ? { ...c, ...changes } : c);
     const map = extractSlotMap(clinics, globalData.additionalTasks);
-    setGlobalData(prev => ({ ...prev, clinics }));
+    setGlobalData(p => ({ ...p, clinics }));
+    // Log open/close toggles
+    if (prev && 'open' in changes && changes.open !== prev.open) {
+      const action = changes.open
+        ? `Clinic opened: ${prev.provider} @ ${prev.location} on ${prev.day}`
+        : `Clinic closed: ${prev.provider} @ ${prev.location} on ${prev.day}`;
+      setChangelog(log => [{ timestamp: Date.now(), action, personName: '', day: prev.day, detail: '', initials: managerInitials ?? undefined }, ...log].slice(0, 500));
+    }
     await doSaveWeek(currentWeek, map);
-  }, [currentWeek, globalData, doSaveWeek]);
+    setDirtyWeeks(p => new Set([...p, currentWeek]));
+  }, [currentWeek, globalData, doSaveWeek, managerInitials]);
 
   const assignSlot = useCallback(async (clinicId, slotType, personId) => {
     if (!globalData) return;
@@ -1405,6 +1414,7 @@ export function AppProvider({ children }) {
 
   const updateSlotTime = useCallback(async (clinicId, slotType, start, end) => {
     if (!globalData) return;
+    const clinic = globalData.clinics.find(c => c.id === clinicId);
     const clinics = globalData.clinics.map(c => {
       if (c.id !== clinicId) return c;
       const existing = c.slots[slotType];
@@ -1415,9 +1425,15 @@ export function AppProvider({ children }) {
     });
     const map = extractSlotMap(clinics, globalData.additionalTasks);
     setGlobalData(prev => ({ ...prev, clinics }));
+    if (clinic) {
+      const slotLabel = SLOT_DISPLAY_LABELS[slotType] ?? slotType;
+      const endStr = end === 'close' ? 'Close' : end != null ? minutesToTime(end) : '?';
+      const action = `${slotLabel} time set @ ${clinic.location} (${clinic.provider}) on ${clinic.day}: ${start != null ? minutesToTime(start) : '?'} – ${endStr}`;
+      setChangelog(log => [{ timestamp: Date.now(), action, personName: '', day: clinic.day, detail: '', initials: managerInitials ?? undefined }, ...log].slice(0, 500));
+    }
     await doSaveWeek(currentWeek, map);
     setDirtyWeeks(prev => new Set([...prev, currentWeek]));
-  }, [currentWeek, globalData, doSaveWeek]);
+  }, [currentWeek, globalData, doSaveWeek, managerInitials]);
 
   const assignTask = useCallback(async (taskId, personId) => {
     if (!globalData) return;
@@ -1452,24 +1468,45 @@ export function AppProvider({ children }) {
       : [...globalData.taskTypes, task.label];
     const map = extractSlotMap(globalData.clinics, additionalTasks);
     setGlobalData(prev => ({ ...prev, additionalTasks, taskTypes }));
+    const endStr = task.end === 'close' ? 'Close' : task.end != null ? minutesToTime(task.end) : null;
+    const timeStr = task.start != null && endStr ? ` ${minutesToTime(task.start)} – ${endStr}` : '';
+    const action = `Task created: ${task.label}${task.locationTag ? ` @ ${task.locationTag}` : ''} on ${task.day}${timeStr}`;
+    setChangelog(log => [{ timestamp: Date.now(), action, personName: '', day: task.day, detail: '', initials: managerInitials ?? undefined }, ...log].slice(0, 500));
     await doSaveWeek(currentWeek, map);
-  }, [currentWeek, globalData, doSaveWeek]);
+    setDirtyWeeks(prev => new Set([...prev, currentWeek]));
+  }, [currentWeek, globalData, doSaveWeek, managerInitials]);
 
-  const removeTask = useCallback((taskId) => {
-    setGlobalData(prev => ({
-      ...prev,
-      additionalTasks: (prev.additionalTasks ?? []).filter(t => t.id !== taskId),
-    }));
-  }, []);
+  const removeTask = useCallback(async (taskId) => {
+    if (!globalData) return;
+    const task = globalData.additionalTasks.find(t => t.id === taskId);
+    const additionalTasks = (globalData.additionalTasks ?? []).filter(t => t.id !== taskId);
+    const map = extractSlotMap(globalData.clinics, additionalTasks);
+    setGlobalData(prev => ({ ...prev, additionalTasks }));
+    if (task) {
+      const action = `Task removed: ${task.label}${task.locationTag ? ` @ ${task.locationTag}` : ''} on ${task.day}`;
+      setChangelog(log => [{ timestamp: Date.now(), action, personName: '', day: task.day, detail: '', initials: managerInitials ?? undefined }, ...log].slice(0, 500));
+    }
+    await doSaveWeek(currentWeek, map);
+    setDirtyWeeks(prev => new Set([...prev, currentWeek]));
+  }, [currentWeek, globalData, doSaveWeek, managerInitials]);
 
-  const updateTaskTime = useCallback((taskId, start, end) => {
-    setGlobalData(prev => ({
-      ...prev,
-      additionalTasks: (prev.additionalTasks ?? []).map(t =>
-        t.id === taskId ? { ...t, start, end } : t
-      ),
-    }));
-  }, []);
+  const updateTaskTime = useCallback(async (taskId, start, end) => {
+    if (!globalData) return;
+    const task = globalData.additionalTasks.find(t => t.id === taskId);
+    const additionalTasks = (globalData.additionalTasks ?? []).map(t =>
+      t.id === taskId ? { ...t, start, end } : t
+    );
+    const map = extractSlotMap(globalData.clinics, additionalTasks);
+    setGlobalData(prev => ({ ...prev, additionalTasks }));
+    if (task) {
+      const endStr = end === 'close' ? 'Close' : end != null ? minutesToTime(end) : '?';
+      const timeStr = start != null ? `${minutesToTime(start)} – ${endStr}` : '';
+      const action = `Task time updated: ${task.label}${task.locationTag ? ` @ ${task.locationTag}` : ''} on ${task.day}${timeStr ? ' → ' + timeStr : ''}`;
+      setChangelog(log => [{ timestamp: Date.now(), action, personName: '', day: task.day, detail: '', initials: managerInitials ?? undefined }, ...log].slice(0, 500));
+    }
+    await doSaveWeek(currentWeek, map);
+    setDirtyWeeks(prev => new Set([...prev, currentWeek]));
+  }, [currentWeek, globalData, doSaveWeek, managerInitials]);
 
   const updateTask = useCallback(async (taskId, changes) => {
     if (!globalData) return;
@@ -1482,8 +1519,26 @@ export function AppProvider({ children }) {
       : globalData.taskTypes;
     const map = extractSlotMap(globalData.clinics, additionalTasks);
     setGlobalData(g => ({ ...g, additionalTasks, taskTypes }));
+    const updated = { ...prev, ...changes };
+    // Log content changes (label / location / time)
+    const changed = [];
+    if (changes.label != null && changes.label !== prev?.label) changed.push(`renamed to "${changes.label}"`);
+    if ('locationTag' in changes && changes.locationTag !== prev?.locationTag) changed.push(`location → ${changes.locationTag || 'none'}`);
+    if (('start' in changes || 'end' in changes) && !('assignedPersonId' in changes)) {
+      const s = updated.start; const e = updated.end;
+      const endStr = e === 'close' ? 'Close' : e != null ? minutesToTime(e) : '?';
+      if (s != null) changed.push(`time → ${minutesToTime(s)} – ${endStr}`);
+    }
+    if (changed.length > 0) {
+      setChangelog(log => [{
+        timestamp: Date.now(),
+        action: `Task edited: ${prev?.label || 'task'} on ${updated.day} (${changed.join(', ')})`,
+        personName: '', day: updated.day, detail: '',
+        initials: managerInitials ?? undefined,
+      }, ...log].slice(0, 500));
+    }
+    // Log assignment changes
     if ('assignedPersonId' in changes && changes.assignedPersonId !== prev?.assignedPersonId) {
-      const updated = { ...prev, ...changes };
       const person = changes.assignedPersonId
         ? globalData.people.find(p => p.id === changes.assignedPersonId)
         : null;

@@ -1017,8 +1017,8 @@ export default function TopBar({ activeTab, setActiveTab }) {
         <div className="unposted-banner">
           <span className="unposted-banner-msg">
             {postedSnapshot
-              ? `Unposted changes — staff are seeing the version posted ${formatPostedTime(postedSnapshot.posted_at)} by ${postedSnapshot.posted_by ?? '—'}`
-              : 'This week has not been posted — staff cannot see it yet.'}
+              ? `Your changes have not been posted — staff cannot see your changes until you post. Version posted ${formatPostedTime(postedSnapshot.posted_at)} by ${postedSnapshot.posted_by ?? '—'}.`
+              : 'This schedule has not been posted — staff cannot see it until you post.'}
           </span>
         </div>
       )}

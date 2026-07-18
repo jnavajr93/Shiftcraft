@@ -448,7 +448,7 @@ function AddTaskForm({ day, initialTask = null, onSubmit, onCancel }) {
 
 // ─── Additional Tasks Panel ───────────────────────────────────────────────────
 export default function AdditionalTasks({ onPersonClick }) {
-  const { data, isAdmin, managerInitials, removeTask, addTask, updateTask, addLog } = useApp();
+  const { data, isAdmin, removeTask, addTask, updateTask } = useApp();
   const [addingDay, setAddingDay] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
 
@@ -461,18 +461,6 @@ export default function AdditionalTasks({ onPersonClick }) {
     updateTask(task.id, task);
     setEditingTask(null);
   };
-
-  const handleRemove = (task) => {
-    addLog({
-      action: `${task.label} removed from ${task.day}`,
-      personName: '',
-      day: task.day,
-      detail: '',
-      initials: managerInitials ?? undefined,
-    });
-    removeTask(task.id);
-  };
-  void handleRemove;
 
   return (
     <div data-tour="additional-tasks" style={{ padding: '0 16px 16px', flexShrink: 0 }}>
