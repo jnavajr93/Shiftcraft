@@ -1,32 +1,27 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import { useApp } from '../context/AppContext.jsx';
-import { calcPersonWeeklyHours, getBoardClinics, SKILLS, minutesToTime, accommodationLabel } from '../data/seed.js';
-
-const SKILL_ABBR = {
-  'Workup':             'WU',
-  'Treatments':         'Tx',
-  'FAs':                'FA',
-  'Autoclave & Closing': 'AC/CL',
-};
+import { calcPersonWeeklyHours, getBoardClinics, DAYS, getAssignmentsForPerson, getSlotLabel } from '../data/seed.js';
 
 // ─── Staff Hover Card ─────────────────────────────────────────────────────────
 
-function StaffHoverCard({ person, hours, style, onMouseEnter, onMouseLeave }) {
-  const skills = person.skills ?? [];
-  const preferredLocations = person.preferredLocations ?? [];
+function StaffHoverCard({ person, hours, clinics, people, style, onMouseEnter, onMouseLeave }) {
   const daysOff = person.daysOff ?? [];
-  const availWindows = person.availabilityWindows ?? {};
-  const accommodations = person.accommodations ?? [];
-  const lockedTo = person.lockedTo ?? [];
-
-  const availEntries = Object.entries(availWindows).filter(
-    ([, w]) => w && (w.endNoLater != null || w.startNotBefore != null)
-  );
+  const nameKey = person.name.trim().toLowerCase();
 
   const employLabel = person.employmentType === 'Full-time' ? 'FT'
     : person.employmentType === 'Part-time' ? 'PT'
     : (person.employmentType ?? '');
+
+  // Week-at-a-glance: one line per day
+  const weekRows = DAYS.map(day => {
+    const assignments = getAssignmentsForPerson(nameKey, day, people, clinics);
+    if (assignments.length === 0) return { day, label: null };
+    const label = assignments
+      .map(a => getSlotLabel(a.slotType, a.clinic.location))
+      .join(' + ');
+    return { day, label };
+  });
 
   return (
     <div
@@ -47,36 +42,18 @@ function StaffHoverCard({ person, hours, style, onMouseEnter, onMouseLeave }) {
         )}
       </div>
 
-      {/* Skills */}
+      {/* Week at a glance */}
       <div className="staff-hovercard-section">
-        <div className="staff-hovercard-label">Skills</div>
-        <div className="staff-hovercard-skills">
-          {SKILLS.map(skill => (
-            <span
-              key={skill}
-              className={`hovercard-skill-pill${skills.includes(skill) ? ' trained' : ''}`}
-            >
-              {SKILL_ABBR[skill] ?? skill}
-            </span>
-          ))}
-        </div>
+        {weekRows.map(({ day, label }) => (
+          <div key={day} className="hovercard-week-row">
+            <span className="hovercard-week-day">{day}</span>
+            {label
+              ? <span className="hovercard-week-assignment">{label}</span>
+              : <span className="hovercard-week-off">Off</span>
+            }
+          </div>
+        ))}
       </div>
-
-      {/* Locked to */}
-      {lockedTo.length > 0 && (
-        <div className="staff-hovercard-section">
-          <div className="staff-hovercard-label">Locked to</div>
-          <div className="staff-hovercard-value">{lockedTo.join(', ')}</div>
-        </div>
-      )}
-
-      {/* Preferred locations */}
-      {preferredLocations.length > 0 && (
-        <div className="staff-hovercard-section">
-          <div className="staff-hovercard-label">Preferred</div>
-          <div className="staff-hovercard-value">{preferredLocations.join(', ')}</div>
-        </div>
-      )}
 
       {/* Days off */}
       {daysOff.length > 0 && (
@@ -85,31 +62,6 @@ function StaffHoverCard({ person, hours, style, onMouseEnter, onMouseLeave }) {
           <div className="staff-hovercard-days">
             {daysOff.map(d => <span key={d} className="hovercard-day-pill">{d}</span>)}
           </div>
-        </div>
-      )}
-
-      {/* Availability */}
-      {availEntries.length > 0 && (
-        <div className="staff-hovercard-section">
-          <div className="staff-hovercard-label">Availability</div>
-          {availEntries.map(([day, w]) => {
-            const parts = [];
-            if (w.startNotBefore != null) parts.push(`from ${minutesToTime(w.startNotBefore)}`);
-            if (w.endNoLater != null) parts.push(`end by ${minutesToTime(w.endNoLater)}`);
-            return (
-              <div key={day} className="staff-hovercard-value">{day}: {parts.join(', ')}</div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Accommodations */}
-      {accommodations.length > 0 && (
-        <div className="staff-hovercard-section">
-          <div className="staff-hovercard-label">Notes</div>
-          {accommodations.map((acc, i) => (
-            <div key={i} className="staff-hovercard-value">{accommodationLabel(acc)}</div>
-          ))}
         </div>
       )}
 
@@ -207,6 +159,8 @@ function PersonCard({ person, onPersonClick, clinics }) {
         <StaffHoverCard
           person={person}
           hours={hours}
+          clinics={clinics}
+          people={data.people}
           style={{ top: cardPos.top, left: cardPos.left }}
           onMouseEnter={cancelClose}
           onMouseLeave={closeCard}

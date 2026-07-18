@@ -237,25 +237,30 @@ html, body, #root {
   color: var(--text-secondary);
   line-height: 1.4;
 }
-.staff-hovercard-skills {
+/* Week-at-a-glance rows */
+.hovercard-week-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.5;
 }
-.hovercard-skill-pill {
+.hovercard-week-day {
+  width: 28px;
+  flex-shrink: 0;
   font-size: 10px;
-  font-weight: 500;
-  padding: 2px 7px;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--border-strong);
-  color: var(--text-muted);
-  background: transparent;
-}
-.hovercard-skill-pill.trained {
-  background: var(--bg-surface);
-  border-color: var(--border-strong);
-  color: var(--text-primary);
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+.hovercard-week-assignment {
+  color: var(--text-primary);
+  flex: 1;
+}
+.hovercard-week-off {
+  color: var(--text-muted);
+  font-style: italic;
 }
 .staff-hovercard-days {
   display: flex;
