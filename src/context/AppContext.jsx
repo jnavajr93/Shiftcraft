@@ -709,6 +709,35 @@ export function AppProvider({ children }) {
 
       data = runMigrations(data);
 
+      // ── Duplicate clinic cleanup ──────────────────────────────────────────
+      // Remove stale (location, day) duplicates that getBoardClinics() hides.
+      // Keeping them causes the post-gate validator to report phantom violations
+      // for clinics that don't exist on the board. Keep the first occurrence
+      // per (location, day) — same logic as getBoardClinics().
+      {
+        const seen = new Set();
+        const kept = [];
+        const removed = [];
+        for (const c of data.clinics) {
+          const key = `${c.location}:${c.day}`;
+          if (seen.has(key)) {
+            removed.push(c);
+          } else {
+            seen.add(key);
+            kept.push(c);
+          }
+        }
+        if (removed.length > 0) {
+          console.warn(
+            `[Shiftcraft init] Removing ${removed.length} duplicate clinic record(s):`,
+            removed.map(c => `${c.location} ${c.day} (id: ${c.id})`).join(', ')
+          );
+          data = { ...data, clinics: kept };
+          saveScheduleDB(toDefinitionData(data));
+        }
+      }
+      // ─────────────────────────────────────────────────────────────────────
+
       // 2. Load this week's slot assignments
       const weekResult = await loadWeekSlotMapDB(nowWeek);
 
@@ -1712,7 +1741,14 @@ export function AppProvider({ children }) {
 
   // ─── Clinic/location mutations ──────────────
   const addClinic = useCallback((clinic) => {
-    setGlobalData(prev => ({ ...prev, clinics: [...prev.clinics, clinic] }));
+    setGlobalData(prev => {
+      const dup = prev.clinics.some(c => c.location === clinic.location && c.day === clinic.day);
+      if (dup) {
+        console.warn(`[addClinic] Blocked duplicate clinic: ${clinic.location} ${clinic.day}`);
+        return prev;
+      }
+      return { ...prev, clinics: [...prev.clinics, clinic] };
+    });
   }, []);
 
   const removeClinic = useCallback((clinicId) => {

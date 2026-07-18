@@ -1,4 +1,4 @@
-import { slotEffectiveRange, rangesOverlap, getRenderedSlotEntries, getSlotPersonId } from '../data/seed.js';
+import { slotEffectiveRange, rangesOverlap, getRenderedSlotEntries, getSlotPersonId, getBoardClinics } from '../data/seed.js';
 
 /**
  * Post-generation schedule validation.
@@ -437,10 +437,14 @@ export function findStaffingGaps(clinics) {
  * Returns array of { label, clinicId, type } — empty means clean to post.
  */
 export function getPostViolations(clinics, people, absences = [], weekMonday = null) {
-  const timeless  = findTimelessAssignments(clinics, people).map(v => ({ ...v, type: 'timeless' }));
-  const conflicts = findBoardConflicts(clinics, people).map(v => ({ ...v, type: 'conflict' }));
-  const absent    = findAbsenceViolations(clinics, people, absences, weekMonday).map(v => ({ ...v, type: 'absence' }));
-  const gaps      = findStaffingGaps(clinics).map(v => ({ ...v, type: 'gap' }));
+  // Validate against the EXACT same clinic set the board renders — one clinic per
+  // (location, day). Stale duplicate records that are hidden by getBoardClinics()
+  // must never produce violations, since the user cannot see or fix them.
+  const boardClinics = getBoardClinics(clinics);
+  const timeless  = findTimelessAssignments(boardClinics, people).map(v => ({ ...v, type: 'timeless' }));
+  const conflicts = findBoardConflicts(boardClinics, people).map(v => ({ ...v, type: 'conflict' }));
+  const absent    = findAbsenceViolations(boardClinics, people, absences, weekMonday).map(v => ({ ...v, type: 'absence' }));
+  const gaps      = findStaffingGaps(boardClinics).map(v => ({ ...v, type: 'gap' }));
   return [...timeless, ...conflicts, ...absent, ...gaps];
 }
 
