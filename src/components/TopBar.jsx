@@ -174,8 +174,8 @@ function ExitNudgeModal({ postedSnapshot, onPost, onLeave }) {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '12px 24px', borderTop: '0.5px solid var(--border)', flexShrink: 0 }}>
-          <button className="btn" onClick={onLeave}>Leave anyway</button>
-          <button className="btn btn-primary" style={{ minHeight: 38, gap: 6 }} onClick={onPost}>
+          <button className="btn" onClick={onLeave}>Save and close</button>
+          <button className="btn btn-post" style={{ minHeight: 38, gap: 6 }} onClick={onPost}>
             <SendHorizonal size={13} /> Post
           </button>
         </div>
@@ -871,22 +871,6 @@ export default function TopBar({ activeTab, setActiveTab }) {
           )}
           {isAdmin && (
             <>
-              {/* Post button — always shown for muscle memory */}
-              <button
-                className={`btn btn-pill topbar-mobile-hidden${isDirty ? ' btn-post' : ''}${postState === 'error' ? ' generate-error' : postState === 'done' ? ' generate-done' : ''}`}
-                style={{ fontSize: 12, minHeight: 32, gap: 5, opacity: isDirty || postState !== 'idle' ? 1 : 0.45 }}
-                onClick={isDirty && (postState === 'idle' || postState === 'error') ? handlePostClick : undefined}
-                disabled={postState === 'loading' || (!isDirty && postState === 'idle')}
-                title={isDirty ? 'Publish schedule to staff' : postedSnapshot ? `Posted by ${postedSnapshot.posted_by ?? '—'}` : 'Nothing to post yet'}
-              >
-                {postState === 'loading' ? <><Loader2 size={13} className="spin" /> Posting…</> :
-                 postState === 'done'    ? <>✓ Posted</> :
-                 isDirty && postedSnapshot ? <><SendHorizonal size={13} /> Post changes</> :
-                 isDirty ? <><SendHorizonal size={13} /> Post</> :
-                 postedSnapshot ? <>✓ Posted {formatPostedTime(postedSnapshot.posted_at)}</> :
-                 <><SendHorizonal size={13} /> Post</>}
-              </button>
-
               {/* Generate schedule button */}
               <button
                 data-tour="generate-button"
@@ -943,6 +927,23 @@ export default function TopBar({ activeTab, setActiveTab }) {
           >
             <CircleHelp size={20} strokeWidth={1.5} />
           </button>
+          {/* Post button — after help, before manager badge */}
+          {isAdmin && (
+            <button
+              className={`btn btn-pill topbar-mobile-hidden btn-post${!isDirty ? ' btn-post--clean' : ''}${postState === 'error' ? ' generate-error' : postState === 'done' ? ' generate-done' : ''}`}
+              style={{ fontSize: 12, minHeight: 32, gap: 5 }}
+              onClick={isDirty && (postState === 'idle' || postState === 'error') ? handlePostClick : undefined}
+              disabled={postState === 'loading' || (!isDirty && postState === 'idle')}
+              title={isDirty ? 'Publish schedule to staff' : postedSnapshot ? `Posted by ${postedSnapshot.posted_by ?? '—'}` : 'Nothing to post yet'}
+            >
+              {postState === 'loading' ? <><Loader2 size={13} className="spin" /> Posting…</> :
+               postState === 'done'    ? <>✓ Posted</> :
+               isDirty && postedSnapshot ? <><SendHorizonal size={13} /> Post changes</> :
+               isDirty ? <><SendHorizonal size={13} /> Post</> :
+               postedSnapshot ? <>✓ Posted {formatPostedTime(postedSnapshot.posted_at)}</> :
+               <><SendHorizonal size={13} /> Post</>}
+            </button>
+          )}
           {/* Presence: other managers viewing this week */}
           {presentManagers.length > 0 && (
             <div className="topbar-mobile-hidden" style={{ display: 'flex', gap: 4, alignItems: 'center' }}>

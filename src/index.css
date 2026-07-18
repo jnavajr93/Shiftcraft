@@ -1176,17 +1176,34 @@ html, body, #root {
   color: #4ade80;
 }
 
-/* Post button — accent-colored pill */
+/* Post button — green pill */
 .btn-post {
-  background: var(--accent, #3b82f6);
+  background: #16a34a;
   color: #fff;
   border-color: transparent;
 }
 .btn-post:hover:not(:disabled) {
-  background: var(--accent-hover, #2563eb);
+  background: #15803d;
 }
 .btn-post:disabled {
   opacity: 0.6;
+}
+/* Clean/posted state — outline green, muted */
+.btn-post.btn-post--clean {
+  background: transparent;
+  color: #16a34a;
+  border: 1px solid #16a34a;
+  opacity: 0.55;
+}
+[data-theme="dark"] .btn-post {
+  background: #15803d;
+}
+[data-theme="dark"] .btn-post:hover:not(:disabled) {
+  background: #166534;
+}
+[data-theme="dark"] .btn-post.btn-post--clean {
+  color: #4ade80;
+  border-color: #4ade80;
 }
 
 /* Timeless variable slot — subtle red outline in manager mode */
