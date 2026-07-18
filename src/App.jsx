@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -21,6 +21,7 @@ import PersonOverlay from './components/PersonOverlay.jsx';
 import AdditionalTasks from './components/AdditionalTasks.jsx';
 import UnassignedStaff from './components/UnassignedStaff.jsx';
 import ConflictBanner from './components/ConflictBanner.jsx';
+import MobileStaffView from './components/MobileStaffView.jsx';
 
 function AppContent() {
   const { data, isAdmin, boardClinics, isLoading, loadError, saveStatus, assignSlot, assignTask } = useApp();
@@ -89,6 +90,14 @@ function AppContent() {
   const [search, setSearch] = useState('');
   const [activeDragId, setActiveDragId] = useState(null);
 
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia('(max-width: 640px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 640px)');
+    const handler = (e) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
@@ -150,16 +159,20 @@ function AppContent() {
               {isAdmin && <Sidebar onPersonClick={openPerson} />}
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
                 {isAdmin && <ConflictBanner />}
-                <div style={{ flex: 1, overflow: 'auto' }}>
-                  <Board
-                    search={search}
-                    setSearch={setSearch}
-                    onPersonClick={openPerson}
-                    onEditClinic={isAdmin ? setConfigClinicId : () => {}}
-                  />
-                  {(isAdmin || boardClinics !== null) && <AdditionalTasks onPersonClick={openPerson} />}
-                  {isAdmin && <UnassignedStaff onPersonClick={openPerson} />}
-                </div>
+                {(!isAdmin && isMobile) ? (
+                  <MobileStaffView onPersonClick={openPerson} />
+                ) : (
+                  <div style={{ flex: 1, overflow: 'auto' }}>
+                    <Board
+                      search={search}
+                      setSearch={setSearch}
+                      onPersonClick={openPerson}
+                      onEditClinic={isAdmin ? setConfigClinicId : () => {}}
+                    />
+                    {(isAdmin || boardClinics !== null) && <AdditionalTasks onPersonClick={openPerson} />}
+                    {isAdmin && <UnassignedStaff onPersonClick={openPerson} />}
+                  </div>
+                )}
                 {isAdmin && <HoursBar />}
               </div>
             </div>

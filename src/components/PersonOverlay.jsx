@@ -8,7 +8,7 @@ function useIsMobile() {
   return window.matchMedia('(max-width: 640px)').matches;
 }
 
-function WeekRows({ personIds, clinics, additionalTasks }) {
+export function WeekRows({ personIds, clinics, additionalTasks }) {
   const pidSet = new Set(personIds);
   return (
     <div>

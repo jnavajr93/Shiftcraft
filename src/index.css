@@ -1259,3 +1259,273 @@ html, body, #root {
 .post-violation-row:hover {
   background: var(--bg-hover, rgba(0,0,0,0.05));
 }
+
+/* ─── Mobile Staff View ───────────────────────── */
+.mobile-staff-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-base);
+}
+
+/* "Find my schedule" / "My schedule" top bar */
+.mobile-name-bar {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 0.5px solid var(--border);
+  flex-shrink: 0;
+  background: var(--bg-elevated);
+}
+.mobile-find-btn,
+.mobile-my-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  border: 0.5px solid var(--border-strong);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: var(--font);
+  transition: background 120ms;
+}
+.mobile-find-btn:hover,
+.mobile-my-btn:hover { background: var(--accent-subtle); color: var(--text-primary); }
+.mobile-my-btn { color: var(--text-primary); border-color: var(--accent); }
+
+/* Name search dropdown */
+.mobile-search-bar {
+  padding: 8px 12px;
+  border-bottom: 0.5px solid var(--border);
+  flex-shrink: 0;
+  background: var(--bg-elevated);
+  position: relative;
+  z-index: 10;
+}
+.mobile-search-input {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  border: 0.5px solid var(--border-strong);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: var(--font);
+  outline: none;
+}
+.mobile-search-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(31,31,31,0.08);
+}
+.mobile-name-suggestions {
+  margin-top: 6px;
+  background: var(--bg-elevated);
+  border: 0.5px solid var(--border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.mobile-name-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  background: none;
+  border: none;
+  border-bottom: 0.5px solid var(--border);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: var(--font);
+  cursor: pointer;
+  text-align: left;
+}
+.mobile-name-suggestion:last-child { border-bottom: none; }
+.mobile-name-suggestion:hover { background: var(--bg-surface); }
+
+/* Day tab strip */
+.mobile-day-tabs {
+  display: flex;
+  flex-shrink: 0;
+  border-bottom: 0.5px solid var(--border);
+  background: var(--bg-elevated);
+}
+.mobile-day-tab {
+  flex: 1;
+  padding: 10px 0;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font);
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color 120ms, border-color 120ms;
+  letter-spacing: 0.02em;
+}
+.mobile-day-tab:hover { color: var(--text-primary); }
+.mobile-day-tab.active {
+  color: var(--text-primary);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+.mobile-day-tab.today {
+  color: #2563eb;
+}
+.mobile-day-tab.today.active {
+  border-bottom-color: #2563eb;
+}
+[data-theme='dark'] .mobile-day-tab.today { color: #60a5fa; }
+[data-theme='dark'] .mobile-day-tab.today.active { border-bottom-color: #60a5fa; }
+
+/* Scrollable day content */
+.mobile-day-content {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Empty state */
+.mobile-empty-day,
+.mobile-not-posted {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 1;
+  color: var(--text-muted);
+  font-size: 14px;
+  text-align: center;
+  padding: 40px 20px;
+}
+
+/* Clinic card */
+.mobile-clinic-card {
+  background: var(--bg-elevated);
+  border: 0.5px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.mobile-clinic-location {
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--bg-surface);
+  border-bottom: 0.5px solid var(--border);
+  color: var(--text-primary);
+  letter-spacing: 0.01em;
+}
+.mobile-clinic-empty {
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.mobile-clinic-slots {
+  display: flex;
+  flex-direction: column;
+}
+.mobile-slot-row {
+  display: flex;
+  align-items: center;
+  padding: 9px 14px;
+  border-bottom: 0.5px solid var(--border);
+  gap: 8px;
+  min-height: 40px;
+}
+.mobile-slot-row:last-child { border-bottom: none; }
+.mobile-slot-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  width: 80px;
+  flex-shrink: 0;
+}
+.mobile-slot-person {
+  flex: 1;
+}
+.mobile-person-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font);
+  padding: 0;
+}
+.mobile-person-btn:hover { text-decoration: underline; text-underline-offset: 2px; }
+.mobile-slot-empty { color: var(--text-muted); font-size: 13px; }
+.mobile-slot-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* "My schedule" full-week screen */
+.mobile-my-schedule-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-bottom: 0.5px solid var(--border);
+  background: var(--bg-elevated);
+  flex-shrink: 0;
+}
+.mobile-my-schedule-title {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 500;
+  text-align: center;
+}
+.mobile-my-schedule-body {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px;
+}
+/* Style WeekRows nicely in mobile context */
+.mobile-my-schedule-body .day-schedule-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 11px 14px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius);
+  margin-bottom: 6px;
+  border: 0.5px solid var(--border);
+}
+.mobile-my-schedule-body .day-schedule-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  width: 30px;
+  flex-shrink: 0;
+  letter-spacing: 0.04em;
+}
+.mobile-my-schedule-body .day-schedule-detail {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+.mobile-my-schedule-body .day-schedule-off {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* Hide TopBar mobile-hidden elements on mobile */
+@media (max-width: 640px) {
+  .topbar-mobile-hidden { display: none !important; }
+}
