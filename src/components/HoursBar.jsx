@@ -20,10 +20,11 @@ function runHoursTest() {
 runHoursTest();
 
 export default function HoursBar() {
-  const { data } = useApp();
+  const { data, doctorOffClinicIds } = useApp();
   const [collapsed, setCollapsed] = useState(false);
 
-  const boardClinics = getBoardClinics(data.clinics);
+  const boardClinics = getBoardClinics(data.clinics)
+    .filter(c => !doctorOffClinicIds?.has(c.id));
 
   // Build hours list, merging linked person pairs into one entry.
   // Whichever of the pair appears first in data.people is the display representative.

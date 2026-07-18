@@ -146,7 +146,8 @@ function diagnoseSolverGaps(cfg, result) {
 //   multiple candidates are equally eligible for a slot.
 // Returns { assignments: [{clinicId, slot, personId}], issues: string[] }
 export function generateSchedule(globalData, options = {}) {
-  const openClinics = (globalData.clinics ?? []).filter(c => c.open);
+  const { doctorOffClinicIds = new Set() } = options;
+  const openClinics = (globalData.clinics ?? []).filter(c => c.open && !doctorOffClinicIds.has(c.id));
 
   // ── 1. Roles — derived from slot keys present in open clinics ──────────────
   const slotKeySet = new Set();

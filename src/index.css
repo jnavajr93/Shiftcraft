@@ -1833,3 +1833,16 @@ html, body, #root {
   font-size: 10px; color: var(--text-muted); flex-shrink: 0;
   white-space: nowrap;
 }
+
+/* Doctor-off closed clinic card */
+.clinic-card--doctor-off {
+  opacity: 0.6;
+  border-style: dashed !important;
+}
+.clinic-doctor-off-body {
+  padding: 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  font-style: italic;
+}

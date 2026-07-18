@@ -11,10 +11,13 @@ export const ABSENCE_TYPES = [
   // Request/pending is retired — hidden from form/legend but kept for rendering old DB rows
   { key: 'Request',  label: 'Request / pending',   short: 'Request',  color: '#f59e0b', hidden: true },
   { key: 'Partial',  label: 'Partial day',         short: 'Partial',  color: '#8b5cf6' },
+  { key: 'DoctorOff', label: 'Doctor off', short: 'Dr. off', color: '#f59e0b' },
 ];
 
 // Types available for selection in the add/edit form and shown in the legend
 const SELECTABLE_TYPES = ABSENCE_TYPES.filter(t => !t.hidden);
+
+const DOCTORS = ['Dr. R', 'Dr. A', 'Dr. S', 'Dr. B'];
 
 const TYPE_MAP  = new Map(ABSENCE_TYPES.map(t => [t.key, t]));
 const colorOf   = (key) => TYPE_MAP.get(key)?.color ?? '#6b7280';
@@ -83,7 +86,7 @@ function Legend() {
 
 // ─── Absence modal ────────────────────────────────────────────────────────────
 
-function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, managerInitials, onSave, onDelete, onClose }) {
+function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, doctors, managerInitials, onSave, onDelete, onClose }) {
   const isEdit = mode === 'edit';
   const [personKey, setPersonKey] = useState(absence?.person_name ?? '');
   // If editing an absence with a retired type (e.g. 'Request'), reset to '' so user must pick a current type
@@ -99,6 +102,11 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, man
   const [saving,    setSaving]    = useState(false);
   const [deleting,  setDeleting]  = useState(false);
   const [dupWarning, setDupWarning] = useState(null);
+
+  const handleTypeSelect = (newType) => {
+    if ((type === 'DoctorOff') !== (newType === 'DoctorOff')) setPersonKey('');
+    setType(newType);
+  };
 
   const checkDup = useCallback(() => {
     if (!personKey || !startD || !endD) return null;
@@ -148,15 +156,24 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, man
         </div>
         <div className="overlay-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-          {/* Person */}
+          {/* Person / Doctor picker */}
           <div>
-            <label className="setup-label">Person</label>
-            <select className="setup-input" value={personKey} onChange={e => setPersonKey(e.target.value)}>
-              <option value="">— select —</option>
-              {[...people].sort((a, b) => a.name.localeCompare(b.name)).map(p => (
-                <option key={p.id} value={p.name.trim().toLowerCase()}>{p.name}</option>
-              ))}
-            </select>
+            <label className="setup-label">{type === 'DoctorOff' ? 'Doctor' : 'Person'}</label>
+            {type === 'DoctorOff' ? (
+              <select className="setup-input" value={personKey} onChange={e => setPersonKey(e.target.value)}>
+                <option value="">— select doctor —</option>
+                {(doctors ?? DOCTORS).map(d => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            ) : (
+              <select className="setup-input" value={personKey} onChange={e => setPersonKey(e.target.value)}>
+                <option value="">— select —</option>
+                {[...people].sort((a, b) => a.name.localeCompare(b.name)).map(p => (
+                  <option key={p.id} value={p.name.trim().toLowerCase()}>{p.name}</option>
+                ))}
+              </select>
+            )}
           </div>
 
           {/* Category */}
@@ -167,7 +184,7 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, man
                 <button
                   key={t.key}
                   type="button"
-                  onClick={() => setType(t.key)}
+                  onClick={() => handleTypeSelect(t.key)}
                   className="absence-type-btn"
                   style={{
                     '--type-color': t.color,
@@ -536,6 +553,7 @@ function AbsenceHistory({ absences, people, personByKey, onAbsenceClick }) {
 export default function AbsenceCalendar({ onClose }) {
   const { data, absences, addAbsence, editAbsence, removeAbsence, managerInitials, addLog } = useApp();
   const people      = data.people ?? [];
+  const doctors     = (data.providers ?? []).map(p => p.name);
   const personByKey = new Map(people.map(p => [p.name.trim().toLowerCase(), p]));
 
   const todayStr  = toDateStr(new Date());
@@ -734,6 +752,7 @@ export default function AbsenceCalendar({ onClose }) {
           absence={modal.absence}
           people={people}
           absences={absences}
+          doctors={doctors}
           managerInitials={managerInitials}
           onSave={handleSave}
           onDelete={handleDelete}

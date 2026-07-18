@@ -436,7 +436,35 @@ export function findStaffingGaps(clinics) {
  * weekMonday: Date (UTC) for absence date calculations
  * Returns array of { label, clinicId, type } — empty means clean to post.
  */
-export function getPostViolations(clinics, people, absences = [], weekMonday = null) {
+/**
+ * Finds staff assignments on doctor-off closed clinics.
+ * Returns violations for each closed clinic that has any assigned person.
+ */
+export function findDoctorOffAssignments(clinics, people, doctorOffClinicIds) {
+  if (!doctorOffClinicIds?.size) return [];
+  const personById = new Map((people ?? []).map(p => [p.id, p]));
+  const violations = [];
+  for (const c of clinics) {
+    if (!doctorOffClinicIds.has(c.id)) continue;
+    const assignedNames = [];
+    for (const [, slotVal] of getRenderedSlotEntries(c)) {
+      const pid = getSlotPersonId(slotVal);
+      if (!pid) continue;
+      const person = personById.get(pid);
+      if (person) assignedNames.push(person.name);
+    }
+    if (assignedNames.length > 0) {
+      const names = [...new Set(assignedNames)].join(', ');
+      violations.push({
+        label: `${c.location} ${c.day} (${c.provider}) is closed — remove assignments first: ${names}`,
+        clinicId: c.id,
+      });
+    }
+  }
+  return violations;
+}
+
+export function getPostViolations(clinics, people, absences = [], weekMonday = null, doctorOffClinicIds = new Set()) {
   // Validate against the EXACT same clinic set the board renders — one clinic per
   // (location, day). Stale duplicate records that are hidden by getBoardClinics()
   // must never produce violations, since the user cannot see or fix them.
@@ -444,8 +472,14 @@ export function getPostViolations(clinics, people, absences = [], weekMonday = n
   const timeless  = findTimelessAssignments(boardClinics, people).map(v => ({ ...v, type: 'timeless' }));
   const conflicts = findBoardConflicts(boardClinics, people).map(v => ({ ...v, type: 'conflict' }));
   const absent    = findAbsenceViolations(boardClinics, people, absences, weekMonday).map(v => ({ ...v, type: 'absence' }));
-  const gaps      = findStaffingGaps(boardClinics).map(v => ({ ...v, type: 'gap' }));
-  return [...timeless, ...conflicts, ...absent, ...gaps];
+  // Staffing gaps skip doctor-off closed clinics
+  const activeClinics = doctorOffClinicIds.size
+    ? boardClinics.filter(c => !doctorOffClinicIds.has(c.id))
+    : boardClinics;
+  const gaps = findStaffingGaps(activeClinics).map(v => ({ ...v, type: 'gap' }));
+  // New: block post if staff are still assigned to doctor-off closed clinics
+  const doctorOffViolations = findDoctorOffAssignments(boardClinics, people, doctorOffClinicIds).map(v => ({ ...v, type: 'doctorOff' }));
+  return [...timeless, ...conflicts, ...absent, ...gaps, ...doctorOffViolations];
 }
 
 // ─── Self-contained tests ───────────────────────────────────────────────────

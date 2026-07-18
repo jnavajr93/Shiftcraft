@@ -1863,6 +1863,34 @@ export function AppProvider({ children }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, globalData, currentWeek, postedSnapshots]);
 
+  const doctorOffClinicIds = useMemo(() => {
+    if (!globalData || !absences.length) return new Set();
+    const monday = mondayOfWeek(currentWeek);
+    const DAYS_LIST = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+    const doctorOffDays = new Map(); // providerName → Set<dayName>
+    for (const absence of absences) {
+      if (absence.type !== 'DoctorOff') continue;
+      const doctorName = absence.person_name;
+      for (let i = 0; i < 5; i++) {
+        const date = new Date(monday);
+        date.setUTCDate(monday.getUTCDate() + i);
+        const dateStr = date.toISOString().slice(0, 10);
+        if (absence.start_date <= dateStr && absence.end_date >= dateStr) {
+          if (!doctorOffDays.has(doctorName)) doctorOffDays.set(doctorName, new Set());
+          doctorOffDays.get(doctorName).add(DAYS_LIST[i]);
+        }
+      }
+    }
+    if (!doctorOffDays.size) return new Set();
+    const ids = new Set();
+    for (const clinic of getBoardClinics(globalData.clinics)) {
+      if (!clinic.open) continue;
+      const offDays = doctorOffDays.get(clinic.provider);
+      if (offDays?.has(clinic.day)) ids.add(clinic.id);
+    }
+    return ids;
+  }, [absences, globalData, currentWeek]);
+
   return (
     <AppContext.Provider value={{
       data,
@@ -1886,6 +1914,7 @@ export function AppProvider({ children }) {
       presentManagers, conflictToast, setConflictToast,
       absences, addAbsence, editAbsence, removeAbsence,
       isDirty, postedSnapshot, dirtyWeeks, boardClinics, postWeek,
+      doctorOffClinicIds,
     }}>
       {children}
     </AppContext.Provider>

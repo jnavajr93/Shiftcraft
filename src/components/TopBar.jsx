@@ -596,6 +596,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
     data, addLog, applyBulkAssignments, restoreClinicSlots, lastSaved, saveStatus,
     historyScores, presentManagers, conflictToast, setConflictToast,
     isDirty, postedSnapshot, dirtyWeeks, postWeek,
+    doctorOffClinicIds,
   } = useApp();
   const weekLabelRef = useRef(null);
   const undoTimerRef = useRef(null);
@@ -640,7 +641,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
     if (!data) return;
     const weekMonday = mondayOfWeek(currentWeek);
     const { data: absences } = await fetchAbsencesForWeek(weekMonday);
-    const violations = getPostViolations(data.clinics, data.people, absences ?? [], weekMonday);
+    const violations = getPostViolations(data.clinics, data.people, absences ?? [], weekMonday, doctorOffClinicIds);
     if (violations.length > 0) {
       setPostViolations(violations);
       setShowPostModal('violations');
@@ -774,7 +775,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
     }
 
     try {
-      const { assignments: raw, issues } = generateSchedule(data, { historyScores });
+      const { assignments: raw, issues } = generateSchedule(data, { historyScores, doctorOffClinicIds });
 
       let assignments = raw;
 

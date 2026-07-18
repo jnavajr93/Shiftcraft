@@ -7,7 +7,7 @@ import ClinicCard from './ClinicCard.jsx';
 const LOCATION_ORDER = ['Phoenix', 'Chandler', 'Estrella', 'Scottsdale', 'OBS'];
 
 export default function Board({ search, setSearch, onPersonClick, onEditClinic, footer }) {
-  const { data, isAdmin, boardClinics, currentWeek } = useApp();
+  const { data, isAdmin, boardClinics, currentWeek, doctorOffClinicIds } = useApp();
   const monday = mondayOfWeek(currentWeek);
 
   // Midnight rollover — tick increments at midnight so todayDay re-evaluates
@@ -132,6 +132,7 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic, 
                       matchedPersonIds={matchedPersonIds}
                       hasSearch={search.trim().length > 0}
                       isToday={isToday}
+                      isDoctorOff={doctorOffClinicIds?.has(clinic.id) ?? false}
                     />
                   );
                 }
