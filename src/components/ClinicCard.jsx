@@ -2,7 +2,11 @@ import { useState, useCallback, useRef } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { Pencil, AlertTriangle, Users, Power, Check, X as XIcon } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { getSlotLabel, getSlotTimeLabel, getSlotPersonId, getSlotTimeObj, formatVariableSlotTime, formatOpenerTimeDisplay, formatOpeningFDTimeDisplay, formatClosingFDOverlayDisplay, formatScribeTimeDisplay, formatClosingOverlayDisplay, minutesToTime, minutesToTimeInput, timeInputToMinutes, SLOT_TYPES, OBS_SLOT_TYPES, SLOT_DISPLAY_LABELS } from '../data/seed.js';
+import { getSlotLabel, getSlotTimeLabel, getSlotPersonId, getSlotTimeObj, formatVariableSlotTime, formatOpenerTimeDisplay, formatOpeningFDTimeDisplay, formatClosingFDOverlayDisplay, formatScribeTimeDisplay, formatClosingOverlayDisplay, minutesToTime, minutesToTimeInput, timeInputToMinutes, SLOT_TYPES, OBS_SLOT_TYPES, SLOT_DISPLAY_LABELS, calcSlotHours } from '../data/seed.js';
+
+function fmtHours(h) {
+  return `${Number(h.toFixed(2))}h`;
+}
 import SlotPopover from './SlotPopover.jsx';
 import { getConflictPersonDays } from './ConflictBanner.jsx';
 
@@ -279,6 +283,13 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
   const isDimmed = hasSearch && person && !matchedPersonIds.includes(personId);
   const interactive = isAdmin && clinicOpen;
 
+  // Per-assignment hours shown in manager mode only (muted, on the time row)
+  const slotHrs = (() => {
+    if (!person || !isAdmin) return null;
+    const h = calcSlotHours(clinic, slotType);
+    return h > 0 ? Number(h.toFixed(2)) : null;
+  })();
+
   const handleRowClick = () => {
     if (interactive) setShowPopover(s => !s);
   };
@@ -361,7 +372,10 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
             className={`variable-time-row${isAdmin && clinicOpen ? ' editable' : ''}`}
             onClick={isAdmin && clinicOpen ? (e) => { e.stopPropagation(); setEditingTime(true); } : undefined}
           >
-            <span>{variableTimeDisplay ?? (isAdmin && clinicOpen ? 'Set time…' : '—')}</span>
+            <span>
+              {variableTimeDisplay ?? (isAdmin && clinicOpen ? 'Set time…' : '—')}
+              {slotHrs != null && variableTimeDisplay && <span style={{ color: 'var(--text-muted)', marginLeft: 4 }}>· {fmtHours(slotHrs)}</span>}
+            </span>
             {isAdmin && clinicOpen && <Pencil size={9} style={{ opacity: 0.5 }} />}
           </div>
         )
@@ -380,7 +394,10 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
             className={`variable-time-row${isAdmin && clinicOpen ? ' editable' : ''}`}
             onClick={isAdmin && clinicOpen ? (e) => { e.stopPropagation(); setEditingTime(true); } : undefined}
           >
-            <span>{scribeTimeDisplay ?? (isAdmin && clinicOpen ? '1st Patient – Close' : '—')}</span>
+            <span>
+              {scribeTimeDisplay ?? (isAdmin && clinicOpen ? '1st Patient – Close' : '—')}
+              {slotHrs != null && <span style={{ color: 'var(--text-muted)', marginLeft: 4 }}>· {fmtHours(slotHrs)}</span>}
+            </span>
             {isAdmin && clinicOpen && <Pencil size={9} style={{ opacity: 0.5 }} />}
           </div>
         )
@@ -401,7 +418,10 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
             className={`variable-time-row${interactive ? ' editable' : ''}`}
             onClick={interactive ? (e) => { e.stopPropagation(); setEditingTime(true); } : undefined}
           >
-            <span>{openerDisplay}</span>
+            <span>
+              {openerDisplay}
+              {slotHrs != null && <span style={{ color: 'var(--text-muted)', marginLeft: 4 }}>· {fmtHours(slotHrs)}</span>}
+            </span>
             {interactive && <Pencil size={9} style={{ opacity: 0.5 }} />}
           </div>
         )
@@ -424,6 +444,7 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
           >
             <span>
               {closingStartStr} – {closingEndStr != null ? closingEndStr : <em>~Close</em>}
+              {slotHrs != null && <span style={{ color: 'var(--text-muted)', marginLeft: 4 }}>· {fmtHours(slotHrs)}</span>}
             </span>
             {interactive && <Pencil size={9} style={{ opacity: 0.5 }} />}
           </div>
@@ -444,7 +465,10 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
             className={`variable-time-row${interactive ? ' editable' : ''}`}
             onClick={interactive ? (e) => { e.stopPropagation(); setEditingTime(true); } : undefined}
           >
-            <span>{frontDeskDisplay}</span>
+            <span>
+              {frontDeskDisplay}
+              {slotHrs != null && <span style={{ color: 'var(--text-muted)', marginLeft: 4 }}>· {fmtHours(slotHrs)}</span>}
+            </span>
             {interactive && <Pencil size={9} style={{ opacity: 0.5 }} />}
           </div>
         )
@@ -526,6 +550,11 @@ function ObsSlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSear
   const interactive = isAdmin && clinicOpen;
   const label = OBS_LABELS[slotType] ?? slotType;
   const obsTimeDisplay = formatVariableSlotTime(slotVal);
+  const slotHrs = (() => {
+    if (!person || !isAdmin) return null;
+    const h = calcSlotHours(clinic, slotType);
+    return h > 0 ? Number(h.toFixed(2)) : null;
+  })();
 
   return (
     <div>
@@ -581,7 +610,10 @@ function ObsSlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSear
             className={`variable-time-row${interactive ? ' editable' : ''}`}
             onClick={interactive ? (e) => { e.stopPropagation(); setEditingTime(true); } : undefined}
           >
-            <span>{obsTimeDisplay ?? 'Open – Close'}</span>
+            <span>
+              {obsTimeDisplay ?? 'Open – Close'}
+              {slotHrs != null && <span style={{ color: 'var(--text-muted)', marginLeft: 4 }}>· {fmtHours(slotHrs)}</span>}
+            </span>
             {interactive && <Pencil size={9} style={{ opacity: 0.5 }} />}
           </div>
         )
