@@ -851,6 +851,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
           )}
           <button
             ref={weekLabelRef}
+            data-tour="week-nav"
             className="topbar-week-label"
             onClick={() => setShowDatePicker(s => !s)}
             aria-label="Jump to week"
@@ -965,6 +966,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
           {/* Post button */}
           {isAdmin && (
             <button
+              data-tour="post-button"
               className={`btn btn-pill topbar-mobile-hidden btn-post${!isDirty ? ' btn-post--clean' : ''}${postState === 'error' ? ' generate-error' : postState === 'done' ? ' generate-done' : ''}`}
               style={{ fontSize: 12, minHeight: 32, gap: 5 }}
               onClick={isDirty && (postState === 'idle' || postState === 'error') ? handlePostClick : undefined}
