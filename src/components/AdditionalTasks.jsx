@@ -1,11 +1,10 @@
-import { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useDroppable } from '@dnd-kit/core';
-import { Plus, X, Trash2, Pencil, Check } from 'lucide-react';
+import { Plus, X, Trash2, Pencil, Zap } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { mondayOfWeek } from '../context/AppContext.jsx';
-import { DAYS, generateId, minutesToTime, minutesToTimeInput, timeInputToMinutes, getAssignmentsForPerson, slotEffectiveRange, rangesOverlap } from '../data/seed.js';
-import { fetchAbsencesForWeek } from '../services/dataService.js';
+import { DAYS, generateId, minutesToTime, getAssignmentsForPerson, slotEffectiveRange, rangesOverlap } from '../data/seed.js';
 import { TimeRangePicker } from './TimeRangePicker.jsx';
 
 // ─── Portal positioning hook (shared pattern with SlotPopover) ────────────────
@@ -68,7 +67,6 @@ function formatTaskTime(task) {
 }
 
 function TaskTimeEditor({ task, onSave, onClose }) {
-  // Smart defaults: 8:00 AM start, 5:00 PM end — only applied when field is null
   return (
     <div className="variable-time-editor" onClick={e => e.stopPropagation()}>
       <TimeRangePicker
@@ -82,10 +80,37 @@ function TaskTimeEditor({ task, onSave, onClose }) {
   );
 }
 
-// ─── Task Slot Popover ───────────────────────
-// No role filtering — any staff can be assigned to any task.
-// Sorted by grade A → B → C → ungraded.
-function TaskPopover({ task, currentPersonId, onAssign, onRemove, onClose, triggerRef }) {
+// ─── Task eligibility (no role check — any staff can take any task) ───────────
+function taskIneligibleReason(person, task, clinics, allPeople) {
+  if ((person.daysOff ?? []).includes(task.day)) return 'Off this day';
+
+  const nameKey = person.name.trim().toLowerCase();
+  const dayAssignments = getAssignmentsForPerson(nameKey, task.day, allPeople ?? [], clinics);
+
+  const taskRange = (task.start != null && task.end != null && task.end !== 'close')
+    ? { start: task.start, end: task.end }
+    : null;
+
+  const blocking = dayAssignments.filter(a => {
+    if (a.isObs) return true; // OBS = day-level block
+    if (!taskRange) return false;
+    return rangesOverlap(taskRange, slotEffectiveRange(a.slotType, a.clinic));
+  });
+
+  if (blocking.length > 0) {
+    const b = blocking[0];
+    if (b.isObs) return 'Assigned to OBS this day';
+    const br = slotEffectiveRange(b.slotType, b.clinic);
+    const label = b.clinic.provider || b.clinic.location;
+    return `Overlaps ${label} ${minutesToTime(br.start)}–${minutesToTime(br.end)}`;
+  }
+
+  return null;
+}
+
+// ─── Task Slot Popover ────────────────────────────────────────────────────────
+// Follows SlotPopover pattern: Suggested / All Staff / Ineligible sections.
+function TaskSlotPopover({ task, currentPersonId, onAssign, onRemove, onClose, triggerRef }) {
   const { data } = useApp();
   const { popoverStyle, contentRef } = usePortalPopover(triggerRef, onClose);
 
@@ -109,13 +134,22 @@ function TaskPopover({ task, currentPersonId, onAssign, onRemove, onClose, trigg
   }, [onClose]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const gradeOrder = { A: 0, B: 1, C: 2 };
-  const currentPerson = currentPersonId
-    ? data.people.find(p => p.id === currentPersonId)
-    : null;
+  const currentPerson = currentPersonId ? data.people.find(p => p.id === currentPersonId) : null;
 
-  const sorted = [...data.people].sort(
-    (a, b) => (gradeOrder[a.grade] ?? 3) - (gradeOrder[b.grade] ?? 3)
-  );
+  // Classify all people
+  const classified = data.people.map(person => {
+    const reason = taskIneligibleReason(person, task, data.clinics, data.people);
+    return { person, eligible: !reason, reason };
+  });
+
+  const eligible = classified
+    .filter(c => c.eligible)
+    .sort((a, b) => (gradeOrder[a.person.grade] ?? 3) - (gradeOrder[b.person.grade] ?? 3));
+
+  const ineligible = classified.filter(c => !c.eligible);
+
+  const suggestions = !currentPersonId ? eligible.slice(0, 3) : [];
+  const rest = !currentPersonId ? eligible.slice(3) : eligible;
 
   return createPortal(
     <div ref={contentRef} className="popover" style={popoverStyle} onClick={e => e.stopPropagation()}>
@@ -135,26 +169,76 @@ function TaskPopover({ task, currentPersonId, onAssign, onRemove, onClose, trigg
             </button>
           </div>
           <div className="popover-divider" />
+          <div className="popover-section-label">Staff</div>
+          {eligible.map(({ person }) => (
+            <TaskPersonRow key={person.id} person={person} isCurrent={person.id === currentPersonId} onAssign={onAssign} />
+          ))}
+          {ineligible.length > 0 && (
+            <>
+              <div className="popover-divider" />
+              <div className="popover-section-label">Ineligible</div>
+              {ineligible.map(({ person, reason }) => (
+                <TaskPersonRow key={person.id} person={person} isCurrent={false} dimmed reason={reason} onAssign={onAssign} />
+              ))}
+            </>
+          )}
         </>
       )}
-      <div className="popover-section-label">Staff</div>
-      {sorted.map(p => (
-        <div
-          key={p.id}
-          className={`popover-item${p.id === currentPersonId ? ' current-person' : ''}`}
-          onClick={() => onAssign(p.id)}
-        >
-          <div className="dot" style={{ background: p.color }} />
-          <span style={{ flex: 1 }}>{p.name}</span>
-          {p.grade && <span className={`grade-badge ${p.grade}`}>{p.grade}</span>}
-        </div>
-      ))}
+
+      {!currentPerson && (
+        <>
+          {suggestions.length > 0 && (
+            <>
+              <div className="popover-section-label" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <Zap size={10} /> Suggested
+              </div>
+              {suggestions.map(({ person }) => (
+                <TaskPersonRow key={person.id} person={person} isCurrent={false} suggested onAssign={onAssign} />
+              ))}
+              {(rest.length > 0 || ineligible.length > 0) && <div className="popover-divider" />}
+            </>
+          )}
+          {rest.length > 0 && (
+            <>
+              <div className="popover-section-label">All Staff</div>
+              {rest.map(({ person }) => (
+                <TaskPersonRow key={person.id} person={person} isCurrent={false} onAssign={onAssign} />
+              ))}
+            </>
+          )}
+          {ineligible.length > 0 && (
+            <>
+              <div className="popover-divider" />
+              <div className="popover-section-label">Ineligible</div>
+              {ineligible.map(({ person, reason }) => (
+                <TaskPersonRow key={person.id} person={person} isCurrent={false} dimmed reason={reason} onAssign={onAssign} />
+              ))}
+            </>
+          )}
+        </>
+      )}
     </div>,
     document.body,
   );
 }
 
-// ─── Task Slot Row ───────────────────────────
+function TaskPersonRow({ person, isCurrent, dimmed, suggested, reason, onAssign }) {
+  return (
+    <div
+      className={`popover-item${isCurrent ? ' current-person' : ''}${suggested ? ' suggested-item' : ''}`}
+      style={{ opacity: dimmed ? 0.5 : 1, cursor: dimmed ? 'default' : 'pointer' }}
+      onClick={() => !dimmed && onAssign(person.id)}
+      title={reason ?? undefined}
+    >
+      <div className="dot" style={{ background: person.color }} />
+      <span style={{ flex: 1 }}>{person.name}</span>
+      {person.grade && <span className={`grade-badge ${person.grade}`}>{person.grade}</span>}
+      {reason && <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{reason}</span>}
+    </div>
+  );
+}
+
+// ─── Task Slot Row ────────────────────────────────────────────────────────────
 function TaskSlotRow({ task, onPersonClick, onEdit }) {
   const { data, isAdmin, assignTask, updateTaskTime, removeTask } = useApp();
   const [showPopover, setShowPopover] = useState(false);
@@ -169,18 +253,15 @@ function TaskSlotRow({ task, onPersonClick, onEdit }) {
     ? data.people.find(p => p.id === task.assignedPersonId)
     : null;
 
-  const handleRowClick = () => {
-    if (isAdmin) setShowPopover(s => !s);
-  };
-
   const timeDisplay = formatTaskTime(task);
 
   return (
     <div className="task-slot-wrapper" style={{ position: 'relative' }}>
+      {/* Slot row — popover is a SIBLING, not a descendant, to avoid React event bubbling interference */}
       <div
         ref={combinedRef}
         className={`task-slot${isOver && isAdmin ? ' drop-target' : ''}`}
-        onClick={handleRowClick}
+        onClick={() => { if (isAdmin) setShowPopover(s => !s); }}
         style={{ cursor: isAdmin ? 'pointer' : 'default' }}
       >
         <div className="task-label">{task.label}</div>
@@ -220,17 +301,20 @@ function TaskSlotRow({ task, onPersonClick, onEdit }) {
             </button>
           </div>
         )}
-        {showPopover && isAdmin && (
-          <TaskPopover
-            task={task}
-            currentPersonId={task.assignedPersonId}
-            onAssign={(pid) => { assignTask(task.id, pid); setShowPopover(false); }}
-            onRemove={() => { assignTask(task.id, null); setShowPopover(false); }}
-            onClose={() => setShowPopover(false)}
-            triggerRef={triggerRef}
-          />
-        )}
       </div>
+
+      {/* Popover lives OUTSIDE .task-slot so its clicks don't bubble to the toggle handler */}
+      {showPopover && isAdmin && (
+        <TaskSlotPopover
+          task={task}
+          currentPersonId={task.assignedPersonId}
+          onAssign={(pid) => { assignTask(task.id, pid); setShowPopover(false); }}
+          onRemove={() => { assignTask(task.id, null); setShowPopover(false); }}
+          onClose={() => setShowPopover(false)}
+          triggerRef={triggerRef}
+        />
+      )}
+
       {(isAdmin || timeDisplay) && (
         editingTime ? (
           <TaskTimeEditor
@@ -252,13 +336,11 @@ function TaskSlotRow({ task, onPersonClick, onEdit }) {
   );
 }
 
-// ─── Add / Edit Task Form ────────────────────
-const DAY_OFFSETS = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4 };
-
+// ─── Add / Edit Task Form ─────────────────────────────────────────────────────
+// Fields: Task, Location tag, Time. Staff is assigned via the slot popover after creation.
 function AddTaskForm({ day, initialTask = null, onSubmit, onCancel }) {
-  const { data, currentWeek } = useApp();
+  const { data } = useApp();
 
-  // Label state — detect if edit-mode label is custom (not in taskTypes)
   const presetLabels = data.taskTypes ?? [];
   const initIsPreset = initialTask ? presetLabels.includes(initialTask.label) : false;
 
@@ -269,77 +351,13 @@ function AddTaskForm({ day, initialTask = null, onSubmit, onCancel }) {
     initialTask && !initIsPreset ? (initialTask.label ?? '') : ''
   );
   const [locationTag, setLocationTag] = useState(initialTask?.locationTag ?? '');
-  const [staffId, setStaffId] = useState(initialTask?.assignedPersonId ?? '');
-  // Smart defaults: 8 AM start, 5 PM end — only applied when field is null
   const [taskTime, setTaskTime] = useState({
     start:      initialTask?.start ?? 480,
     end:        initialTask?.end !== 'close' ? (initialTask?.end ?? 1020) : null,
     endIsClose: initialTask?.end === 'close',
   });
-  const [absences, setAbsences] = useState([]);
-
-  useEffect(() => {
-    const monday = mondayOfWeek(currentWeek);
-    fetchAbsencesForWeek(monday).then(r => setAbsences(r.data ?? []));
-  }, [currentWeek]);
 
   const effectiveLabel = labelMode === '__custom' ? customLabel : labelMode;
-
-  // Date string for this day in the current week
-  const weekMonday = mondayOfWeek(currentWeek);
-  const dayDate = new Date(weekMonday);
-  dayDate.setUTCDate(dayDate.getUTCDate() + (DAY_OFFSETS[day] ?? 0));
-  const dayDateStr = dayDate.toISOString().slice(0, 10);
-
-  // Eligibility per person (absence + time-overlap)
-  const eligibility = useMemo(() => {
-    const taskRange = (!taskTime.endIsClose && taskTime.start != null && taskTime.end != null)
-      ? { start: taskTime.start, end: taskTime.end }
-      : null;
-
-    const result = {};
-    for (const person of data.people) {
-      const nameKey = person.name.trim().toLowerCase();
-
-      const fullDayAbsent = absences.some(a =>
-        a.person_name === nameKey &&
-        a.start_date <= dayDateStr &&
-        a.end_date >= dayDateStr &&
-        a.type !== 'partial'
-      );
-      if (fullDayAbsent) { result[person.id] = 'On leave'; continue; }
-
-      if (taskRange) {
-        // Partial absence overlap
-        const partialConflict = absences.some(a =>
-          a.person_name === nameKey &&
-          a.start_date <= dayDateStr &&
-          a.end_date >= dayDateStr &&
-          a.type === 'partial' &&
-          a.partial_start != null && a.partial_end != null &&
-          rangesOverlap(taskRange, { start: a.partial_start, end: a.partial_end })
-        );
-        if (partialConflict) { result[person.id] = 'On leave'; continue; }
-
-        // Clinic assignment overlap
-        const assignments = getAssignmentsForPerson(nameKey, day, data.people, data.clinics);
-        const hasConflict = assignments.some(a => {
-          if (a.isObs) return false;
-          const r = slotEffectiveRange(a.slotType, a.clinic);
-          return rangesOverlap(taskRange, r);
-        });
-        if (hasConflict) { result[person.id] = 'Time conflict'; continue; }
-      }
-
-      result[person.id] = null; // eligible
-    }
-    return result;
-  }, [data.people, data.clinics, absences, dayDateStr, day, taskTime]);
-
-  const gradeOrder = { A: 0, B: 1, C: 2 };
-  const sortedPeople = [...data.people].sort(
-    (a, b) => (gradeOrder[a.grade] ?? 3) - (gradeOrder[b.grade] ?? 3)
-  );
 
   const timeError = !taskTime.endIsClose &&
     taskTime.start != null && taskTime.end != null &&
@@ -352,7 +370,7 @@ function AddTaskForm({ day, initialTask = null, onSubmit, onCancel }) {
       label: effectiveLabel.trim(),
       day,
       locationTag: locationTag || null,
-      assignedPersonId: staffId || null,
+      assignedPersonId: initialTask?.assignedPersonId ?? null,
       isLocationSpecific: !!locationTag,
       start: taskTime.start,
       end: taskTime.endIsClose ? 'close' : taskTime.end,
@@ -400,27 +418,6 @@ function AddTaskForm({ day, initialTask = null, onSubmit, onCancel }) {
         </select>
       </div>
 
-      {/* Staff */}
-      <div className="form-group">
-        <label className="form-label">Staff (optional)</label>
-        <select
-          className="form-input"
-          style={{ fontSize: 13 }}
-          value={staffId}
-          onChange={e => setStaffId(e.target.value)}
-        >
-          <option value="">Unassigned</option>
-          {sortedPeople.map(p => {
-            const reason = eligibility[p.id];
-            return (
-              <option key={p.id} value={p.id} disabled={!!reason}>
-                {p.name}{p.grade ? ` (${p.grade})` : ''}{reason ? ` — ${reason}` : ''}
-              </option>
-            );
-          })}
-        </select>
-      </div>
-
       {/* Time */}
       <div className="form-group">
         <label className="form-label">Time (optional)</label>
@@ -449,7 +446,7 @@ function AddTaskForm({ day, initialTask = null, onSubmit, onCancel }) {
   );
 }
 
-// ─── Additional Tasks Panel ──────────────────
+// ─── Additional Tasks Panel ───────────────────────────────────────────────────
 export default function AdditionalTasks({ onPersonClick }) {
   const { data, isAdmin, managerInitials, removeTask, addTask, updateTask, addLog } = useApp();
   const [addingDay, setAddingDay] = useState(null);
