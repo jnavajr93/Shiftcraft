@@ -1017,27 +1017,6 @@ html, body, #root {
   border-radius: 50%; background: var(--accent);
 }
 
-/* ─── Print ─────────────────────────── */
-@media print {
-  .topbar, .sidebar, .hours-bar, .board-search,
-  .clinic-edit-btn, .hint-middle, .conflict-banner,
-  .btn, .popover, .config-panel, .overlay-backdrop,
-  .bottom-sheet-wrapper { display: none !important; }
-  .app { height: auto; overflow: visible; }
-  .main { overflow: visible; }
-  .admin-layout { display: block; }
-  .board-wrapper { overflow: visible; }
-  .board-scroll { overflow: visible; padding: 0; }
-  .board-grid { min-width: unset; display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
-  .clinic-card { break-inside: avoid; border: 0.5px solid #ccc; }
-  .person-chip { border: none; background: none; padding: 0; }
-  .slot-empty { border: none; color: #999; }
-  body { color: #000; background: #fff; font-size: 12px; }
-  .print-header { display: block !important; }
-  .print-footer { display: block !important; }
-  .tasks-grid { min-width: unset; }
-}
-.print-header, .print-footer { display: none; }
 
 /* ─── Scrollbar ─────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }

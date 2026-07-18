@@ -143,12 +143,6 @@ function AppContent() {
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="app">
-        {/* Print-only header */}
-        <div className="print-header" style={{ padding: '16px 0 8px', borderBottom: '1px solid #ccc', marginBottom: 16 }}>
-          <div style={{ fontSize: 18, fontWeight: 600 }}>Shiftcraft — Week of {data ? '' : ''}</div>
-          <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>CONFIDENTIAL — Admin use only</div>
-        </div>
-
         <TopBar activeTab={activeTab} setActiveTab={setActiveTab} />
         <div className="main">
           {activeTab === 'schedule' ? (
@@ -172,12 +166,6 @@ function AppContent() {
           ) : (
             <Setup />
           )}
-        </div>
-
-        {/* Print-only footer */}
-        <div className="print-footer" style={{ marginTop: 24, paddingTop: 8, borderTop: '1px solid #ccc', fontSize: 11, color: '#666', display: 'flex', justifyContent: 'space-between' }}>
-          <span>Generated {new Date().toLocaleString()}</span>
-          <span>CONFIDENTIAL — Admin use only</span>
         </div>
 
         {selectedPerson && (
