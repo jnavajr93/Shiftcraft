@@ -2,10 +2,19 @@ import { useState, useCallback, useRef } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { Pencil, AlertTriangle, Users, Power, Check, X as XIcon } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { getSlotLabel, getSlotTimeLabel, getSlotPersonId, getSlotTimeObj, formatVariableSlotTime, formatOpenerTimeDisplay, formatOpeningFDTimeDisplay, formatClosingFDOverlayDisplay, formatScribeTimeDisplay, formatClosingOverlayDisplay, minutesToTime, minutesToTimeInput, timeInputToMinutes, SLOT_TYPES, OBS_SLOT_TYPES, SLOT_DISPLAY_LABELS, calcSlotHours } from '../data/seed.js';
+import { getSlotLabel, getSlotTimeLabel, getSlotPersonId, getSlotTimeObj, formatVariableSlotTime, formatOpenerTimeDisplay, formatOpeningFDTimeDisplay, formatClosingFDOverlayDisplay, formatScribeTimeDisplay, formatClosingOverlayDisplay, minutesToTime, minutesToTimeInput, timeInputToMinutes, SLOT_TYPES, OBS_SLOT_TYPES, SLOT_DISPLAY_LABELS, calcSlotHours, calcPersonWeeklyHours } from '../data/seed.js';
 
 function fmtHours(h) {
   return `${Number(h.toFixed(2))}h`;
+}
+
+function HoursPill({ slotHrs, isOvertime }) {
+  if (slotHrs == null) return null;
+  return (
+    <span className={`slot-hours-pill${isOvertime ? ' overtime' : ''}`}>
+      {fmtHours(slotHrs)}
+    </span>
+  );
 }
 import SlotPopover from './SlotPopover.jsx';
 import { getConflictPersonDays } from './ConflictBanner.jsx';
@@ -283,12 +292,13 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
   const isDimmed = hasSearch && person && !matchedPersonIds.includes(personId);
   const interactive = isAdmin && clinicOpen;
 
-  // Per-assignment hours shown in manager mode only (muted, on the time row)
+  // Per-assignment hours pill: manager mode only, right-aligned on time row
   const slotHrs = (() => {
     if (!person || !isAdmin) return null;
     const h = calcSlotHours(clinic, slotType);
     return h > 0 ? Number(h.toFixed(2)) : null;
   })();
+  const isOvertime = slotHrs != null && calcPersonWeeklyHours(person.id, data.clinics, data.additionalTasks) > 38;
 
   const handleRowClick = () => {
     if (interactive) setShowPopover(s => !s);
@@ -372,10 +382,8 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
             className={`variable-time-row${isAdmin && clinicOpen ? ' editable' : ''}`}
             onClick={isAdmin && clinicOpen ? (e) => { e.stopPropagation(); setEditingTime(true); } : undefined}
           >
-            <span>
-              {variableTimeDisplay ?? (isAdmin && clinicOpen ? 'Set time…' : '—')}
-              {slotHrs != null && variableTimeDisplay && <span style={{ color: 'var(--text-muted)', marginLeft: 4 }}>· {fmtHours(slotHrs)}</span>}
-            </span>
+            <span>{variableTimeDisplay ?? (isAdmin && clinicOpen ? 'Set time…' : '—')}</span>
+            {variableTimeDisplay && <HoursPill slotHrs={slotHrs} isOvertime={isOvertime} />}
             {isAdmin && clinicOpen && <Pencil size={9} style={{ opacity: 0.5 }} />}
           </div>
         )
@@ -394,10 +402,8 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
             className={`variable-time-row${isAdmin && clinicOpen ? ' editable' : ''}`}
             onClick={isAdmin && clinicOpen ? (e) => { e.stopPropagation(); setEditingTime(true); } : undefined}
           >
-            <span>
-              {scribeTimeDisplay ?? (isAdmin && clinicOpen ? '1st Patient – Close' : '—')}
-              {slotHrs != null && <span style={{ color: 'var(--text-muted)', marginLeft: 4 }}>· {fmtHours(slotHrs)}</span>}
-            </span>
+            <span>{scribeTimeDisplay ?? (isAdmin && clinicOpen ? '1st Patient – Close' : '—')}</span>
+            <HoursPill slotHrs={slotHrs} isOvertime={isOvertime} />
             {isAdmin && clinicOpen && <Pencil size={9} style={{ opacity: 0.5 }} />}
           </div>
         )
@@ -418,10 +424,8 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
             className={`variable-time-row${interactive ? ' editable' : ''}`}
             onClick={interactive ? (e) => { e.stopPropagation(); setEditingTime(true); } : undefined}
           >
-            <span>
-              {openerDisplay}
-              {slotHrs != null && <span style={{ color: 'var(--text-muted)', marginLeft: 4 }}>· {fmtHours(slotHrs)}</span>}
-            </span>
+            <span>{openerDisplay}</span>
+            <HoursPill slotHrs={slotHrs} isOvertime={isOvertime} />
             {interactive && <Pencil size={9} style={{ opacity: 0.5 }} />}
           </div>
         )
@@ -442,10 +446,8 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
             className={`variable-time-row${interactive ? ' editable' : ''}`}
             onClick={interactive ? (e) => { e.stopPropagation(); setEditingTime(true); } : undefined}
           >
-            <span>
-              {closingStartStr} – {closingEndStr != null ? closingEndStr : <em>~Close</em>}
-              {slotHrs != null && <span style={{ color: 'var(--text-muted)', marginLeft: 4 }}>· {fmtHours(slotHrs)}</span>}
-            </span>
+            <span>{closingStartStr} – {closingEndStr != null ? closingEndStr : <em>~Close</em>}</span>
+            <HoursPill slotHrs={slotHrs} isOvertime={isOvertime} />
             {interactive && <Pencil size={9} style={{ opacity: 0.5 }} />}
           </div>
         )
@@ -465,10 +467,8 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
             className={`variable-time-row${interactive ? ' editable' : ''}`}
             onClick={interactive ? (e) => { e.stopPropagation(); setEditingTime(true); } : undefined}
           >
-            <span>
-              {frontDeskDisplay}
-              {slotHrs != null && <span style={{ color: 'var(--text-muted)', marginLeft: 4 }}>· {fmtHours(slotHrs)}</span>}
-            </span>
+            <span>{frontDeskDisplay}</span>
+            <HoursPill slotHrs={slotHrs} isOvertime={isOvertime} />
             {interactive && <Pencil size={9} style={{ opacity: 0.5 }} />}
           </div>
         )
@@ -555,6 +555,7 @@ function ObsSlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSear
     const h = calcSlotHours(clinic, slotType);
     return h > 0 ? Number(h.toFixed(2)) : null;
   })();
+  const isOvertime = slotHrs != null && calcPersonWeeklyHours(person.id, data.clinics, data.additionalTasks) > 38;
 
   return (
     <div>
@@ -610,10 +611,8 @@ function ObsSlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSear
             className={`variable-time-row${interactive ? ' editable' : ''}`}
             onClick={interactive ? (e) => { e.stopPropagation(); setEditingTime(true); } : undefined}
           >
-            <span>
-              {obsTimeDisplay ?? 'Open – Close'}
-              {slotHrs != null && <span style={{ color: 'var(--text-muted)', marginLeft: 4 }}>· {fmtHours(slotHrs)}</span>}
-            </span>
+            <span>{obsTimeDisplay ?? 'Open – Close'}</span>
+            <HoursPill slotHrs={slotHrs} isOvertime={isOvertime} />
             {interactive && <Pencil size={9} style={{ opacity: 0.5 }} />}
           </div>
         )

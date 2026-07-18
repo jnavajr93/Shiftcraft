@@ -430,6 +430,19 @@ html, body, #root {
 .variable-time-row.editable:hover { color: var(--text-secondary); }
 .variable-time-row.editable:hover svg { opacity: 1 !important; }
 
+.slot-hours-pill {
+  margin-left: auto; flex-shrink: 0;
+  display: inline-flex; align-items: center;
+  height: 16px; padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-elevated); border: 0.5px solid var(--border-strong);
+  font-size: 10px; font-weight: 500; color: var(--text-secondary);
+  white-space: nowrap;
+}
+.slot-hours-pill.overtime {
+  background: var(--amber-bg); border-color: var(--amber); color: var(--amber);
+}
+
 .variable-time-editor {
   padding: 6px 12px 8px 64px;
   border-bottom: 0.5px solid var(--border);
