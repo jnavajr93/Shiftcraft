@@ -555,7 +555,7 @@ export function getSeedData() {
 
   const additionalTasks = [];
 
-  const taskTypes = ['Triage', 'See Matt/Jo', 'Imaging Upload', 'Research'];
+  const taskTypes = ['Triage', 'See Matt/Jo', 'Imaging Upload', 'Research', 'Training'];
 
   return { people, clinics, locations, providers, additionalTasks, taskTypes };
 }

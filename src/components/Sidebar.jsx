@@ -6,6 +6,7 @@ import {
   getAssignmentsForPerson, getSlotLabel, OBS_SLOT_TYPES,
   formatVariableSlotTime, formatOpenerTimeDisplay, formatOpeningFDTimeDisplay,
   formatClosingOverlayDisplay, formatClosingFDOverlayDisplay, formatScribeTimeDisplay,
+  slotEffectiveRange,
 } from '../data/seed.js';
 
 // ─── Staff Hover Card ─────────────────────────────────────────────────────────
@@ -22,6 +23,7 @@ function StaffHoverCard({ person, hours, clinics, people, style, onMouseEnter, o
   const weekRows = DAYS.map(day => {
     const assignments = getAssignmentsForPerson(nameKey, day, people, clinics);
     if (assignments.length === 0) return { day, text: null };
+    assignments.sort((a, b) => slotEffectiveRange(a.slotType, a.clinic).start - slotEffectiveRange(b.slotType, b.clinic).start);
     const text = assignments.map(a => {
       const slotVal = a.clinic.slots?.[a.slotType];
       let time;

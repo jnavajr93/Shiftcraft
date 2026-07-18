@@ -24,6 +24,8 @@ import { computeHistoryScores } from '../data/patterns.js';
 // localStorage keys kept only for migration and per-device flags
 const STORAGE_KEY = 'shiftcraft.v5';
 
+const BUILTIN_TASK_TYPES = ['Triage', 'See Matt/Jo', 'Imaging Upload', 'Research', 'Training'];
+
 const AppContext = createContext(null);
 
 // ─── ISO week helpers ─────────────────────────
@@ -190,7 +192,7 @@ function migrateData(raw) {
       };
     }),
     additionalTasks: (raw.additionalTasks ?? []).filter(t => !SEEDED_TASK_IDS.has(t.id)),
-    taskTypes: raw.taskTypes ?? getSeedData().taskTypes,
+    taskTypes: [...new Set([...BUILTIN_TASK_TYPES, ...(raw.taskTypes ?? [])])],
   };
 }
 

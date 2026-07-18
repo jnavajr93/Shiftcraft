@@ -1,29 +1,3 @@
-/**
- * Shared time-range picker — used by both slot editors (Middle/Training)
- * and the task time editor / add-task form.
- *
- * Usage — self-contained with Save/Cancel (slot and task inline editors):
- *   <div className="variable-time-editor" onClick={e => e.stopPropagation()}>
- *     <TimeRangePicker
- *       defaultStart={480}          // minutes, or null for empty
- *       defaultEnd={null}
- *       defaultEndIsClose={true}
- *       onSave={(start, end) => …}  // end is minutes | 'close' | null
- *       onCancel={onClose}
- *       saveLabel="Save"
- *     />
- *   </div>
- *
- * Usage — embedded inside a form (onChange mode, no Save/Cancel buttons):
- *   <TimeRangePicker
- *     defaultStart={480}
- *     defaultEnd={1020}
- *     defaultEndIsClose={false}
- *     onChange={(startMins, endMins, endIsClose) => setTime(...)}
- *   />
- *   // parent checks validity: endMins != null && endMins > startMins (or endIsClose)
- */
-
 import { useState, useEffect } from 'react';
 import { Check, X as XIcon } from 'lucide-react';
 import { minutesToTimeInput, timeInputToMinutes } from '../data/seed.js';
@@ -43,13 +17,14 @@ export const END_PRESETS = [
 ];
 
 export function TimeRangePicker({
-  defaultStart      = null,   // minutes | null
-  defaultEnd        = null,   // minutes | null  (ignored when defaultEndIsClose=true)
+  defaultStart      = null,
+  defaultEnd        = null,
   defaultEndIsClose = false,
-  onChange,                   // (startMins, endMins, endIsClose) — for form embedding
-  onSave,                     // (startMins, endMinOrClose) — shows Save button when present
-  onCancel,                   // () — shows Cancel button when present
+  onChange,
+  onSave,
+  onCancel,
   saveLabel         = 'Save',
+  openTime          = null,   // NEW: if provided, shows "Open" chip at start of start presets
 }) {
   const [startVal, setStartVal] = useState(
     defaultStart != null ? minutesToTimeInput(defaultStart) : ''
@@ -59,28 +34,29 @@ export function TimeRangePicker({
   );
   const [endIsClose, setEndIsClose] = useState(defaultEndIsClose);
 
-  // Derived minutes
   const startMins = startVal ? timeInputToMinutes(startVal) : null;
   const endMins   = endIsClose ? null : (endVal ? timeInputToMinutes(endVal) : null);
 
-  // Validation
   const timeError = !endIsClose && startMins != null && endMins != null && endMins <= startMins
     ? 'End must be after start'
     : null;
 
-  // Notify parent on every change (form-embedding mode)
   useEffect(() => {
     onChange?.(startMins, endMins, endIsClose);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startMins, endMins, endIsClose]);
+  }, [startMins, endMins, endIsClose]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setEnd = (val) => { setEndIsClose(false); setEndVal(val); };
-  const setClose = (checked) => { setEndIsClose(checked); if (checked) setEndVal(''); };
+  const setClose = (active) => { setEndIsClose(active); if (active) setEndVal(''); };
 
   const handleSave = () => {
     if (timeError) return;
     onSave?.(startMins, endIsClose ? 'close' : endMins);
   };
+
+  // Build start chips — prepend "Open" if openTime is provided
+  const startChips = openTime != null
+    ? [{ label: 'Open', value: openTime }, ...START_PRESETS]
+    : START_PRESETS;
 
   return (
     <>
@@ -88,9 +64,9 @@ export function TimeRangePicker({
       <div className="trp-row">
         <span className="vte-label">Start</span>
         <div className="trp-presets">
-          {START_PRESETS.map(p => (
+          {startChips.map(p => (
             <button
-              key={p.value}
+              key={String(p.value)}
               type="button"
               className={`trp-chip${startMins === p.value ? ' active' : ''}`}
               onClick={() => setStartVal(minutesToTimeInput(p.value))}
@@ -109,7 +85,7 @@ export function TimeRangePicker({
         />
       </div>
 
-      {/* ── End row ── */}
+      {/* ── End row — Close is now a pill chip, not a separate checkbox ── */}
       <div className="trp-row">
         <span className="vte-label">End</span>
         <div className="trp-presets">
@@ -124,7 +100,7 @@ export function TimeRangePicker({
                 className={`trp-chip${isActive ? ' active' : ''}`}
                 onClick={() =>
                   p.value === 'close'
-                    ? setClose(true)
+                    ? setClose(!endIsClose)   // toggle: click again to unselect
                     : setEnd(minutesToTimeInput(p.value))
                 }
               >
@@ -144,20 +120,11 @@ export function TimeRangePicker({
             onChange={e => setEnd(e.target.value)}
           />
         )}
-        <label className="vte-close-toggle">
-          <input
-            type="checkbox"
-            checked={endIsClose}
-            onChange={e => setClose(e.target.checked)}
-          />
-          <span>Close</span>
-        </label>
+        {/* Close checkbox REMOVED — Close is now a selectable pill above */}
       </div>
 
-      {/* ── Validation error ── */}
       {timeError && <div className="trp-error">{timeError}</div>}
 
-      {/* ── Save / Cancel (inline-editor mode only) ── */}
       {onSave && (
         <div className="variable-time-actions">
           <button

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { DAYS, calcPersonWeeklyHours, getBoardClinics, getSlotLabel, getSlotPersonId, getRenderedSlotEntries, formatVariableSlotTime, formatOpenerTimeDisplay, formatOpeningFDTimeDisplay, formatClosingOverlayDisplay, formatClosingFDOverlayDisplay, formatScribeTimeDisplay, formatTaskTime, OBS_SLOT_TYPES } from '../data/seed.js';
+import { DAYS, calcPersonWeeklyHours, getBoardClinics, getSlotLabel, getSlotPersonId, getRenderedSlotEntries, formatVariableSlotTime, formatOpenerTimeDisplay, formatOpeningFDTimeDisplay, formatClosingOverlayDisplay, formatClosingFDOverlayDisplay, formatScribeTimeDisplay, formatTaskTime, OBS_SLOT_TYPES, slotEffectiveRange } from '../data/seed.js';
 import ArcChart from './ArcChart.jsx';
 
 function useIsMobile() {
@@ -42,9 +42,11 @@ export function WeekRows({ personIds, clinics, additionalTasks }) {
                 } else {
                   time = '';
                 }
+                const sortKey = slotEffectiveRange(slotType, c).start;
                 assignments.push({
                   label: getSlotLabel(slotType, c.location),
                   time,
+                  sortKey,
                 });
               }
             });
@@ -56,8 +58,10 @@ export function WeekRows({ personIds, clinics, additionalTasks }) {
           .forEach(t => {
             const label = `${t.label}${t.locationTag ? ' @ ' + t.locationTag : ''}`;
             const time = formatTaskTime(t) ?? 'All shift';
-            assignments.push({ label, time });
+            assignments.push({ label, time, sortKey: t.start ?? Infinity });
           });
+
+        assignments.sort((a, b) => a.sortKey - b.sortKey);
 
         return (
           <div key={day} className="day-schedule-row">

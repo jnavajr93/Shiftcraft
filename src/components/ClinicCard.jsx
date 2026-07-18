@@ -1,8 +1,8 @@
 import { useState, useCallback, useRef } from 'react';
 import { useDroppable } from '@dnd-kit/core';
-import { Pencil, AlertTriangle, Users, Power, Check, X as XIcon } from 'lucide-react';
+import { Pencil, AlertTriangle, Users, Power } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { getSlotLabel, getSlotTimeLabel, getSlotPersonId, getSlotTimeObj, formatVariableSlotTime, formatOpenerTimeDisplay, formatOpeningFDTimeDisplay, formatClosingFDOverlayDisplay, formatScribeTimeDisplay, formatClosingOverlayDisplay, minutesToTime, minutesToTimeInput, timeInputToMinutes, SLOT_TYPES, OBS_SLOT_TYPES, SLOT_DISPLAY_LABELS, calcSlotHours, calcPersonWeeklyHours } from '../data/seed.js';
+import { getSlotLabel, getSlotTimeLabel, getSlotPersonId, getSlotTimeObj, formatVariableSlotTime, formatOpenerTimeDisplay, formatOpeningFDTimeDisplay, formatClosingFDOverlayDisplay, formatScribeTimeDisplay, formatClosingOverlayDisplay, minutesToTime, SLOT_TYPES, OBS_SLOT_TYPES, SLOT_DISPLAY_LABELS, calcSlotHours, calcPersonWeeklyHours } from '../data/seed.js';
 import { TimeRangePicker } from './TimeRangePicker.jsx';
 
 function fmtHours(h) {
@@ -30,7 +30,6 @@ function PatientBadge({ count }) {
 function VariableTimeEditor({ slotType, slotVal, clinic, clinicId, onClose }) {
   const { updateSlotTime } = useApp();
   const timeObj = getSlotTimeObj(slotVal);
-  // Smart defaults: clinic start time; End = Close when not yet set
   const defaultEndIsClose = timeObj.end == null || timeObj.end === 'close';
   return (
     <div className="variable-time-editor" onClick={e => e.stopPropagation()}>
@@ -38,6 +37,7 @@ function VariableTimeEditor({ slotType, slotVal, clinic, clinicId, onClose }) {
         defaultStart={timeObj.start ?? clinic?.startTime ?? null}
         defaultEnd={!defaultEndIsClose ? timeObj.end : null}
         defaultEndIsClose={defaultEndIsClose}
+        openTime={clinic?.startTime ?? null}
         onSave={(s, e) => { updateSlotTime(clinicId, slotType, s, e); onClose(); }}
         onCancel={onClose}
       />
@@ -45,153 +45,70 @@ function VariableTimeEditor({ slotType, slotVal, clinic, clinicId, onClose }) {
   );
 }
 
-function ScribeTimeEditor({ slotVal, clinicId, onClose }) {
+function ScribeTimeEditor({ slotVal, clinicId, clinic, onClose }) {
   const { updateSlotTime } = useApp();
   const timeObj = getSlotTimeObj(slotVal);
-  const [startVal, setStartVal] = useState(timeObj.start != null ? minutesToTimeInput(timeObj.start) : '');
-  const [endVal, setEndVal] = useState(timeObj.end != null ? minutesToTimeInput(timeObj.end) : '');
-
-  const handleSave = () => {
-    const s = startVal ? timeInputToMinutes(startVal) : null;
-    const e = endVal ? timeInputToMinutes(endVal) : null;
-    updateSlotTime(clinicId, 'scribe', s, e);
-    onClose();
-  };
-
+  // null start = 1st Patient default; null/close end = Close default
+  const defaultEndIsClose = timeObj.end == null || timeObj.end === 'close';
   return (
     <div className="variable-time-editor" onClick={e => e.stopPropagation()}>
-      <div className="variable-time-fields">
-        <label className="vte-label">Start</label>
-        <input
-          type="time"
-          className="vte-input"
-          value={startVal}
-          onChange={e => setStartVal(e.target.value)}
-          autoFocus
-        />
-        <label className="vte-label">End</label>
-        <input
-          type="time"
-          className="vte-input"
-          value={endVal}
-          onChange={e => setEndVal(e.target.value)}
-        />
-      </div>
-      <div style={{ fontSize: 10, color: 'var(--text-muted)', padding: '2px 0 4px' }}>
-        Leave blank for defaults (1st Patient / Close)
-      </div>
-      <div className="variable-time-actions">
-        <button className="btn btn-primary" style={{ minHeight: 26, fontSize: 11, padding: '3px 10px' }} onClick={handleSave}>
-          <Check size={11} /> Save
-        </button>
-        <button className="btn" style={{ minHeight: 26, fontSize: 11, padding: '3px 8px' }} onClick={onClose}>
-          <XIcon size={11} />
-        </button>
+      <TimeRangePicker
+        defaultStart={timeObj.start ?? null}
+        defaultEnd={!defaultEndIsClose ? timeObj.end : null}
+        defaultEndIsClose={defaultEndIsClose}
+        openTime={clinic?.startTime ?? null}
+        onSave={(s, e) => {
+          // scribe uses null for close, not 'close' string
+          updateSlotTime(clinicId, 'scribe', s, e === 'close' ? null : e);
+          onClose();
+        }}
+        onCancel={onClose}
+      />
+      <div style={{ fontSize: 10, color: 'var(--text-muted)', padding: '2px 0 2px' }}>
+        Leave Start blank for 1st Patient; Close = end of clinic
       </div>
     </div>
   );
 }
 
-function OpenerTimeEditor({ slotVal, clinicId, slotType = 'opener', defaultEndTime = '17:00', onClose }) {
+function OpenerTimeEditor({ slotVal, clinicId, clinic, slotType = 'opener', onClose }) {
   const { updateSlotTime } = useApp();
   const obj = (slotVal && typeof slotVal === 'object') ? slotVal : {};
-  const [startVal, setStartVal] = useState(obj.start != null ? minutesToTimeInput(obj.start) : '');
-  const [endVal, setEndVal] = useState(obj.end != null ? minutesToTimeInput(obj.end) : defaultEndTime);
-
-  const handleSave = () => {
-    const s = startVal ? timeInputToMinutes(startVal) : null;
-    const e = endVal ? timeInputToMinutes(endVal) : 1020;
-    updateSlotTime(clinicId, slotType, s, e);
-    onClose();
-  };
-
+  const openTime = clinic ? (clinic.startTime - 15) : null;
   return (
     <div className="variable-time-editor" onClick={e => e.stopPropagation()}>
-      <div className="variable-time-fields">
-        <label className="vte-label">Start</label>
-        <input
-          type="time"
-          className="vte-input"
-          value={startVal}
-          onChange={e => setStartVal(e.target.value)}
-          autoFocus
-        />
-        <label className="vte-label">End</label>
-        <input
-          type="time"
-          className="vte-input"
-          value={endVal}
-          onChange={e => setEndVal(e.target.value)}
-        />
-      </div>
-      <div style={{ fontSize: 10, color: 'var(--text-muted)', padding: '2px 0 4px' }}>
-        Leave Start blank for 'Open' (15 min before 1st patient)
-      </div>
-      <div className="variable-time-actions">
-        <button className="btn btn-primary" style={{ minHeight: 26, fontSize: 11, padding: '3px 10px' }} onClick={handleSave}>
-          <Check size={11} /> Save
-        </button>
-        <button className="btn" style={{ minHeight: 26, fontSize: 11, padding: '3px 8px' }} onClick={onClose}>
-          <XIcon size={11} />
-        </button>
-      </div>
+      <TimeRangePicker
+        defaultStart={obj.start ?? null}
+        defaultEnd={obj.end != null && obj.end !== 'close' ? obj.end : null}
+        defaultEndIsClose={obj.end === 'close'}
+        openTime={openTime}
+        onSave={(s, e) => {
+          updateSlotTime(clinicId, slotType, s, e === 'close' ? null : e);
+          onClose();
+        }}
+        onCancel={onClose}
+      />
     </div>
   );
 }
 
-function ClosingTimeEditor({ slotVal, clinicId, slotType = 'closing', defaultStartTime = '09:00', onClose }) {
+function ClosingTimeEditor({ slotVal, clinicId, clinic, slotType = 'closing', onClose }) {
   const { updateSlotTime } = useApp();
   const obj = (slotVal && typeof slotVal === 'object') ? slotVal : {};
-  const [startVal, setStartVal] = useState(obj.start != null ? minutesToTimeInput(obj.start) : defaultStartTime);
-  const [endVal, setEndVal] = useState(obj.end != null ? minutesToTimeInput(obj.end) : '');
-  const [endIsClose, setEndIsClose] = useState(obj.end == null);
-
-  const handleSave = () => {
-    const s = startVal ? timeInputToMinutes(startVal) : 540;
-    const e = endIsClose ? null : endVal ? timeInputToMinutes(endVal) : null;
-    updateSlotTime(clinicId, slotType, s, e);
-    onClose();
-  };
-
+  const defaultStartTime = slotType === 'closingFrontDesk' ? 630 : 540; // 10:30 or 9:00
   return (
     <div className="variable-time-editor" onClick={e => e.stopPropagation()}>
-      <div className="variable-time-fields">
-        <label className="vte-label">Start</label>
-        <input
-          type="time"
-          className="vte-input"
-          value={startVal}
-          onChange={e => setStartVal(e.target.value)}
-          autoFocus
-        />
-        <label className="vte-label">End</label>
-        {endIsClose ? (
-          <span className="vte-close-badge">~Close</span>
-        ) : (
-          <input
-            type="time"
-            className="vte-input"
-            value={endVal}
-            onChange={e => setEndVal(e.target.value)}
-          />
-        )}
-        <label className="vte-close-toggle">
-          <input
-            type="checkbox"
-            checked={endIsClose}
-            onChange={e => setEndIsClose(e.target.checked)}
-          />
-          <span>~Close</span>
-        </label>
-      </div>
-      <div className="variable-time-actions">
-        <button className="btn btn-primary" style={{ minHeight: 26, fontSize: 11, padding: '3px 10px' }} onClick={handleSave}>
-          <Check size={11} /> Save
-        </button>
-        <button className="btn" style={{ minHeight: 26, fontSize: 11, padding: '3px 8px' }} onClick={onClose}>
-          <XIcon size={11} />
-        </button>
-      </div>
+      <TimeRangePicker
+        defaultStart={obj.start ?? defaultStartTime}
+        defaultEnd={null}
+        defaultEndIsClose={obj.end == null}
+        onSave={(s, e) => {
+          // closing uses null for close end
+          updateSlotTime(clinicId, slotType, s, e === 'close' ? null : e);
+          onClose();
+        }}
+        onCancel={onClose}
+      />
     </div>
   );
 }
@@ -355,6 +272,7 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
           <ScribeTimeEditor
             slotVal={slotVal}
             clinicId={clinic.id}
+            clinic={clinic}
             onClose={() => setEditingTime(false)}
           />
         ) : (
@@ -375,8 +293,8 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
           <OpenerTimeEditor
             slotVal={slotVal}
             clinicId={clinic.id}
+            clinic={clinic}
             slotType={slotType}
-            defaultEndTime={isOpeningFrontDesk ? '15:30' : '17:00'}
             onClose={() => setEditingTime(false)}
           />
         ) : (
@@ -397,8 +315,8 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
           <ClosingTimeEditor
             slotVal={slotVal}
             clinicId={clinic.id}
+            clinic={clinic}
             slotType={slotType}
-            defaultStartTime={isClosingFrontDesk ? '10:30' : '09:00'}
             onClose={() => setEditingTime(false)}
           />
         ) : (
@@ -445,48 +363,24 @@ const OBS_LABELS = {
   scrub: 'Scrub Tech',
 };
 
-function ObsTimeEditor({ slotType, slotVal, clinicId, onClose }) {
+function ObsTimeEditor({ slotType, slotVal, clinicId, clinic, onClose }) {
   const { updateSlotTime } = useApp();
   const obj = (slotVal && typeof slotVal === 'object') ? slotVal : {};
-  const [startVal, setStartVal] = useState(obj.start != null ? minutesToTimeInput(obj.start) : '');
-  const [endVal, setEndVal] = useState(obj.end != null ? minutesToTimeInput(obj.end) : '');
-
-  const handleSave = () => {
-    const s = startVal ? timeInputToMinutes(startVal) : null;
-    const e = endVal ? timeInputToMinutes(endVal) : null;
-    updateSlotTime(clinicId, slotType, s, e);
-    onClose();
-  };
-
   return (
     <div className="variable-time-editor" onClick={e => e.stopPropagation()}>
-      <div className="variable-time-fields">
-        <label className="vte-label">Start</label>
-        <input
-          type="time"
-          className="vte-input"
-          value={startVal}
-          onChange={e => setStartVal(e.target.value)}
-          autoFocus
-        />
-        <label className="vte-label">End</label>
-        <input
-          type="time"
-          className="vte-input"
-          value={endVal}
-          onChange={e => setEndVal(e.target.value)}
-        />
-      </div>
-      <div style={{ fontSize: 10, color: 'var(--text-muted)', padding: '2px 0 4px' }}>
+      <TimeRangePicker
+        defaultStart={obj.start ?? null}
+        defaultEnd={obj.end ?? null}
+        defaultEndIsClose={false}
+        openTime={clinic?.startTime ?? null}
+        onSave={(s, e) => {
+          updateSlotTime(clinicId, slotType, s, e === 'close' ? null : e);
+          onClose();
+        }}
+        onCancel={onClose}
+      />
+      <div style={{ fontSize: 10, color: 'var(--text-muted)', padding: '2px 0 2px' }}>
         Leave blank to use provider-buffered hours
-      </div>
-      <div className="variable-time-actions">
-        <button className="btn btn-primary" style={{ minHeight: 26, fontSize: 11, padding: '3px 10px' }} onClick={handleSave}>
-          <Check size={11} /> Save
-        </button>
-        <button className="btn" style={{ minHeight: 26, fontSize: 11, padding: '3px 8px' }} onClick={onClose}>
-          <XIcon size={11} />
-        </button>
       </div>
     </div>
   );
@@ -564,6 +458,7 @@ function ObsSlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSear
             slotType={slotType}
             slotVal={slotVal}
             clinicId={clinic.id}
+            clinic={clinic}
             onClose={() => setEditingTime(false)}
           />
         ) : (
