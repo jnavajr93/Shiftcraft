@@ -51,9 +51,18 @@ export function defaultLandingWeek() {
   const rollover = (dow === 5 && hour >= 17) || dow === 6 || dow === 0;
   const daysToMon = rollover ? (dow === 0 ? 1 : 8 - dow) : 0;
 
-  const target = new Date(px.getTime() + daysToMon * 86_400_000);
-  // Reconstruct a clean UTC midnight so isoWeek() works correctly
-  return isoWeek(new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), target.getUTCDate())));
+  // Compute ISO week entirely from UTC values — do NOT call isoWeek() here.
+  // isoWeek() reads the Date using local-timezone methods (.getFullYear etc.), which
+  // gives the wrong calendar date on any device not at UTC+0 (e.g. UTC-7 Phoenix:
+  // Date.UTC(2026,6,20) local-reads as Jul 19, landing on the prior week).
+  const target = new Date(px.getTime() + daysToMon * 86400000);
+  const y = target.getUTCFullYear(), m = target.getUTCMonth(), d = target.getUTCDate();
+  const thursday = new Date(Date.UTC(y, m, d));
+  const utcDow = thursday.getUTCDay() || 7;          // 1=Mon … 7=Sun
+  thursday.setUTCDate(d + 4 - utcDow);               // shift to Thursday of ISO week
+  const yearStart = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 1));
+  const weekNum = Math.ceil(((thursday - yearStart) / 86400000 + 1) / 7);
+  return `${thursday.getUTCFullYear()}-W${String(weekNum).padStart(2, '0')}`;
 }
 
 export function mondayOfWeek(weekStr) {
@@ -1044,10 +1053,9 @@ export function AppProvider({ children }) {
   const navigateWeek = useCallback(async (delta) => {
     if (!globalData) return;
 
-    // Save current week before leaving — awaited so navigation never loses in-flight data
-    const currentMap = extractSlotMap(globalData.clinics, globalData.additionalTasks);
-    await doSaveWeek(currentWeek, currentMap);
-    // Proceed even if save failed; the error indicator remains visible to the user.
+    // No save here — every individual mutation (assignSlot etc.) already saves immediately
+    // to Supabase. Saving again on navigation would produce misleading "✓ Saved" toasts
+    // and perform redundant writes. Navigation is strictly read-only.
 
     // Compute target week
     const monday = mondayOfWeek(currentWeek);
@@ -1100,13 +1108,12 @@ export function AppProvider({ children }) {
     if (hasAnyAssignment(map) && !(snapValue && sortedJSON(map) === sortedJSON(snapValue.snapshot))) {
       setDirtyWeeks(prev => new Set([...prev, next]));
     }
-  }, [currentWeek, globalData, doSaveWeek]);
+  }, [currentWeek, globalData]);
 
   const jumpToWeek = useCallback(async (targetWeek) => {
     if (!globalData || currentWeek === targetWeek) return;
 
-    const currentMap = extractSlotMap(globalData.clinics, globalData.additionalTasks);
-    await doSaveWeek(currentWeek, currentMap);
+    // No save here — same reasoning as navigateWeek: each mutation already saves immediately.
 
     const weekResult = await loadWeekSlotMapDB(targetWeek);
     let map;
@@ -1141,7 +1148,7 @@ export function AppProvider({ children }) {
     if (hasAnyAssignment(map) && !(snapValue2 && sortedJSON(map) === sortedJSON(snapValue2.snapshot))) {
       setDirtyWeeks(prev => new Set([...prev, targetWeek]));
     }
-  }, [currentWeek, globalData, doSaveWeek]);
+  }, [currentWeek, globalData]);
 
   const weekIsEmpty = useCallback(() => {
     if (!globalData) return true;
