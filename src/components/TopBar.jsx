@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Calendar, Sun, Moon, ChevronLeft, ChevronRight,
   History, Sparkles, Wand2, Loader2, X, CircleHelp, RotateCcw,
-  SendHorizonal, AlertCircle,
+  SendHorizonal, AlertCircle, Save,
 } from 'lucide-react';
 import { useApp, isoWeek, mondayOfWeek } from '../context/AppContext.jsx';
 
@@ -187,7 +187,7 @@ function ExitNudgeModal({ postedSnapshot, onPost, onLeave }) {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '12px 24px', borderTop: '0.5px solid var(--border)', flexShrink: 0 }}>
-          <button className="btn" onClick={onLeave}>Save and close</button>
+          <button className="btn" style={{ gap: 6 }} onClick={onLeave}><Save size={14} /> Save and close</button>
           <button className="btn btn-post" style={{ minHeight: 38, gap: 6 }} onClick={onPost}>
             <SendHorizonal size={13} /> Post
           </button>

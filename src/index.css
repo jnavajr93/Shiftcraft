@@ -325,10 +325,12 @@ html, body, #root {
 }
 
 /* ─── Board ─────────────────────────── */
-.board-wrapper { flex: 1; overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
+.board-wrapper { flex: 1; overflow: clip; display: flex; flex-direction: column; min-width: 0; }
 .board-search {
   padding: 12px 16px; border-bottom: 0.5px solid var(--border); flex-shrink: 0;
   display: flex; align-items: center;
+  position: sticky; top: 0; z-index: 50;
+  background: var(--bg-base);
 }
 .search-wrap { position: relative; display: inline-flex; align-items: center; width: 100%; max-width: 300px; }
 .search-icon { position: absolute; left: 10px; color: var(--text-muted); pointer-events: none; display: flex; }
