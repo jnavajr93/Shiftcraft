@@ -193,7 +193,7 @@ function ExitNudgeModal({ postedSnapshot, onPost, onLeave, onCancel }) {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '12px 24px', borderTop: '0.5px solid var(--border)', flexShrink: 0 }}>
-          <button className="btn" style={{ gap: 6, background: 'transparent', color: 'var(--amber)', border: '1px solid var(--amber)' }} onClick={onLeave}><Save size={14} /> Save and Close</button>
+          <button className="btn" style={{ gap: 6, background: 'var(--amber)', color: '#ffffff', border: '1px solid var(--amber)' }} onClick={onLeave}><Save size={14} /> Save and Close</button>
           <button className="btn btn-post" style={{ minHeight: 38, gap: 6 }} onClick={onPost}>
             <SendHorizonal size={13} /> Post
           </button>
@@ -946,18 +946,18 @@ export default function TopBar({ activeTab, setActiveTab }) {
           >
             <CircleHelp size={20} strokeWidth={1.5} />
           </button>
-          {/* Saved status — left of Post button */}
-          {saveStatus === 'error' && (
+          {/* Saved status — left of Post button; manager-only */}
+          {isAdmin && saveStatus === 'error' && (
             <span className="topbar-mobile-hidden" style={{ fontSize: 11, color: '#dc2626', fontWeight: 500, whiteSpace: 'nowrap' }}>
               ⚠ Unsaved changes
             </span>
           )}
-          {saveStatus === 'saving' && (
+          {isAdmin && saveStatus === 'saving' && (
             <span className="topbar-mobile-hidden" style={{ fontSize: 11, color: 'var(--text-muted, var(--text-secondary))', opacity: 0.7, whiteSpace: 'nowrap' }}>
               Saving…
             </span>
           )}
-          {(saveStatus === 'saved' || saveStatus === 'idle') && savedAgoLabel && (
+          {isAdmin && (saveStatus === 'saved' || saveStatus === 'idle') && savedAgoLabel && (
             <span className="topbar-mobile-hidden" style={{ fontSize: 11, color: 'var(--text-muted, var(--text-secondary))', opacity: 0.7, whiteSpace: 'nowrap' }}>
               {savedAgoLabel}
             </span>
@@ -979,8 +979,8 @@ export default function TopBar({ activeTab, setActiveTab }) {
                <><SendHorizonal size={13} /> Post</>}
             </button>
           )}
-          {/* Presence: other managers viewing this week */}
-          {presentManagers.length > 0 && (
+          {/* Presence: other managers viewing this week — manager-only */}
+          {isAdmin && presentManagers.length > 0 && (
             <div className="topbar-mobile-hidden" style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
               {presentManagers.map(initials => (
                 <span
