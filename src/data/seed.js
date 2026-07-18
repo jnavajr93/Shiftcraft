@@ -153,22 +153,22 @@ export function calcSlotHours(clinic, slotType) {
     case 'openingFrontDesk': {
       const sv = clinic.slots?.openingFrontDesk;
       const obj = (sv && typeof sv === 'object') ? sv : {};
-      const s = obj.start != null ? obj.start : startTime; // Open = clinic start (no buffer)
-      const e = obj.end   != null ? obj.end   : 930;       // default 3:30 PM
+      const s = obj.start != null ? obj.start : (startTime - 30); // 30 min early arrival
+      const e = obj.end   != null ? obj.end   : 930;              // ends 3:30 PM (no post buffer)
       return (e - s) / 60;
     }
     case 'closingFrontDesk': {
       const sv = clinic.slots?.closingFrontDesk;
       const obj = (sv && typeof sv === 'object') ? sv : {};
-      const s = obj.start != null ? obj.start : 630;       // default 10:30 AM
-      const e = obj.end   != null ? obj.end   : (endTime + 75);
+      const s = obj.start != null ? obj.start : 630;              // default 10:30 AM
+      const e = obj.end   != null ? obj.end   : (endTime + 90);  // 1.5h post-clinic buffer
       return (e - s) / 60;
     }
     case 'frontDesk': {
       const sv = clinic.slots?.frontDesk;
       const obj = (sv && typeof sv === 'object') ? sv : {};
-      const s = obj.start != null ? obj.start : startTime;
-      const e = obj.end   != null ? obj.end   : endTime;
+      const s = obj.start != null ? obj.start : (startTime - 30); // 30 min early arrival
+      const e = obj.end   != null ? obj.end   : (endTime + 90);  // 1.5h post-clinic buffer
       return (e - s) / 60;
     }
     case 'scribe': {
@@ -322,21 +322,28 @@ export function getAssignmentsForPerson(nameKey, day, people, clinics) {
  * Custom per-slot start/end overrides are respected when present.
  */
 export function slotEffectiveRange(slot, clinic) {
-  const sv  = clinic.slots?.[slot];
-  const cs  = (sv && typeof sv === 'object') ? (sv.start ?? null) : null;
-  const ce  = (sv && typeof sv === 'object') ? (sv.end   ?? null) : null;
-  const s   = cs ?? (clinic.startTime ?? 0);
-  const e   = ce ?? (clinic.endTime   ?? 0);
+  const sv         = clinic.slots?.[slot];
+  const cs         = (sv && typeof sv === 'object') ? (sv.start ?? null) : null;
+  const ce         = (sv && typeof sv === 'object') ? (sv.end   ?? null) : null;
+  const clinicStart = clinic.startTime ?? 0;
+  const clinicEnd   = clinic.endTime   ?? 0;
   switch (slot) {
     case 'scribe':
     case 'closing':
-    case 'closingFrontDesk':
-      return { start: s, end: ce ?? (e + 75) };
+      return { start: cs ?? clinicStart, end: ce ?? (clinicEnd + 75) };
     case 'opener':
+      return { start: cs ?? (clinicStart - 15), end: ce ?? clinicEnd };
+    // FD slots: opening gets 30-min early arrival, no post buffer; ends 3:30 PM
     case 'openingFrontDesk':
-      return { start: cs ?? (s - 15), end: e };
+      return { start: cs ?? (clinicStart - 30), end: ce ?? 930 };
+    // closing FD: starts 10:30 AM, 1.5h post buffer
+    case 'closingFrontDesk':
+      return { start: cs ?? 630, end: ce ?? (clinicEnd + 90) };
+    // single FD: both buffers
+    case 'frontDesk':
+      return { start: cs ?? (clinicStart - 30), end: ce ?? (clinicEnd + 90) };
     default:
-      return { start: s, end: e };
+      return { start: cs ?? clinicStart, end: ce ?? clinicEnd };
   }
 }
 

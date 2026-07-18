@@ -112,8 +112,13 @@ function exceedsHourCap(personId, additionalHrs, weekHours, cfg) {
 
 /**
  * Effective time range a person occupies when placed in roleId at shift.
- * Scribe/closing slots have a +75 min post-shift buffer; opener has a -15 min
- * pre-shift buffer. Other roles use the raw shift window.
+ * Mirrors seed.js slotEffectiveRange() — must stay in sync.
+ *   scribe/closing          : [start,      end + 75]
+ *   opener                  : [start - 15, end     ]
+ *   openingFrontDesk        : [start - 30, 3:30 PM ]   (no post buffer; end at 930)
+ *   closingFrontDesk        : [10:30 AM,   end + 90]   (start at 630)
+ *   frontDesk               : [start - 30, end + 90]   (both buffers)
+ *   all other roles         : [start,      end     ]
  */
 function effectiveRange(roleId, shift) {
   const s = shift.start ?? 0;
@@ -121,14 +126,24 @@ function effectiveRange(roleId, shift) {
   switch (roleId) {
     case 'scribe':
     case 'closing':
-    case 'closingFrontDesk':
       return { start: s, end: e + 75 };
     case 'opener':
-    case 'openingFrontDesk':
       return { start: s - 15, end: e };
+    case 'openingFrontDesk':
+      return { start: s - 30, end: 930 };
+    case 'closingFrontDesk':
+      return { start: 630, end: e + 90 };
+    case 'frontDesk':
+      return { start: s - 30, end: e + 90 };
     default:
       return { start: s, end: e };
   }
+}
+
+/** Hours for a specific role at a shift, including role-specific buffers. */
+function roleHours(roleId, shift) {
+  const r = effectiveRange(roleId, shift);
+  return Math.max(0, (r.end - r.start) / 60);
 }
 
 /**
@@ -152,12 +167,13 @@ function markPlaced(personId, roleId, shift, isObs, usedRanges, blockedIds) {
 }
 
 /**
- * Check if a person can be placed at a shift.
+ * Check if a person can be placed in roleId at a shift.
  * - OBS target: requires no existing commitments (full-day occupation).
- * - Regular target: checks time overlap with existing effective ranges.
+ * - Regular target: checks whether the role's effective time range (with buffers)
+ *   overlaps any already-committed range. Touching boundaries are NOT an overlap.
  * obsBlock persons are always excluded.
  */
-function isAvailableForShift(personId, shift, isObs, usedRanges) {
+function isAvailableForShift(personId, roleId, shift, isObs, usedRanges) {
   const entry = usedRanges.get(personId);
   if (!entry) return true;
   if (entry.obsBlock) return false;
@@ -165,10 +181,9 @@ function isAvailableForShift(personId, shift, isObs, usedRanges) {
     // OBS is a full-day commitment — any existing time range blocks it.
     return entry.ranges.length === 0;
   }
-  // Regular: strict overlap — touching boundaries (a.end === b.start) are allowed.
-  const s = shift.start ?? 0;
-  const e = shift.end ?? 0;
-  return !entry.ranges.some(r => r.start < e && s < r.end);
+  // Use the effective range of the new role (includes FD buffers, scribe/closing buffer, etc.)
+  const { start, end } = effectiveRange(roleId, shift);
+  return !entry.ranges.some(r => r.start < end && start < r.end);
 }
 
 // ── fillShift ────────────────────────────────────────────────────────────────
@@ -186,7 +201,6 @@ function isAvailableForShift(personId, shift, isObs, usedRanges) {
 function fillShift(shift, reservations, usedRanges, weekHours, cards, issues, idx, cfg, day, isObs, scoreFn) {
   const loc = idx.locations[shift.locationId];
   const req = staffingFor(shift.locationId, cfg);
-  const hrs = shiftHours(shift);
 
   const assigned = [];
 
@@ -194,7 +208,7 @@ function fillShift(shift, reservations, usedRanges, weekHours, cards, issues, id
   // These people were already marked in usedRanges during the pre-pass.
   for (const res of (reservations[shift.id] ?? [])) {
     assigned.push(res);
-    weekHours[res.personId] = (weekHours[res.personId] || 0) + hrs;
+    weekHours[res.personId] = (weekHours[res.personId] || 0) + roleHours(res.roleId, shift);
     console.log(
       `[Shiftcraft fill] ${day} | ${shift.name} @ ${loc?.name ?? shift.locationId}` +
       ` | ${res.roleId} → ${idx.people[res.personId]?.name ?? res.personId} (MUST_PAIR)`
@@ -206,12 +220,13 @@ function fillShift(shift, reservations, usedRanges, weekHours, cards, issues, id
     const need = req[roleId].min || 0;
     const have = assigned.filter((a) => a.roleId === roleId).length;
     for (let i = have; i < need; i++) {
+      const rHrs = roleHours(roleId, shift);
       // Gather all eligible candidates, then pick the one with the highest
       // historical score (soft tiebreaker). Without scoreFn, first eligible wins.
       const eligible = cfg.people.filter(
         (person) =>
-          isAvailableForShift(person.id, shift, isObs, usedRanges) &&
-          !exceedsHourCap(person.id, hrs, weekHours, cfg) &&
+          isAvailableForShift(person.id, roleId, shift, isObs, usedRanges) &&
+          !exceedsHourCap(person.id, rHrs, weekHours, cfg) &&
           canStaff(person, shift.locationId, roleId, day, cfg)
       );
       let candidate;
@@ -230,7 +245,7 @@ function fillShift(shift, reservations, usedRanges, weekHours, cards, issues, id
       if (candidate) {
         assigned.push({ personId: candidate.id, roleId });
         markPlaced(candidate.id, roleId, shift, isObs, usedRanges, candidate.blockedIds);
-        weekHours[candidate.id] = (weekHours[candidate.id] || 0) + hrs;
+        weekHours[candidate.id] = (weekHours[candidate.id] || 0) + rHrs;
         console.log(
           `[Shiftcraft fill] ${day} | ${shift.name} @ ${loc?.name ?? shift.locationId}` +
           ` | ${roleId} → ${idx.people[candidate.id]?.name ?? candidate.id}`
@@ -337,9 +352,8 @@ export function solve(cfg, week = null, scoreFn = null) {
         const anchorShift = idx.shifts[p.anchorId];
         if (!anchorShift) continue;
 
-        if (!isAvailableForShift(person.id, anchorShift, isObsPhase, usedRanges)) continue;
-
         const roleId = p.slot ?? person.roles[0];
+        if (!isAvailableForShift(person.id, roleId, anchorShift, isObsPhase, usedRanges)) continue;
 
         // Guard: role must actually be required by the target shift.
         const anchorReq = staffingFor(anchorShift.locationId, cfg);
