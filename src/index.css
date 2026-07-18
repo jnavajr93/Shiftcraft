@@ -437,7 +437,7 @@ html, body, #root {
 .slot-hours-num {
   margin-left: auto; flex-shrink: 0;
   white-space: nowrap;
-  font-size: 12px; font-weight: 500; color: var(--text-primary);
+  font-size: 10px; font-weight: 500; color: var(--text-primary);
 }
 
 .variable-time-editor {
