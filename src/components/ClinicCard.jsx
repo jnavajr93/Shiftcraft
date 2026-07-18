@@ -181,7 +181,7 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
   };
 
   return (
-    <div data-tour={slotType === 'scribe' ? 'slot-scribe' : slotType === 'middle' ? 'slot-middle' : undefined}>
+    <div className="slot-block" data-tour={slotType === 'scribe' ? 'slot-scribe' : slotType === 'middle' ? 'slot-middle' : undefined}>
       <div
         ref={setRef}
         className={[
@@ -412,7 +412,7 @@ function ObsSlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSear
   })();
 
   return (
-    <div>
+    <div className="slot-block">
       <div
         ref={setRef}
         className={['slot-row', isOver && interactive ? 'drop-target' : ''].filter(Boolean).join(' ')}

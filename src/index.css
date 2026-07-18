@@ -430,12 +430,16 @@ html, body, #root {
 .clinic-card:hover .clinic-edit-btn { opacity: 1; }
 
 /* ─── Slot Row ─────────────────────────── */
+/* .slot-block wraps the chip row + time row as one visual unit; the divider closes the block */
+.slot-block {
+  border-bottom: 0.5px solid var(--border);
+}
+.slot-block:last-child { border-bottom: none; }
 .slot-row {
   display: flex; align-items: center;
-  padding: 8px 12px; border-bottom: 0.5px solid var(--border);
+  padding: 8px 12px;
   gap: 8px; min-height: 40px; position: relative;
 }
-.slot-row:last-child { border-bottom: none; }
 .slot-row.drop-target { background: var(--accent-subtle); }
 .slot-row.warning-slot { border-left: 2px solid var(--amber); padding-left: 10px; }
 
@@ -452,10 +456,8 @@ html, body, #root {
   display: flex; align-items: center; gap: 5px;
   padding: 3px 12px 6px 64px;
   font-size: 10px; color: var(--text-muted);
-  border-bottom: 0.5px solid var(--border);
   min-height: 0;
 }
-.variable-time-row:last-child { border-bottom: none; }
 .variable-time-row.editable { cursor: pointer; }
 .variable-time-row.editable:hover { color: var(--text-secondary); }
 .variable-time-row.editable:hover svg { opacity: 1 !important; }
