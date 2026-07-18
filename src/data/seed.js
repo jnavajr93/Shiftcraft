@@ -86,13 +86,13 @@ export function accommodationLabel(acc) {
 }
 
 export function getSlotTimeLabel(clinic, slotType) {
-  const { startTime } = clinic;
+  const { startTime, endTime } = clinic;
   switch (slotType) {
     case 'scribe':           return null;
     case 'openingFrontDesk':
-    case 'opener':           return `${minutesToTime(startTime)} – 5:00 PM`;
+    case 'opener':           return `Open – ${minutesToTime(Math.min(1020, endTime))}`;
     case 'closingFrontDesk':
-    case 'closing':          return '9:00 AM – ~Close';
+    case 'closing':          return `${minutesToTime(Math.max(540, startTime))} – ~Close`;
     case 'frontDesk':        return null; // shows via time editor row
     default:                 return null;
   }
@@ -106,7 +106,7 @@ export function getSlotLabel(slotType, location) {
 export function formatOpenerTimeDisplay(clinic, slotVal) {
   const obj = (slotVal && typeof slotVal === 'object') ? slotVal : {};
   const startStr = obj.start != null ? minutesToTime(obj.start) : 'Open';
-  const endStr   = obj.end   != null ? minutesToTime(obj.end)   : '5:00 PM';
+  const endStr   = obj.end   != null ? minutesToTime(obj.end)   : minutesToTime(Math.min(1020, clinic?.endTime ?? 1020));
   return `${startStr} – ${endStr}`;
 }
 
@@ -126,9 +126,9 @@ export function formatClosingFDOverlayDisplay(slotVal) {
 }
 
 // Plain-text closing display for overlays/text contexts (no ~, no JSX)
-export function formatClosingOverlayDisplay(slotVal) {
+export function formatClosingOverlayDisplay(slotVal, clinic) {
   const obj = (slotVal && typeof slotVal === 'object') ? slotVal : {};
-  const startStr = obj.start != null ? minutesToTime(obj.start) : '9:00 AM';
+  const startStr = obj.start != null ? minutesToTime(obj.start) : minutesToTime(Math.max(540, clinic?.startTime ?? 540));
   return `${startStr} – Close`;
 }
 
@@ -189,13 +189,13 @@ function rawSlotHours(clinic, slotType) {
       const sv = clinic.slots?.opener;
       const obj = (sv && typeof sv === 'object') ? sv : {};
       const s = obj.start != null ? obj.start : (startTime - 15);
-      const e = obj.end   != null ? obj.end   : 1020;
+      const e = obj.end   != null ? obj.end   : Math.min(1020, endTime);
       return (e - s) / 60;
     }
     case 'closing': {
       const sv = clinic.slots?.closing;
       const obj = (sv && typeof sv === 'object') ? sv : {};
-      const s = obj.start != null ? obj.start : 540;
+      const s = obj.start != null ? obj.start : Math.max(540, startTime);
       const e = obj.end   != null ? obj.end   : (endTime + 75);
       return (e - s) / 60;
     }
@@ -339,10 +339,11 @@ export function slotEffectiveRange(slot, clinic) {
   const clinicEnd   = clinic.endTime   ?? 0;
   switch (slot) {
     case 'scribe':
-    case 'closing':
       return { start: cs ?? clinicStart, end: ce ?? (clinicEnd + 75) };
+    case 'closing':
+      return { start: cs ?? Math.max(540, clinicStart), end: ce ?? (clinicEnd + 75) };
     case 'opener':
-      return { start: cs ?? (clinicStart - 15), end: ce ?? clinicEnd };
+      return { start: cs ?? (clinicStart - 15), end: ce ?? Math.min(1020, clinicEnd) };
     // FD slots: opening gets 30-min early arrival, no post buffer; ends 3:30 PM
     case 'openingFrontDesk':
       return { start: cs ?? (clinicStart - 30), end: ce ?? 930 };

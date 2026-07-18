@@ -260,7 +260,7 @@ function MobileClinicCard({ clinic, people, onPersonClick }) {
             } else if (slotType === 'openingFrontDesk') {
               time = formatOpeningFDTimeDisplay(slotVal);
             } else if (slotType === 'closing') {
-              time = formatClosingOverlayDisplay(slotVal);
+              time = formatClosingOverlayDisplay(slotVal, clinic);
             } else if (slotType === 'closingFrontDesk') {
               time = formatClosingFDOverlayDisplay(slotVal);
             } else if (slotType === 'frontDesk') {

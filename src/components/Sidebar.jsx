@@ -32,7 +32,7 @@ function StaffHoverCard({ person, hours, clinics, people, style, onMouseEnter, o
       } else if (a.slotType === 'openingFrontDesk') {
         time = formatOpeningFDTimeDisplay(slotVal);
       } else if (a.slotType === 'closing') {
-        time = formatClosingOverlayDisplay(slotVal);
+        time = formatClosingOverlayDisplay(slotVal, a.clinic);
       } else if (a.slotType === 'closingFrontDesk') {
         time = formatClosingFDOverlayDisplay(slotVal);
       } else if (a.slotType === 'frontDesk') {

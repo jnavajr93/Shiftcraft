@@ -30,7 +30,7 @@ export function WeekRows({ personIds, clinics, additionalTasks }) {
                 } else if (slotType === 'openingFrontDesk') {
                   time = formatOpeningFDTimeDisplay(slotVal);
                 } else if (slotType === 'closing') {
-                  time = formatClosingOverlayDisplay(slotVal);
+                  time = formatClosingOverlayDisplay(slotVal, c);
                 } else if (slotType === 'closingFrontDesk') {
                   time = formatClosingFDOverlayDisplay(slotVal);
                 } else if (slotType === 'frontDesk') {
