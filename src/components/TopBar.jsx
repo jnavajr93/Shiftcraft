@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Calendar, Sun, Moon, ChevronLeft, ChevronRight,
   History, Printer, Sparkles, Wand2, Loader2, X, CircleHelp, RotateCcw,
-  Download, Upload,
+  Download, Upload, SendHorizonal, AlertCircle,
 } from 'lucide-react';
 import { useApp, isoWeek, mondayOfWeek } from '../context/AppContext.jsx';
 
@@ -11,7 +11,177 @@ import { useTour } from './Tour.jsx';
 import ChangeLogDrawer from './ChangeLogDrawer.jsx';
 import ChatPanel from './ChatPanel.jsx';
 import { generateSchedule } from '../engine/adapter.js';
-import { validateAndRepairAssignments, findObsViolations, findInvalidSlotAssignments } from '../engine/validator.js';
+import { validateAndRepairAssignments, findObsViolations, findInvalidSlotAssignments, getPostViolations } from '../engine/validator.js';
+
+// ─── Post helpers ────────────────────────────
+function formatPostedTime(isoString) {
+  if (!isoString) return '';
+  const d = new Date(isoString);
+  return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+// Open a print window with a formatted schedule grid
+function generatePrintWindow(data, weekLabel, weekMonday, postedBy) {
+  const DAYS_LIST = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+  const LOC_ORDER = ['Phoenix', 'Chandler', 'Estrella', 'Scottsdale', 'OBS'];
+  const personById = new Map((data.people ?? []).map(p => [p.id, p]));
+
+  const dayDates = DAYS_LIST.map((day, i) => {
+    const d = new Date(weekMonday);
+    d.setUTCDate(weekMonday.getUTCDate() + i);
+    return `${day} ${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
+  });
+
+  const allLocs = [...new Set(data.clinics.filter(c => c.open).map(c => c.location))];
+  const extras = allLocs.filter(l => !LOC_ORDER.includes(l)).sort();
+  const locations = [...LOC_ORDER, ...extras].filter(l => allLocs.includes(l));
+
+  const getPersonId = (sv) => {
+    if (!sv) return null;
+    if (typeof sv === 'string') return sv;
+    return sv.personId ?? null;
+  };
+
+  let rows = '';
+  for (const loc of locations) {
+    let cells = `<td class="lc">${loc}</td>`;
+    for (const day of DAYS_LIST) {
+      const clinic = data.clinics.find(c => c.day === day && c.location === loc && c.open);
+      if (!clinic) { cells += '<td></td>'; continue; }
+      let content = clinic.provider ? `<div class="pv">${clinic.provider}</div>` : '';
+      for (const [st, sv] of Object.entries(clinic.slots ?? {})) {
+        const pid = getPersonId(sv);
+        if (!pid) continue;
+        const p = personById.get(pid);
+        if (!p) continue;
+        const lbl = st.replace(/([A-Z])/g, ' $1').trim();
+        content += `<div class="sl"><span class="sr">${lbl}:</span> ${p.name}</div>`;
+      }
+      if (!content) content = '<span class="em">—</span>';
+      cells += `<td>${content}</td>`;
+    }
+    rows += `<tr>${cells}</tr>`;
+  }
+
+  const generatedAt = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const html = `<!DOCTYPE html><html><head><title>Shiftcraft — Week of ${weekLabel}</title>
+<style>
+@media print{@page{size:landscape;margin:0.4in}}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,Arial,sans-serif;font-size:9px;color:#111}
+h1{font-size:13px;font-weight:700;margin-bottom:8px}
+table{border-collapse:collapse;width:100%;table-layout:fixed}
+th,td{border:0.5px solid #bbb;padding:4px 5px;vertical-align:top}
+th{background:#f3f4f6;font-weight:600;text-align:center;font-size:9px}
+.lc{font-weight:700;background:#f9fafb;width:72px}
+.pv{font-weight:600;font-size:8.5px;margin-bottom:2px;color:#444}
+.sl{font-size:8px;line-height:1.45}
+.sr{color:#777}
+.em{color:#aaa;font-style:italic}
+footer{margin-top:8px;font-size:7.5px;color:#666;display:flex;justify-content:space-between}
+</style></head><body>
+<h1>Shiftcraft — Week of ${weekLabel}</h1>
+<table><thead><tr><th style="width:72px">Location</th>${dayDates.map(d => `<th>${d}</th>`).join('')}</tr></thead>
+<tbody>${rows}</tbody></table>
+<footer><span>Generated ${generatedAt}</span><span>Posted by ${postedBy ?? '—'}</span></footer>
+<script>window.onload=function(){window.print()}</script>
+</body></html>`;
+
+  const win = window.open('', '_blank');
+  if (win) { win.document.write(html); win.document.close(); }
+}
+
+// ─── Post validation modal ───────────────────
+function PostValidationModal({ violations, onClose, onJump, setActiveTab }) {
+  return (
+    <div className="overlay-backdrop" style={{ zIndex: 260 }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="overlay-modal" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
+        <div className="overlay-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <AlertCircle size={16} style={{ color: 'var(--red)' }} />
+            <span style={{ fontWeight: 600, fontSize: 15 }}>Cannot post — fix these issues first</span>
+          </div>
+          <button className="overlay-close" onClick={onClose}><X size={16} /></button>
+        </div>
+        <div className="overlay-body" style={{ maxHeight: 320, overflowY: 'auto' }}>
+          <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {violations.map((v, i) => (
+              <li key={i}>
+                <button
+                  onClick={() => onJump(v, setActiveTab)}
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
+                    display: 'flex', alignItems: 'flex-start', gap: 8, width: '100%',
+                    padding: '6px 8px', borderRadius: 6,
+                    color: v.type === 'timeless' ? 'var(--red)' : 'var(--amber)',
+                  }}
+                  className="post-violation-row"
+                >
+                  <span style={{ flexShrink: 0, marginTop: 1 }}>●</span>
+                  <span style={{ fontSize: 13, lineHeight: 1.4 }}>{v.label}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div style={{ padding: '12px 24px', borderTop: '0.5px solid var(--border)', display: 'flex', justifyContent: 'flex-end' }}>
+          <button className="btn" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Post confirmation modal ─────────────────
+function PostConfirmModal({ weekLabel, onConfirm, onCancel }) {
+  return (
+    <div className="overlay-backdrop" style={{ zIndex: 260 }} onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
+      <div className="overlay-modal" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()}>
+        <div className="overlay-header">
+          <div style={{ fontWeight: 500, fontSize: 16 }}>Post Week of {weekLabel}?</div>
+          <button className="overlay-close" onClick={onCancel}><X size={16} /></button>
+        </div>
+        <div className="overlay-body">
+          <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
+            This will publish the schedule to all staff immediately. A JSON backup and a printable PDF will download automatically.
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '12px 24px', borderTop: '0.5px solid var(--border)', flexShrink: 0 }}>
+          <button className="btn" onClick={onCancel}>Cancel</button>
+          <button className="btn btn-primary" style={{ minHeight: 40, gap: 6 }} onClick={onConfirm}>
+            <SendHorizonal size={14} /> Post + Export
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Exit nudge modal ────────────────────────
+function ExitNudgeModal({ postedSnapshot, onPost, onLeave }) {
+  return (
+    <div className="overlay-backdrop" style={{ zIndex: 300, backdropFilter: 'blur(4px)' }} onClick={e => { if (e.target === e.currentTarget) onLeave(); }}>
+      <div className="overlay-modal" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
+        <div className="overlay-header">
+          <div style={{ fontWeight: 600, fontSize: 15 }}>Unposted changes</div>
+        </div>
+        <div className="overlay-body">
+          <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            {postedSnapshot
+              ? 'This week has changes that staff haven\'t seen yet. Post before leaving manager mode?'
+              : 'This week hasn\'t been posted yet — staff can\'t see it. Post before leaving manager mode?'}
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '12px 24px', borderTop: '0.5px solid var(--border)', flexShrink: 0 }}>
+          <button className="btn" onClick={onLeave}>Leave anyway</button>
+          <button className="btn btn-primary" style={{ minHeight: 38, gap: 6 }} onClick={onPost}>
+            <SendHorizonal size={13} /> Post
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Generate confirmation modal ─────────────
 function GenerateModal({ weekLabel, keepExisting, onKeepChange, onConfirm, onCancel, isRegen }) {
@@ -296,7 +466,7 @@ Only include slots that should be filled. Omit middle/training unless needed. If
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DAY_HDRS = ['Mo','Tu','We','Th','Fr','Sa','Su'];
 
-function WeekDatePicker({ currentWeek, onSelectWeek, onClose, triggerRef }) {
+function WeekDatePicker({ currentWeek, onSelectWeek, onClose, triggerRef, dirtyWeeks }) {
   const ref = useRef(null);
   const monday = mondayOfWeek(currentWeek);
   const [viewYear, setViewYear] = useState(monday.getUTCFullYear());
@@ -340,6 +510,7 @@ function WeekDatePicker({ currentWeek, onSelectWeek, onClose, triggerRef }) {
           const otherMonth = d.getMonth() !== viewMonth;
           const isToday = d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
           const isSel = wk === currentWeek;
+          const isDirtyWk = dirtyWeeks?.has(wk);
           const dow = d.getDay();
           return (
             <div
@@ -348,6 +519,7 @@ function WeekDatePicker({ currentWeek, onSelectWeek, onClose, triggerRef }) {
               onClick={() => { onSelectWeek(wk); onClose(); }}
             >
               {d.getDate()}
+              {isDirtyWk && <span className="wdp-dirty-dot" title="Unposted changes" />}
             </div>
           );
         })}
@@ -395,6 +567,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
     weekLabel, currentWeek, navigateWeek, jumpToWeek, weekIsEmpty, copyFromTwoWeeksAgo, clearWeek,
     data, addLog, applyBulkAssignments, restoreClinicSlots, lastSaved, saveStatus, importWeekData,
     historyScores, presentManagers, conflictToast, setConflictToast,
+    isDirty, postedSnapshot, dirtyWeeks, postWeek,
   } = useApp();
   const weekLabelRef = useRef(null);
   const undoTimerRef = useRef(null);
@@ -426,9 +599,93 @@ export default function TopBar({ activeTab, setActiveTab }) {
   const [showLog, setShowLog] = useState(false);
   const [showChat, setShowChat] = useState(false);
 
+  // ─── Post state ──────────────────────────────
+  // 'idle' | 'violations' | 'confirm' — which post modal to show
+  const [showPostModal, setShowPostModal] = useState(null);
+  const [postViolations, setPostViolations] = useState([]);
+  const [postState, setPostState] = useState('idle'); // 'idle'|'loading'|'done'|'error'
+  const [showExitNudge, setShowExitNudge] = useState(false);
+
   // ─── Export / Import state ───────────────────
   const [pendingImport, setPendingImport] = useState(null); // parsed file data awaiting confirmation
   const [importError, setImportError] = useState('');
+
+  // ─── Post flow ───────────────────────────────
+  const handlePostClick = () => {
+    if (!data) return;
+    const violations = getPostViolations(data.clinics, data.people);
+    if (violations.length > 0) {
+      setPostViolations(violations);
+      setShowPostModal('violations');
+    } else {
+      setShowPostModal('confirm');
+    }
+  };
+
+  const handleViolationJump = (violation, setTab) => {
+    setShowPostModal(null);
+    if (setTab) setTab('schedule');
+    setTimeout(() => {
+      const el = document.querySelector(`[data-clinic-id="${violation.clinicId}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('clinic-card--flash');
+        setTimeout(() => el.classList.remove('clinic-card--flash'), 1500);
+      }
+    }, 80);
+  };
+
+  const handlePostConfirm = async () => {
+    setShowPostModal(null);
+    setPostState('loading');
+    const { error, snapshot } = await postWeek(managerInitials);
+    if (error) {
+      setPostState('error');
+      setCopyToast('Post failed — check connection');
+      setTimeout(() => setCopyToast(null), 4000);
+      return;
+    }
+    addLog({
+      action: `Week of ${weekLabel} posted`,
+      personName: 'Manager',
+      day: '',
+      detail: `Published by ${managerInitials}`,
+    });
+
+    // JSON download
+    const monday = mondayOfWeek(currentWeek);
+    const payload = {
+      version: EXPORT_VERSION,
+      weekStr: currentWeek,
+      weekMonday: monday.toISOString().slice(0, 10),
+      exportedAt: new Date().toISOString(),
+      slotMap: snapshot,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `shiftcraft_week_${monday.toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    // PDF print window
+    generatePrintWindow(data, weekLabel, monday, managerInitials);
+
+    setPostState('done');
+    setTimeout(() => setPostState('idle'), 3000);
+  };
+
+  const handleExitLeave = () => {
+    setShowExitNudge(false);
+    setIsAdmin(false);
+    setManagerInitials(null);
+  };
+
+  const handleExitPost = () => {
+    setShowExitNudge(false);
+    handlePostClick();
+  };
 
   const handleExport = () => {
     if (!data) return;
@@ -707,6 +964,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
               onSelectWeek={jumpToWeek}
               onClose={() => setShowDatePicker(false)}
               triggerRef={weekLabelRef}
+              dirtyWeeks={dirtyWeeks}
             />
           )}
         </div>
@@ -755,6 +1013,26 @@ export default function TopBar({ activeTab, setActiveTab }) {
           )}
           {isAdmin && (
             <>
+              {/* Post button */}
+              {isDirty ? (
+                <button
+                  className={`btn btn-pill topbar-mobile-hidden btn-post${postState === 'error' ? ' generate-error' : postState === 'done' ? ' generate-done' : ''}`}
+                  style={{ fontSize: 12, minHeight: 32, gap: 5 }}
+                  onClick={postState === 'idle' || postState === 'error' ? handlePostClick : undefined}
+                  disabled={postState === 'loading'}
+                  title="Publish schedule to staff"
+                >
+                  {postState === 'loading' ? <><Loader2 size={13} className="spin" /> Posting…</> :
+                   postState === 'done'    ? <>✓ Posted</> :
+                   postedSnapshot ? <><SendHorizonal size={13} /> Post changes</> :
+                   <><SendHorizonal size={13} /> Post</>}
+                </button>
+              ) : postedSnapshot ? (
+                <span className="topbar-posted-status topbar-mobile-hidden" title={`Posted by ${postedSnapshot.posted_by ?? '—'}`}>
+                  ✓ Posted {formatPostedTime(postedSnapshot.posted_at)}
+                </span>
+              ) : null}
+
               {/* Generate schedule button */}
               <button
                 data-tour="generate-button"
@@ -859,8 +1137,12 @@ export default function TopBar({ activeTab, setActiveTab }) {
             className={`btn btn-pill btn-admin ${isAdmin ? 'active' : ''}`}
             onClick={() => {
               if (isAdmin) {
-                setIsAdmin(false);
-                setManagerInitials(null);
+                if (isDirty) {
+                  setShowExitNudge(true);
+                } else {
+                  setIsAdmin(false);
+                  setManagerInitials(null);
+                }
               } else {
                 setShowPinModal(true);
               }
@@ -870,6 +1152,24 @@ export default function TopBar({ activeTab, setActiveTab }) {
           </button>
         </div>
       </div>
+
+      {/* Unposted changes banner — persistent, manager-only, not dismissible */}
+      {isAdmin && isDirty && (
+        <div className="unposted-banner">
+          <span className="unposted-banner-msg">
+            {postedSnapshot
+              ? `Unposted changes — staff are seeing the version posted ${formatPostedTime(postedSnapshot.posted_at)} by ${postedSnapshot.posted_by ?? '—'}`
+              : 'This week has not been posted — staff cannot see it yet.'}
+          </span>
+          <button
+            className="btn btn-primary"
+            style={{ minHeight: 26, fontSize: 11, padding: '3px 12px', whiteSpace: 'nowrap', flexShrink: 0 }}
+            onClick={handlePostClick}
+          >
+            Post
+          </button>
+        </div>
+      )}
 
       {/* Mobile-only week navigation bar */}
       <div className="topbar-mobile-week">
@@ -959,6 +1259,28 @@ export default function TopBar({ activeTab, setActiveTab }) {
         <ManagerModal
           onSuccess={(inits) => { setShowPinModal(false); setIsAdmin(true); setManagerInitials(inits); }}
           onCancel={() => setShowPinModal(false)}
+        />
+      )}
+      {showPostModal === 'violations' && (
+        <PostValidationModal
+          violations={postViolations}
+          onClose={() => setShowPostModal(null)}
+          onJump={handleViolationJump}
+          setActiveTab={setActiveTab}
+        />
+      )}
+      {showPostModal === 'confirm' && (
+        <PostConfirmModal
+          weekLabel={weekLabel}
+          onConfirm={handlePostConfirm}
+          onCancel={() => setShowPostModal(null)}
+        />
+      )}
+      {showExitNudge && (
+        <ExitNudgeModal
+          postedSnapshot={postedSnapshot}
+          onPost={handleExitPost}
+          onLeave={handleExitLeave}
         />
       )}
     </>

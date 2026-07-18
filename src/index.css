@@ -1169,3 +1169,77 @@ html, body, #root {
   border-bottom: 6px solid transparent;
   border-left: 6px solid var(--bg-elevated);
 }
+
+/* ─── Post / Draft workflow ──────────────────── */
+
+/* Persistent amber banner below topbar for unposted changes */
+.unposted-banner {
+  position: sticky; top: 52px; z-index: 90;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 7px 16px;
+  background: #fffbeb;
+  border-bottom: 1px solid #fcd34d;
+  font-size: 12px; color: #92400e; line-height: 1.4;
+}
+[data-theme="dark"] .unposted-banner {
+  background: rgba(217,119,6,0.12);
+  border-bottom-color: rgba(252,211,77,0.3);
+  color: #fcd34d;
+}
+.unposted-banner-msg { flex: 1; min-width: 0; }
+
+/* Inline "✓ Posted" status when clean */
+.topbar-posted-status {
+  font-size: 11px; color: var(--green, #16a34a);
+  font-weight: 500; white-space: nowrap; opacity: 0.85;
+}
+[data-theme="dark"] .topbar-posted-status {
+  color: #4ade80;
+}
+
+/* Post button — accent-colored pill */
+.btn-post {
+  background: var(--accent, #3b82f6);
+  color: #fff;
+  border-color: transparent;
+}
+.btn-post:hover:not(:disabled) {
+  background: var(--accent-hover, #2563eb);
+}
+.btn-post:disabled {
+  opacity: 0.6;
+}
+
+/* Timeless variable slot — subtle red outline in manager mode */
+.slot-row--timeless {
+  outline: 1.5px solid rgba(220, 38, 38, 0.45);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+
+/* Week picker amber dot for dirty weeks */
+.wdp-dirty-dot {
+  display: block;
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: #f59e0b;
+  position: absolute; bottom: 2px; right: 3px;
+  pointer-events: none;
+}
+/* Make wdp-day position:relative so the dot can anchor */
+.wdp-day { position: relative; }
+
+/* Flash animation for click-to-jump on violation rows */
+@keyframes clinicFlash {
+  0%   { box-shadow: 0 0 0 3px rgba(239,68,68,0.7); }
+  60%  { box-shadow: 0 0 0 6px rgba(239,68,68,0); }
+  100% { box-shadow: none; }
+}
+.clinic-card--flash {
+  animation: clinicFlash 1.2s ease-out both;
+}
+
+/* Violation row hover in post-gate modal */
+.post-violation-row:hover {
+  background: var(--bg-hover, rgba(0,0,0,0.05));
+}

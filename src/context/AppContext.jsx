@@ -13,6 +13,8 @@ import {
   savePlacementHistory as savePlacementHistoryDB,
   loadDismissedPatterns as loadDismissedPatternsDB,
   saveDismissedPatterns as saveDismissedPatternsDB,
+  fetchLatestPostedSnapshot as fetchLatestPostedSnapshotDB,
+  savePostedSnapshot as savePostedSnapshotDB,
   weekKey,
   SCHEDULE_KEY,
   CHANGELOG_KEY,
@@ -497,6 +499,30 @@ function runMigrations(data) {
   return d;
 }
 
+// ─── Snapshot helpers (module-level, usable in init()) ────────────────────
+// Canonical slot map string with stable key order for dirty-state comparison.
+// Postgres JSONB may return keys in a different order than we wrote them.
+function sortedJSON(obj) {
+  if (obj === null || typeof obj !== 'object' || Array.isArray(obj)) return JSON.stringify(obj);
+  const keys = Object.keys(obj).sort();
+  const inner = keys.map(k => `${JSON.stringify(k)}:${sortedJSON(obj[k])}`).join(',');
+  return `{${inner}}`;
+}
+
+function hasAnyAssignment(map) {
+  for (const [key, val] of Object.entries(map)) {
+    if (key.startsWith('task:')) { if (val) return true; continue; }
+    if (!val) continue;
+    if (typeof val === 'string') return true;
+    if (typeof val === 'object') {
+      for (const sv of Object.values(val)) {
+        if (getSlotPersonId(sv)) return true;
+      }
+    }
+  }
+  return false;
+}
+
 // Strip slots from clinic definitions before saving global store
 function toDefinitionData(globalData) {
   const { clinics, additionalTasks, ...rest } = globalData;
@@ -541,6 +567,13 @@ export function AppProvider({ children }) {
   const [dismissedPatterns, setDismissedPatterns] = useState([]);
   // Stable ref so appendHistory doesn't need placementHistory in its deps.
   const historyRef = useRef([]);
+
+  // ─── Posted snapshots ────────────────────────
+  // { [weekStr]: { id, snapshot, posted_at, posted_by } | null }
+  // undefined = not yet fetched; null = fetched, never posted
+  const [postedSnapshots, setPostedSnapshots] = useState({});
+  // Session-scoped: weeks that have assignments newer than their last post
+  const [dirtyWeeks, setDirtyWeeks] = useState(() => new Set());
 
   // ─── Realtime & concurrency ────────────────
   // Per-week version loaded from DB — used for conditional (optimistic) saves.
@@ -789,6 +822,20 @@ export function AppProvider({ children }) {
         }
       }
 
+      // 7. Load posted snapshot for current week (graceful — app works without it)
+      const snapResult = await fetchLatestPostedSnapshotDB(weekKey(nowWeek));
+      if (!cancelled) {
+        const snapValue = snapResult.status === 'ok' ? snapResult.data : null;
+        setPostedSnapshots({ [nowWeek]: snapValue });
+        // Dirty check: if week has assignments newer than the snapshot, mark dirty
+        const currentMap = extractSlotMap(applied.clinics, applied.additionalTasks ?? []);
+        const isEmpty = !hasAnyAssignment(currentMap);
+        const snapshotMatches = snapValue && sortedJSON(currentMap) === sortedJSON(snapValue.snapshot);
+        if (!isEmpty && !snapshotMatches) {
+          setDirtyWeeks(new Set([nowWeek]));
+        }
+      }
+
       setIsLoading(false);
     }
 
@@ -877,6 +924,22 @@ export function AppProvider({ children }) {
             setChangelog(value.slice(0, 500));
           }
         }
+      })
+
+      // ── posted_schedules — live updates when another manager posts ──
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'posted_schedules',
+      }, (payload) => {
+        const row = payload.new ?? {};
+        if (!row.week_key) return;
+        // week_key is the full weekKey string (e.g. 'shiftcraft_week_2025-W42')
+        const ws = row.week_key.replace('shiftcraft_week_', '');
+        const newSnap = { id: row.id, snapshot: row.snapshot, posted_at: row.posted_at, posted_by: row.posted_by };
+        setPostedSnapshots(prev => ({ ...prev, [ws]: newSnap }));
+        // Clear dirty state for the posted week (banner clears live for all managers)
+        setDirtyWeeks(prev => { const next = new Set(prev); next.delete(ws); return next; });
       })
 
       // ── Presence — who else is viewing this week ──
@@ -1003,11 +1066,20 @@ export function AppProvider({ children }) {
       return;
     }
 
+    // Load snapshot for the new week in parallel with state updates
+    const snapResult = await fetchLatestPostedSnapshotDB(weekKey(next));
+    const snapValue = snapResult.status === 'ok' ? snapResult.data : null;
+
     setCurrentWeek(next);
     setGlobalData(g => {
       const applied = applySlotMap(g.clinics, g.additionalTasks, map);
       return { ...g, ...applied };
     });
+    setPostedSnapshots(prev => ({ ...prev, [next]: snapValue }));
+    // Track dirty state for week picker dots
+    if (hasAnyAssignment(map) && !(snapValue && sortedJSON(map) === sortedJSON(snapValue.snapshot))) {
+      setDirtyWeeks(prev => new Set([...prev, next]));
+    }
   }, [currentWeek, globalData, doSaveWeek]);
 
   const jumpToWeek = useCallback(async (targetWeek) => {
@@ -1037,11 +1109,18 @@ export function AppProvider({ children }) {
       return;
     }
 
+    const snapResult2 = await fetchLatestPostedSnapshotDB(weekKey(targetWeek));
+    const snapValue2 = snapResult2.status === 'ok' ? snapResult2.data : null;
+
     setCurrentWeek(targetWeek);
     setGlobalData(g => {
       const applied = applySlotMap(g.clinics, g.additionalTasks, map);
       return { ...g, ...applied };
     });
+    setPostedSnapshots(prev => ({ ...prev, [targetWeek]: snapValue2 }));
+    if (hasAnyAssignment(map) && !(snapValue2 && sortedJSON(map) === sortedJSON(snapValue2.snapshot))) {
+      setDirtyWeeks(prev => new Set([...prev, targetWeek]));
+    }
   }, [currentWeek, globalData, doSaveWeek]);
 
   const weekIsEmpty = useCallback(() => {
@@ -1076,6 +1155,7 @@ export function AppProvider({ children }) {
       const applied = applySlotMap(g.clinics, g.additionalTasks, prevMap);
       return { ...g, ...applied };
     });
+    setDirtyWeeks(prev => new Set([...prev, currentWeek]));
     return mondayOfWeek(prevWeek);
   }, [currentWeek, globalData, doSaveWeek]);
 
@@ -1107,6 +1187,7 @@ export function AppProvider({ children }) {
         return { ...g, ...applied };
       });
     }
+    setDirtyWeeks(prev => new Set([...prev, weekStr]));
     return true;
   }, [currentWeek, globalData, doSaveWeek]);
 
@@ -1121,7 +1202,11 @@ export function AppProvider({ children }) {
     }));
     const additionalTasks = (globalData.additionalTasks ?? []).map(t => ({ ...t, assignedPersonId: null }));
     setGlobalData(prev => ({ ...prev, clinics, additionalTasks }));
-  }, [currentWeek, globalData]);
+    // A cleared week with a prior snapshot is now dirty (snapshot ≠ blank)
+    if (postedSnapshots[currentWeek]) {
+      setDirtyWeeks(prev => new Set([...prev, currentWeek]));
+    }
+  }, [currentWeek, globalData, postedSnapshots]);
 
   // ─── History helpers ─────────────────────────
   const MAX_HISTORY_WEEKS = 52;
@@ -1135,6 +1220,29 @@ export function AppProvider({ children }) {
     setPlacementHistory(pruned);
     savePlacementHistoryDB(pruned); // fire-and-forget
   }, []);
+
+  // ─── Post week ────────────────────────────────
+  // Writes a snapshot of the current live data to posted_schedules.
+  // Returns { error, snapshot } — TopBar handles downloads and logging on success.
+  const postWeek = useCallback(async (initials) => {
+    if (!globalData) return { error: 'No data' };
+    const slotMap = extractSlotMap(globalData.clinics, globalData.additionalTasks);
+    const wk = weekKey(currentWeek);
+    const { error, data: row } = await savePostedSnapshotDB(wk, slotMap, initials);
+    if (error) {
+      console.error('[Shiftcraft] Post failed:', error);
+      return { error };
+    }
+    const newSnap = {
+      id: row?.id,
+      snapshot: slotMap,
+      posted_at: row?.posted_at ?? new Date().toISOString(),
+      posted_by: initials,
+    };
+    setPostedSnapshots(prev => ({ ...prev, [currentWeek]: newSnap }));
+    setDirtyWeeks(prev => { const next = new Set(prev); next.delete(currentWeek); return next; });
+    return { error: null, snapshot: slotMap };
+  }, [globalData, currentWeek]);
 
   const dismissPattern = useCallback((key) => {
     setDismissedPatterns(prev => {
@@ -1247,6 +1355,7 @@ export function AppProvider({ children }) {
     setChangelog(log => [...allEntries, ...log].slice(0, 500));
 
     await doSaveWeek(currentWeek, map);
+    setDirtyWeeks(prev => new Set([...prev, currentWeek]));
 
     // Record history entry for manual slot assignments (not for removals).
     if (personId && targetClinic) {
@@ -1280,6 +1389,7 @@ export function AppProvider({ children }) {
     const map = extractSlotMap(clinics, globalData.additionalTasks);
     setGlobalData(prev => ({ ...prev, clinics }));
     await doSaveWeek(currentWeek, map);
+    setDirtyWeeks(prev => new Set([...prev, currentWeek]));
   }, [currentWeek, globalData, doSaveWeek]);
 
   const assignTask = useCallback(async (taskId, personId) => {
@@ -1304,6 +1414,7 @@ export function AppProvider({ children }) {
     }
 
     await doSaveWeek(currentWeek, map);
+    setDirtyWeeks(prev => new Set([...prev, currentWeek]));
   }, [currentWeek, globalData, doSaveWeek, managerInitials]);
 
   const addTask = useCallback(async (task) => {
@@ -1391,6 +1502,7 @@ export function AppProvider({ children }) {
     const map = extractSlotMap(clinics, globalData.additionalTasks);
     setGlobalData(prev => ({ ...prev, clinics }));
     await doSaveWeek(currentWeek, map);
+    setDirtyWeeks(prev => new Set([...prev, currentWeek]));
 
     // Record generated assignments in history for pattern learning.
     const clinicById  = new Map(globalData.clinics.map(c => [c.id, c]));
@@ -1426,6 +1538,7 @@ export function AppProvider({ children }) {
     const map = extractSlotMap(clinics, globalData.additionalTasks);
     setGlobalData(prev => ({ ...prev, clinics }));
     await doSaveWeek(currentWeek, map);
+    setDirtyWeeks(prev => new Set([...prev, currentWeek]));
   }, [currentWeek, globalData, doSaveWeek]);
 
   const deletePerson = useCallback((personId) => {
@@ -1521,6 +1634,32 @@ export function AppProvider({ children }) {
     month: 'short', day: 'numeric', timeZone: 'UTC',
   });
 
+  const postedSnapshot = postedSnapshots[currentWeek] ?? null;
+
+  const isDirty = useMemo(() => {
+    if (!globalData) return false;
+    const snap = postedSnapshots[currentWeek];
+    if (snap === undefined) return false; // still loading
+    const liveMap = extractSlotMap(globalData.clinics, globalData.additionalTasks);
+    if (snap === null) {
+      // Never posted — dirty only if the week has assignments worth posting
+      return hasAnyAssignment(liveMap);
+    }
+    return sortedJSON(liveMap) !== sortedJSON(snap.snapshot);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [globalData, currentWeek, postedSnapshots]);
+
+  // What the board renders: live data for managers, snapshot-applied data for staff.
+  // null = staff view, week never posted → show "not yet posted" placeholder.
+  const boardClinics = useMemo(() => {
+    if (!globalData) return null;
+    if (isAdmin) return globalData.clinics;
+    const snap = postedSnapshots[currentWeek];
+    if (snap == null) return null; // undefined (loading) or null (never posted)
+    return applySlotMap(globalData.clinics, globalData.additionalTasks, snap.snapshot).clinics;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, globalData, currentWeek, postedSnapshots]);
+
   return (
     <AppContext.Provider value={{
       data,
@@ -1542,6 +1681,7 @@ export function AppProvider({ children }) {
       placementHistory, dismissedPatterns, historyScores,
       dismissPattern, undismissPattern,
       presentManagers, conflictToast, setConflictToast,
+      isDirty, postedSnapshot, dirtyWeeks, boardClinics, postWeek,
     }}>
       {children}
     </AppContext.Provider>

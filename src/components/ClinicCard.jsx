@@ -286,6 +286,10 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
   const isDimmed = hasSearch && person && !matchedPersonIds.includes(personId);
   const interactive = isAdmin && clinicOpen;
 
+  // Timeless violation: person assigned to a variable-time slot with no time set
+  const isTimelessViolation = isVariable && isAdmin && person &&
+    slotVal && typeof slotVal === 'object' && slotVal.start == null && slotVal.end == null;
+
   // Per-assignment hours: manager mode only, right-aligned on time row
   const slotHrs = (() => {
     if (!person || !isAdmin) return null;
@@ -305,6 +309,7 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
           'slot-row',
           isOver && interactive ? 'drop-target' : '',
           showWarning ? 'warning-slot' : '',
+          isTimelessViolation ? 'slot-row--timeless' : '',
         ].filter(Boolean).join(' ')}
         onClick={handleRowClick}
         style={{ cursor: interactive ? 'pointer' : 'default' }}
@@ -621,7 +626,7 @@ export default function ClinicCard({ clinic, onPersonClick, onEditClinic, matche
   if (!clinic.open && !isAdmin) return null;
 
   return (
-    <div data-tour="clinic-card" className={`clinic-card${!clinic.open ? ' closed' : ''}`}>
+    <div data-tour="clinic-card" data-clinic-id={clinic.id} className={`clinic-card${!clinic.open ? ' closed' : ''}`}>
       <div className="clinic-card-header">
         <div>
           <div className="clinic-card-title">{clinic.provider}</div>

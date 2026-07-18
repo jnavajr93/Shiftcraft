@@ -147,6 +147,39 @@ export async function saveDismissedPatterns(keys) {
   return { error: error ?? null };
 }
 
+// ─── Posted schedule snapshots ───────────────
+// Snapshot = slotMap ({ [clinicId]: {...slots}, [`task:${id}`]: personId|null })
+// stored in posted_schedules.snapshot (jsonb). Append-only — every Post writes
+// a new row. Staff view reads the MAX(posted_at) row per week_key.
+
+export async function fetchLatestPostedSnapshot(wk) {
+  const { data, error } = await supabase
+    .from('posted_schedules')
+    .select('id, snapshot, posted_at, posted_by')
+    .eq('week_key', wk)
+    .order('posted_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    if (error.code === 'PGRST116') return { status: 'empty' };
+    // Table doesn't exist yet (42P01) — treat as empty so app degrades gracefully
+    if (error.code === '42P01') return { status: 'empty' };
+    return { status: 'error', error };
+  }
+  if (!data) return { status: 'empty' };
+  return { status: 'ok', data };
+}
+
+export async function savePostedSnapshot(wk, snapshot, postedBy) {
+  const { data, error } = await supabase
+    .from('posted_schedules')
+    .insert({ week_key: wk, snapshot, posted_by: postedBy })
+    .select('id, posted_at')
+    .single();
+  if (error) return { error };
+  return { error: null, data };
+}
+
 // ─── Changelog ────────────────────────────────
 export async function saveChangelog(entries) {
   const { error } = await supabase

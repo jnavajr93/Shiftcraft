@@ -1,4 +1,4 @@
-import { slotEffectiveRange } from '../data/seed.js';
+import { slotEffectiveRange, rangesOverlap, getRenderedSlotEntries, getSlotPersonId } from '../data/seed.js';
 
 /**
  * Post-generation schedule validation.
@@ -209,6 +209,113 @@ export function findInvalidSlotAssignments(assignments, clinics) {
     }
   }
   return violations;
+}
+
+/**
+ * Finds assigned-but-timeless slots: variable-time slots (middle, training)
+ * where a person is assigned but no start/end time has been set.
+ * These are blocking violations for the post gate.
+ *
+ * Returns array of { label, clinicId, personName, slotType, day, location }
+ */
+export function findTimelessAssignments(clinics, people) {
+  const personById = new Map((people ?? []).map(p => [p.id, p]));
+  const violations = [];
+  for (const c of clinics) {
+    if (!c.open || c.location?.toLowerCase() === 'obs') continue;
+    for (const slotType of ['middle', 'training']) {
+      const sv = c.slots?.[slotType];
+      if (!sv || typeof sv !== 'object') continue;
+      const { personId, start, end } = sv;
+      if (personId && start == null && end == null) {
+        const name = personById.get(personId)?.name ?? personId;
+        const label = slotType.charAt(0).toUpperCase() + slotType.slice(1);
+        violations.push({
+          label: `${name} — ${label} @ ${c.location} ${c.day}: no time set`,
+          clinicId: c.id,
+          personName: name,
+          slotType,
+          day: c.day,
+          location: c.location,
+        });
+      }
+    }
+  }
+  return violations;
+}
+
+/**
+ * Finds time-overlap and OBS conflicts in the current board state.
+ * Returns array of { label, clinicId, personName } violation objects.
+ */
+export function findBoardConflicts(clinics, people) {
+  const personById = new Map((people ?? []).map(p => [p.id, p]));
+  const byPersonDay = new Map();
+  for (const c of clinics) {
+    if (!c.open) continue;
+    const isObs = c.location?.toLowerCase() === 'obs';
+    for (const [slotType, slotVal] of getRenderedSlotEntries(c)) {
+      const pid = getSlotPersonId(slotVal);
+      if (!pid) continue;
+      const person = personById.get(pid);
+      if (!person) continue;
+      const nameKey = person.name.trim().toLowerCase();
+      const mapKey = `${nameKey}:${c.day}`;
+      if (!byPersonDay.has(mapKey)) byPersonDay.set(mapKey, []);
+      byPersonDay.get(mapKey).push({ clinicId: c.id, slotType, clinic: c, personId: pid, personName: person.name, isObs });
+    }
+  }
+
+  const violations = [];
+  const seen = new Set();
+  for (const entries of byPersonDay.values()) {
+    if (entries.length <= 1) continue;
+    const obsEntries    = entries.filter(e => e.isObs);
+    const nonObsEntries = entries.filter(e => !e.isObs);
+    if (obsEntries.length > 0 && nonObsEntries.length > 0) {
+      for (const e of nonObsEntries) {
+        const key = `${e.clinicId}:${e.slotType}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        violations.push({
+          label: `${e.personName} — OBS conflict on ${e.clinic.day}: also assigned ${e.slotType} @ ${e.clinic.location}`,
+          clinicId: e.clinicId,
+          personName: e.personName,
+        });
+      }
+    } else {
+      for (let i = 0; i < nonObsEntries.length; i++) {
+        for (let j = i + 1; j < nonObsEntries.length; j++) {
+          const ei = nonObsEntries[i];
+          const ej = nonObsEntries[j];
+          const ri = slotEffectiveRange(ei.slotType, ei.clinic);
+          const rj = slotEffectiveRange(ej.slotType, ej.clinic);
+          if (rangesOverlap(ri, rj)) {
+            const key = `${ei.clinicId}:${ei.slotType}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              violations.push({
+                label: `${ei.personName} — overlap on ${ei.clinic.day}: ${ei.slotType} @ ${ei.clinic.location} conflicts with ${ej.slotType} @ ${ej.clinic.location}`,
+                clinicId: ei.clinicId,
+                personName: ei.personName,
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+  return violations;
+}
+
+/**
+ * Combined post gate: timeless slots + time-overlap conflicts.
+ * Returns array of { label, clinicId, type } — empty means clean to post.
+ */
+export function getPostViolations(clinics, people) {
+  const timeless  = findTimelessAssignments(clinics, people).map(v => ({ ...v, type: 'timeless' }));
+  const conflicts = findBoardConflicts(clinics, people).map(v => ({ ...v, type: 'conflict' }));
+  return [...timeless, ...conflicts];
 }
 
 // ─── Self-contained tests ───────────────────────────────────────────────────
