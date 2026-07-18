@@ -67,8 +67,8 @@ html, body, #root {
 
 /* ─── Layout ─────────────────────────── */
 .app { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
-.main { flex: 1; overflow: hidden; display: flex; }
-.admin-layout { display: flex; width: 100%; height: 100%; overflow: hidden; }
+.main { flex: 1; min-height: 0; overflow: hidden; display: flex; }
+.admin-layout { display: flex; width: 100%; min-height: 0; overflow: hidden; }
 
 /* ─── Top Bar ─────────────────────────── */
 .topbar {
@@ -329,7 +329,7 @@ html, body, #root {
    flex children OUTSIDE board-scroll, so they are never in the scroll area
    and never need sticky positioning — they simply don't move. board-scroll
    is the sole scroll container for the clinic grid. */
-.board-wrapper { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.board-wrapper { flex: 1; min-height: 0; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
 .board-search {
   padding: 12px 16px; border-bottom: 0.5px solid var(--border); flex-shrink: 0;
   display: flex; align-items: center;
@@ -362,7 +362,7 @@ html, body, #root {
   padding: 8px 16px;
 }
 
-.board-scroll { flex: 1; overflow: auto; }
+.board-scroll { flex: 1; min-height: 0; overflow: auto; }
 .board-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(200px, 1fr));
