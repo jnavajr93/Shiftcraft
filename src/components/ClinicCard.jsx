@@ -309,7 +309,6 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
           'slot-row',
           isOver && interactive ? 'drop-target' : '',
           showWarning ? 'warning-slot' : '',
-          isTimelessViolation ? 'slot-row--timeless' : '',
         ].filter(Boolean).join(' ')}
         onClick={handleRowClick}
         style={{ cursor: interactive ? 'pointer' : 'default' }}
@@ -377,7 +376,7 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
           />
         ) : (
           <div
-            className={`variable-time-row${isAdmin && clinicOpen ? ' editable' : ''}`}
+            className={`variable-time-row${isAdmin && clinicOpen ? ' editable' : ''}${isTimelessViolation ? ' slot-row--timeless' : ''}`}
             onClick={isAdmin && clinicOpen ? (e) => { e.stopPropagation(); setEditingTime(true); } : undefined}
           >
             <span className="slot-time-label">{variableTimeDisplay ?? (isAdmin && clinicOpen ? 'Set time…' : '—')}</span>
