@@ -1697,3 +1697,125 @@ html, body, #root {
 @media (max-width: 640px) {
   .topbar-mobile-hidden { display: none !important; }
 }
+
+/* ─── Absence calendar: legend ─────────────────────────────────────────────── */
+.absence-legend {
+  display: flex; flex-wrap: wrap; gap: 6px 14px;
+  padding: 8px 14px 10px;
+  border-bottom: 0.5px solid var(--border);
+  flex-shrink: 0;
+}
+.absence-legend-item {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 10.5px; color: var(--text-secondary);
+}
+.absence-legend-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+
+/* ─── Absence modal: category picker ───────────────────────────────────────── */
+.absence-type-btn {
+  display: flex; align-items: center; gap: 7px;
+  padding: 7px 10px; border-radius: 7px;
+  border: 1.5px solid var(--border);
+  background: var(--bg-surface); cursor: pointer;
+  font-size: 12px; font-weight: 500; color: var(--text-primary);
+  transition: border-color 100ms, background 100ms;
+  text-align: left;
+}
+.absence-type-btn:hover { background: var(--bg-elevated); }
+.absence-type-btn--active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-surface));
+}
+.absence-type-swatch {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+}
+
+/* ─── Absence history view ──────────────────────────────────────────────────── */
+.absence-history {
+  display: flex; flex-direction: column; overflow: hidden;
+  flex: 1; min-height: 0;
+}
+.absence-history-controls {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  padding: 12px 16px; border-bottom: 0.5px solid var(--border); flex-shrink: 0;
+}
+.absence-history-controls select {
+  height: 30px; padding: 0 8px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--bg-surface);
+  color: var(--text-primary); font-size: 12px; cursor: pointer;
+}
+.absence-history-year-pills,
+.absence-history-filter-pills {
+  display: flex; gap: 5px; flex-wrap: wrap;
+}
+.absence-type-filter-btn {
+  display: flex; align-items: center; gap: 5px;
+  padding: 4px 9px; border-radius: 999px;
+  border: 1.5px solid var(--border);
+  background: var(--bg-surface); cursor: pointer;
+  font-size: 11px; font-weight: 500; color: var(--text-secondary);
+  transition: border-color 100ms, background 100ms, color 100ms;
+}
+.absence-type-filter-btn:hover { border-color: var(--text-secondary); }
+.absence-type-filter-btn--active {
+  border-color: transparent;
+  background: var(--accent);
+  color: #fff;
+}
+.absence-history-summary {
+  flex-shrink: 0;
+  padding: 12px 16px;
+  border-bottom: 0.5px solid var(--border);
+  background: var(--bg-surface);
+}
+.absence-history-summary-header {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px;
+}
+.absence-history-summary-counts {
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
+.absence-history-count-chip {
+  display: flex; align-items: center; gap: 5px;
+  padding: 4px 9px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; color: #fff;
+}
+.absence-history-count-chip span { opacity: 0.88; font-weight: 400; }
+.absence-history-list {
+  flex: 1; min-height: 0; overflow-y: auto; padding: 4px 0;
+}
+.absence-history-empty {
+  padding: 32px 16px; text-align: center;
+  font-size: 13px; color: var(--text-muted);
+}
+.absence-history-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 16px; border-bottom: 0.5px solid var(--border);
+  transition: background 80ms;
+}
+.absence-history-row:hover { background: var(--bg-surface); }
+.absence-history-row-dot {
+  width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+}
+.absence-history-row-date {
+  font-size: 11.5px; font-weight: 600; color: var(--text-primary);
+  min-width: 90px; flex-shrink: 0;
+}
+.absence-history-row-person {
+  font-size: 11.5px; font-weight: 600; color: var(--text-secondary);
+  min-width: 90px; flex-shrink: 0;
+}
+.absence-history-row-type {
+  font-size: 11px; font-weight: 600; padding: 2px 7px;
+  border-radius: 999px; color: #fff; flex-shrink: 0;
+}
+.absence-history-row-note {
+  font-size: 11px; color: var(--text-secondary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1;
+}
+.absence-history-row-meta {
+  font-size: 10px; color: var(--text-muted); flex-shrink: 0;
+  white-space: nowrap;
+}

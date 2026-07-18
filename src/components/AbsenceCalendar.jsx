@@ -1,6 +1,21 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ChevronLeft, ChevronRight, X, Clock, Plus, Trash2, AlertCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Clock, Plus, Trash2, AlertCircle, History } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
+
+// ─── Category definitions ─────────────────────────────────────────────────────
+
+export const ABSENCE_TYPES = [
+  { key: 'Callout',  label: 'Last-minute callout', short: 'Callout',  color: '#ef4444' },
+  { key: 'Approved', label: 'Approved time off',   short: 'Approved', color: '#22c55e' },
+  { key: 'Sick',     label: 'Sick',                short: 'Sick',     color: '#3b82f6' },
+  { key: 'Request',  label: 'Request / pending',   short: 'Request',  color: '#f59e0b' },
+  { key: 'Partial',  label: 'Partial day',         short: 'Partial',  color: '#8b5cf6' },
+];
+
+const TYPE_MAP  = new Map(ABSENCE_TYPES.map(t => [t.key, t]));
+const colorOf   = (key) => TYPE_MAP.get(key)?.color ?? '#6b7280';
+const labelOf   = (key) => TYPE_MAP.get(key)?.label ?? key;
+const shortOf   = (key) => TYPE_MAP.get(key)?.short ?? key;
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
@@ -13,14 +28,12 @@ const MONTHS = [
 ];
 const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-const TYPE_OPTIONS = ['Vacation', 'Sick', 'Personal', 'Partial'];
-const TYPE_COLOR = { Vacation: '#3b82f6', Sick: '#ef4444', Personal: '#8b5cf6', Partial: '#f59e0b' };
-
 function formatDateDisplay(str) {
   const d = parseUTC(str);
-  return `${MONTHS[d.getUTCMonth()].slice(0,3)} ${d.getUTCDate()}`;
+  return `${MONTHS[d.getUTCMonth()].slice(0, 3)} ${d.getUTCDate()}`;
 }
 function formatRange(start, end) {
+  if (!start) return '';
   if (start === end) return formatDateDisplay(start);
   const s = parseUTC(start), e = parseUTC(end);
   if (s.getUTCFullYear() === e.getUTCFullYear()) {
@@ -31,10 +44,10 @@ function formatRange(start, end) {
   return `${formatDateDisplay(start)} – ${formatDateDisplay(end)}, ${e.getUTCFullYear()}`;
 }
 
-// Build 6-row × 7-col grid (Sun→Sat) for the given year/month (0-indexed)
+// Build 6-row × 7-col grid (Sun→Sat)
 function buildGrid(year, month) {
   const firstDay = new Date(Date.UTC(year, month, 1));
-  const dow = firstDay.getUTCDay(); // 0=Sun
+  const dow = firstDay.getUTCDay();
   const cur = new Date(firstDay);
   cur.setUTCDate(1 - dow);
   const grid = [];
@@ -49,12 +62,27 @@ function buildGrid(year, month) {
   return grid;
 }
 
+// ─── Legend ───────────────────────────────────────────────────────────────────
+
+function Legend() {
+  return (
+    <div className="absence-legend">
+      {ABSENCE_TYPES.map(t => (
+        <div key={t.key} className="absence-legend-item">
+          <span className="absence-legend-dot" style={{ background: t.color }} />
+          <span>{t.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Absence modal ────────────────────────────────────────────────────────────
 
 function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, managerInitials, onSave, onDelete, onClose }) {
   const isEdit = mode === 'edit';
   const [personKey, setPersonKey] = useState(absence?.person_name ?? '');
-  const [type,      setType]      = useState(absence?.type ?? 'Vacation');
+  const [type,      setType]      = useState(absence?.type ?? 'Approved');
   const [startD,    setStartD]    = useState(absence?.start_date ?? initStart ?? '');
   const [endD,      setEndD]      = useState(absence?.end_date   ?? initEnd   ?? '');
   const [pStart,    setPStart]    = useState(absence?.partial_start ?? '08:00');
@@ -62,16 +90,14 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, man
   const [note,      setNote]      = useState(absence?.note ?? '');
   const [saving,    setSaving]    = useState(false);
   const [deleting,  setDeleting]  = useState(false);
-  const [dupWarning, setDupWarning] = useState(null); // overlap entry or null
+  const [dupWarning, setDupWarning] = useState(null);
 
-  // Soft duplicate check
   const checkDup = useCallback(() => {
     if (!personKey || !startD || !endD) return null;
-    const dup = absences.find(a => {
+    return absences.find(a => {
       if (isEdit && a.id === absence?.id) return false;
       return a.person_name === personKey && a.end_date >= startD && a.start_date <= endD;
-    });
-    return dup ?? null;
+    }) ?? null;
   }, [personKey, startD, endD, absences, isEdit, absence]);
 
   const handleSubmit = async (force = false) => {
@@ -119,29 +145,31 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, man
             <label className="setup-label">Person</label>
             <select className="setup-input" value={personKey} onChange={e => setPersonKey(e.target.value)}>
               <option value="">— select —</option>
-              {[...people].sort((a,b) => a.name.localeCompare(b.name)).map(p => (
+              {[...people].sort((a, b) => a.name.localeCompare(b.name)).map(p => (
                 <option key={p.id} value={p.name.trim().toLowerCase()}>{p.name}</option>
               ))}
             </select>
           </div>
 
-          {/* Type */}
+          {/* Category */}
           <div>
-            <label className="setup-label">Type</label>
+            <label className="setup-label">Category</label>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {TYPE_OPTIONS.map(t => (
+              {ABSENCE_TYPES.map(t => (
                 <button
-                  key={t}
+                  key={t.key}
                   type="button"
-                  onClick={() => setType(t)}
-                  className="pill"
+                  onClick={() => setType(t.key)}
+                  className="absence-type-btn"
                   style={{
-                    background: type === t ? TYPE_COLOR[t] : undefined,
-                    borderColor: type === t ? TYPE_COLOR[t] : undefined,
-                    color: type === t ? '#fff' : undefined,
+                    '--type-color': t.color,
+                    background:     type === t.key ? t.color : undefined,
+                    borderColor:    type === t.key ? t.color : undefined,
+                    color:          type === t.key ? '#fff'  : undefined,
                   }}
                 >
-                  {t}
+                  <span className="absence-type-swatch" style={{ background: t.color, opacity: type === t.key ? 0 : 1 }} />
+                  {t.label}
                 </button>
               ))}
             </div>
@@ -151,11 +179,13 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, man
           <div style={{ display: 'flex', gap: 12 }}>
             <div style={{ flex: 1 }}>
               <label className="setup-label">Start date</label>
-              <input type="date" className="setup-input" value={startD} onChange={e => { setStartD(e.target.value); if (e.target.value > endD) setEndD(e.target.value); }} />
+              <input type="date" className="setup-input" value={startD}
+                onChange={e => { setStartD(e.target.value); if (e.target.value > endD) setEndD(e.target.value); }} />
             </div>
             <div style={{ flex: 1 }}>
               <label className="setup-label">End date</label>
-              <input type="date" className="setup-input" value={endD} min={startD} onChange={e => setEndD(e.target.value)} />
+              <input type="date" className="setup-input" value={endD} min={startD}
+                onChange={e => setEndD(e.target.value)} />
             </div>
           </div>
 
@@ -176,7 +206,7 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, man
           {/* Note */}
           <div>
             <label className="setup-label">Note <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span></label>
-            <input className="setup-input" value={note} onChange={e => setNote(e.target.value)} placeholder="e.g. pre-approved, FMLA…" />
+            <input className="setup-input" value={note} onChange={e => setNote(e.target.value)} placeholder="e.g. FMLA, pre-approved…" />
           </div>
 
           {/* Duplicate warning */}
@@ -184,13 +214,15 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, man
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '10px 12px', background: 'rgba(245,158,11,0.1)', borderRadius: 8, border: '0.5px solid rgba(245,158,11,0.4)' }}>
               <AlertCircle size={14} style={{ color: '#f59e0b', flexShrink: 0, marginTop: 1 }} />
               <div style={{ fontSize: 12, lineHeight: 1.5 }}>
-                <strong>{person?.name ?? dupWarning.person_name}</strong> already has <em>{dupWarning.type}</em>{' '}
+                <strong>{person?.name ?? dupWarning.person_name}</strong> already has <em>{labelOf(dupWarning.type)}</em>{' '}
                 ({formatRange(dupWarning.start_date, dupWarning.end_date)}) overlapping these dates.
                 <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
-                  <button className="btn btn-primary btn-pill" style={{ fontSize: 11, minHeight: 26 }} onClick={() => handleSubmit(true)} disabled={saving}>
+                  <button className="btn btn-primary btn-pill" style={{ fontSize: 11, minHeight: 26 }}
+                    onClick={() => handleSubmit(true)} disabled={saving}>
                     {saving ? 'Adding…' : 'Add anyway'}
                   </button>
-                  <button className="btn btn-pill" style={{ fontSize: 11, minHeight: 26 }} onClick={() => setDupWarning(null)}>
+                  <button className="btn btn-pill" style={{ fontSize: 11, minHeight: 26 }}
+                    onClick={() => setDupWarning(null)}>
                     Cancel
                   </button>
                 </div>
@@ -199,11 +231,11 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, man
           )}
         </div>
 
-        {/* Footer */}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', padding: '12px 24px', borderTop: '0.5px solid var(--border)', flexShrink: 0 }}>
           <div>
             {isEdit && (
-              <button className="btn btn-pill" style={{ fontSize: 12, color: '#dc2626', borderColor: '#dc2626' }} onClick={handleDelete} disabled={deleting}>
+              <button className="btn btn-pill" style={{ fontSize: 12, color: '#dc2626', borderColor: '#dc2626' }}
+                onClick={handleDelete} disabled={deleting}>
                 {deleting ? 'Deleting…' : <><Trash2 size={13} /> Delete</>}
               </button>
             )}
@@ -227,18 +259,15 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, man
 function WeekRow({ week, viewMonth, absences, personByKey, todayStr, dragStart, dragEnd, onDayMouseDown, onDayMouseEnter, onDayClick, onAbsenceClick }) {
   const weekStart = toDateStr(week[0]);
   const weekEnd   = toDateStr(week[6]);
-
   const dragMin = dragStart && dragEnd ? (dragStart < dragEnd ? dragStart : dragEnd) : dragStart;
   const dragMax = dragStart && dragEnd ? (dragStart > dragEnd ? dragStart : dragEnd) : dragStart;
 
-  // Absences overlapping this week, sorted stably for lane assignment
   const weekAbsences = absences
     .filter(a => a.end_date >= weekStart && a.start_date <= weekEnd)
     .sort((a, b) => a.start_date.localeCompare(b.start_date) || a.person_name.localeCompare(b.person_name));
 
   return (
     <div className="absence-week-row">
-      {/* Day cells */}
       {week.map((day, col) => {
         const ds = toDateStr(day);
         const isThisMonth = day.getUTCMonth() === viewMonth;
@@ -259,7 +288,6 @@ function WeekRow({ week, viewMonth, absences, personByKey, todayStr, dragStart, 
         );
       })}
 
-      {/* Bars overlay — absolutely positioned over the week row */}
       {weekAbsences.length > 0 && (
         <div className="absence-bars-layer" style={{ pointerEvents: 'none' }}>
           {weekAbsences.map((absence, laneIdx) => {
@@ -269,20 +297,20 @@ function WeekRow({ week, viewMonth, absences, personByKey, todayStr, dragStart, 
             const endCol   = week.findIndex(d => toDateStr(d) === barEnd);
             if (startCol < 0 || endCol < 0) return null;
 
-            const person = personByKey.get(absence.person_name);
-            const color  = person?.color ?? TYPE_COLOR[absence.type] ?? '#6b7280';
-            const label  = `${person?.name ?? absence.person_name} · ${absence.type}`;
-            const isStart = absence.start_date >= weekStart;
-            const isEnd   = absence.end_date   <= weekEnd;
+            const person   = personByKey.get(absence.person_name);
+            const color    = colorOf(absence.type);
+            const label    = `${person?.name ?? absence.person_name} · ${shortOf(absence.type)}`;
+            const isStart  = absence.start_date >= weekStart;
+            const isEnd    = absence.end_date   <= weekEnd;
 
             return (
               <div
                 key={absence.id}
                 className="absence-bar"
                 style={{
-                  left:    `calc(${startCol} / 7 * 100% + 2px)`,
-                  width:   `calc(${endCol - startCol + 1} / 7 * 100% - 4px)`,
-                  top:     `${30 + laneIdx * 22}px`,
+                  left:       `calc(${startCol} / 7 * 100% + 2px)`,
+                  width:      `calc(${endCol - startCol + 1} / 7 * 100% - 4px)`,
+                  top:        `${30 + laneIdx * 22}px`,
                   background: color,
                   borderRadius: `${isStart ? 3 : 0}px ${isEnd ? 3 : 0}px ${isEnd ? 3 : 0}px ${isStart ? 3 : 0}px`,
                   pointerEvents: 'auto',
@@ -314,18 +342,18 @@ function UpcomingPanel({ absences, personByKey, todayStr, onAbsenceClick }) {
       <div className="absence-upcoming-title">Upcoming 30 days</div>
       <div className="absence-upcoming-list">
         {upcoming.length === 0 && (
-          <div style={{ color: 'var(--text-muted)', fontSize: 12, padding: '12px 0', textAlign: 'center' }}>No upcoming absences</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 12, padding: '16px 0', textAlign: 'center' }}>No upcoming absences</div>
         )}
         {upcoming.map(a => {
           const person = personByKey.get(a.person_name);
-          const color  = person?.color ?? TYPE_COLOR[a.type] ?? '#6b7280';
+          const color  = colorOf(a.type);
           return (
             <div key={a.id} className="absence-upcoming-item" onClick={() => onAbsenceClick(a)}>
               <div className="absence-upcoming-dot" style={{ background: color }} />
               <div className="absence-upcoming-info">
                 <div className="absence-upcoming-name">{person?.name ?? a.person_name}</div>
                 <div className="absence-upcoming-detail">
-                  {a.type} · {formatRange(a.start_date, a.end_date)}
+                  {labelOf(a.type)} · {formatRange(a.start_date, a.end_date)}
                   {a.type === 'Partial' && a.partial_start && (
                     <span style={{ marginLeft: 4, opacity: 0.7 }}>({a.partial_start}–{a.partial_end})</span>
                   )}
@@ -340,16 +368,172 @@ function UpcomingPanel({ absences, personByKey, todayStr, onAbsenceClick }) {
   );
 }
 
+// ─── History view ─────────────────────────────────────────────────────────────
+
+function AbsenceHistory({ absences, people, personByKey, onAbsenceClick }) {
+  const [selectedKey, setSelectedKey] = useState('');
+  const [selectedYear, setSelectedYear] = useState('all');
+  const [activeTypes, setActiveTypes] = useState(new Set(ABSENCE_TYPES.map(t => t.key)));
+
+  // All years present in absences data
+  const allYears = [...new Set(absences.map(a => a.start_date.slice(0, 4)))].sort().reverse();
+
+  const personAbsences = absences.filter(a => {
+    if (selectedKey && a.person_name !== selectedKey) return false;
+    if (selectedYear !== 'all' && !a.start_date.startsWith(selectedYear)) return false;
+    if (!activeTypes.has(a.type)) return false;
+    return true;
+  }).sort((a, b) => b.start_date.localeCompare(a.start_date));
+
+  // Summary counts by category for selected person + year (ignoring type filter for summary)
+  const summaryBase = absences.filter(a => {
+    if (selectedKey && a.person_name !== selectedKey) return false;
+    if (selectedYear !== 'all' && !a.start_date.startsWith(selectedYear)) return false;
+    return true;
+  });
+  const counts = Object.fromEntries(ABSENCE_TYPES.map(t => [
+    t.key,
+    summaryBase.filter(a => a.type === t.key).length,
+  ]));
+  const totalDays = summaryBase.reduce((sum, a) => {
+    const start = parseUTC(a.start_date), end = parseUTC(a.end_date);
+    return sum + Math.round((end - start) / 86400000) + 1;
+  }, 0);
+
+  const toggleType = (key) => {
+    setActiveTypes(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) { if (next.size > 1) next.delete(key); }
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const selectedPerson = personByKey.get(selectedKey);
+
+  return (
+    <div className="absence-history">
+      {/* Controls */}
+      <div className="absence-history-controls">
+        {/* Person selector */}
+        <select
+          className="setup-input"
+          style={{ maxWidth: 200, fontSize: 13 }}
+          value={selectedKey}
+          onChange={e => setSelectedKey(e.target.value)}
+        >
+          <option value="">All staff</option>
+          {[...people].sort((a, b) => a.name.localeCompare(b.name)).map(p => (
+            <option key={p.id} value={p.name.trim().toLowerCase()}>{p.name}</option>
+          ))}
+        </select>
+
+        {/* Year filter */}
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          <button
+            className={`pill small${selectedYear === 'all' ? ' active' : ''}`}
+            onClick={() => setSelectedYear('all')}
+          >All time</button>
+          {allYears.map(y => (
+            <button
+              key={y}
+              className={`pill small${selectedYear === y ? ' active' : ''}`}
+              onClick={() => setSelectedYear(y)}
+            >{y}</button>
+          ))}
+        </div>
+
+        {/* Category filter */}
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          {ABSENCE_TYPES.map(t => (
+            <button
+              key={t.key}
+              className="absence-type-filter-btn"
+              style={{
+                background:  activeTypes.has(t.key) ? t.color : undefined,
+                borderColor: activeTypes.has(t.key) ? t.color : undefined,
+                color:       activeTypes.has(t.key) ? '#fff'  : undefined,
+                opacity:     activeTypes.has(t.key) ? 1 : 0.45,
+              }}
+              onClick={() => toggleType(t.key)}
+            >
+              {t.short}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Summary counts */}
+      {summaryBase.length > 0 && (
+        <div className="absence-history-summary">
+          <div className="absence-history-summary-header">
+            {selectedPerson
+              ? <><span style={{ fontWeight: 700 }}>{selectedPerson.name}</span> — </>
+              : 'All staff — '
+            }
+            {selectedYear !== 'all' ? selectedYear : 'all time'} · {totalDays} day{totalDays !== 1 ? 's' : ''} total
+          </div>
+          <div className="absence-history-summary-counts">
+            {ABSENCE_TYPES.filter(t => counts[t.key] > 0).map(t => (
+              <span key={t.key} className="absence-history-count-chip"
+                style={{ background: `${t.color}18`, borderColor: `${t.color}40`, color: t.color }}>
+                <span style={{ fontWeight: 700 }}>{counts[t.key]}</span> {t.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Chronological list */}
+      <div className="absence-history-list">
+        {personAbsences.length === 0 && (
+          <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: '32px 0', textAlign: 'center' }}>
+            {selectedKey ? 'No absences recorded for this person' : 'No absences match the selected filters'}
+          </div>
+        )}
+        {personAbsences.map(a => {
+          const person = personByKey.get(a.person_name);
+          const color  = colorOf(a.type);
+          return (
+            <div key={a.id} className="absence-history-row" onClick={() => onAbsenceClick(a)}>
+              <div className="absence-history-row-dot" style={{ background: color }} />
+              <div className="absence-history-row-date">{formatRange(a.start_date, a.end_date)}</div>
+              {!selectedKey && (
+                <div className="absence-history-row-person" style={{ color: person?.color }}>
+                  {person?.name ?? a.person_name}
+                </div>
+              )}
+              <div className="absence-history-row-type" style={{ color }}>
+                {labelOf(a.type)}
+                {a.type === 'Partial' && a.partial_start && (
+                  <span style={{ opacity: 0.7, fontSize: 10, marginLeft: 5 }}>
+                    {a.partial_start}–{a.partial_end}
+                  </span>
+                )}
+              </div>
+              {a.note && <div className="absence-history-row-note">{a.note}</div>}
+              {a.entered_by && (
+                <div className="absence-history-row-meta">entered by {a.entered_by}</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main calendar ────────────────────────────────────────────────────────────
 
 export default function AbsenceCalendar({ onClose }) {
   const { data, absences, addAbsence, editAbsence, removeAbsence, managerInitials, addLog } = useApp();
-  const people    = data.people ?? [];
+  const people      = data.people ?? [];
   const personByKey = new Map(people.map(p => [p.name.trim().toLowerCase(), p]));
 
-  const todayStr = toDateStr(new Date());
+  const todayStr  = toDateStr(new Date());
   const todayDate = new Date();
 
+  const [view,      setView]      = useState('calendar'); // 'calendar' | 'history'
   const [viewYear,  setViewYear]  = useState(todayDate.getUTCFullYear());
   const [viewMonth, setViewMonth] = useState(todayDate.getUTCMonth());
   const [modal,     setModal]     = useState(null);
@@ -371,7 +555,6 @@ export default function AbsenceCalendar({ onClose }) {
   };
   const goToday = () => { setViewYear(todayDate.getUTCFullYear()); setViewMonth(todayDate.getUTCMonth()); };
 
-  // Drag handlers
   const handleDayMouseDown = useCallback((ds) => {
     dragging.current = true;
     setDragStart(ds);
@@ -393,12 +576,11 @@ export default function AbsenceCalendar({ onClose }) {
     }
   }, [dragStart]);
 
-  // Global mouseup to end drag
   useEffect(() => {
     const onUp = () => {
       if (dragging.current && dragStart) {
-        const start = dragStart < dragEnd ? dragStart : dragEnd ?? dragStart;
-        const end   = dragStart > dragEnd ? dragStart : dragEnd ?? dragStart;
+        const start = dragStart < (dragEnd ?? dragStart) ? dragStart : (dragEnd ?? dragStart);
+        const end   = dragStart > (dragEnd ?? dragStart) ? dragStart : (dragEnd ?? dragStart);
         dragging.current = false;
         setDragStart(null);
         setDragEnd(null);
@@ -418,14 +600,16 @@ export default function AbsenceCalendar({ onClose }) {
     if (modal?.mode === 'edit') {
       result = await editAbsence(...args);
       if (!result.error) {
-        const person = personByKey.get(args[1]?.person_name ?? modal?.absence?.person_name);
-        addLog({ action: 'Absence updated', personName: person?.name ?? args[1]?.person_name ?? '?', day: '', detail: `${args[1]?.type} ${formatRange(args[1]?.start_date, args[1]?.end_date)}` });
+        const p = personByKey.get(args[1]?.person_name ?? modal?.absence?.person_name);
+        addLog({ action: 'Absence updated', personName: p?.name ?? '?', day: '',
+          detail: `${labelOf(args[1]?.type)} ${formatRange(args[1]?.start_date, args[1]?.end_date)}` });
       }
     } else {
       result = await addAbsence(...args);
       if (!result.error) {
-        const person = personByKey.get(args[0]?.person_name);
-        addLog({ action: 'Absence added', personName: person?.name ?? args[0]?.person_name ?? '?', day: '', detail: `${args[0]?.type} ${formatRange(args[0]?.start_date, args[0]?.end_date)}` });
+        const p = personByKey.get(args[0]?.person_name);
+        addLog({ action: 'Absence added', personName: p?.name ?? '?', day: '',
+          detail: `${labelOf(args[0]?.type)} ${formatRange(args[0]?.start_date, args[0]?.end_date)}` });
       }
     }
     if (!result.error) setModal(null);
@@ -433,10 +617,11 @@ export default function AbsenceCalendar({ onClose }) {
 
   const handleDelete = useCallback(async (id) => {
     const absence = modal?.absence;
-    const result = await removeAbsence(id);
+    const result  = await removeAbsence(id);
     if (!result.error) {
-      const person = personByKey.get(absence?.person_name);
-      addLog({ action: 'Absence removed', personName: person?.name ?? absence?.person_name ?? '?', day: '', detail: `${absence?.type} ${formatRange(absence?.start_date, absence?.end_date)}` });
+      const p = personByKey.get(absence?.person_name);
+      addLog({ action: 'Absence removed', personName: p?.name ?? '?', day: '',
+        detail: `${labelOf(absence?.type)} ${formatRange(absence?.start_date, absence?.end_date)}` });
       setModal(null);
     }
   }, [modal, removeAbsence, addLog, personByKey]);
@@ -444,64 +629,88 @@ export default function AbsenceCalendar({ onClose }) {
   return (
     <div className="absence-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="absence-panel">
-        {/* Header */}
+
+        {/* ── Header ── */}
         <div className="absence-header">
-          <button className="btn btn-icon" onClick={prevMonth} title="Previous month"><ChevronLeft size={16} /></button>
-          <span className="absence-month-label">{MONTHS[viewMonth]} {viewYear}</span>
-          <button className="btn btn-icon" onClick={nextMonth} title="Next month"><ChevronRight size={16} /></button>
-          <button className="btn btn-pill" style={{ fontSize: 11, minHeight: 26, padding: '2px 10px' }} onClick={goToday}>
-            This month
-          </button>
+          {view === 'calendar' ? (
+            <>
+              <button className="btn btn-icon" onClick={prevMonth} title="Previous month"><ChevronLeft size={16} /></button>
+              <span className="absence-month-label">{MONTHS[viewMonth]} {viewYear}</span>
+              <button className="btn btn-icon" onClick={nextMonth} title="Next month"><ChevronRight size={16} /></button>
+              <button className="btn btn-pill" style={{ fontSize: 11, minHeight: 26, padding: '2px 10px' }} onClick={goToday}>
+                This month
+              </button>
+            </>
+          ) : (
+            <span className="absence-month-label" style={{ paddingLeft: 4 }}>Absence History</span>
+          )}
           <div style={{ flex: 1 }} />
+          {/* View toggle */}
           <button
-            className="btn btn-pill"
+            className={`btn btn-pill topbar-mobile-hidden${view === 'history' ? ' active' : ''}`}
             style={{ fontSize: 11, minHeight: 26, padding: '2px 10px', gap: 4 }}
-            onClick={() => setModal({ mode: 'add', initStart: todayStr, initEnd: todayStr })}
+            onClick={() => setView(v => v === 'calendar' ? 'history' : 'calendar')}
+            title={view === 'calendar' ? 'View absence history' : 'Back to calendar'}
           >
-            <Plus size={12} /> Add
+            <History size={13} />
+            {view === 'calendar' ? 'History' : 'Calendar'}
           </button>
+          {view === 'calendar' && (
+            <button
+              className="btn btn-pill"
+              style={{ fontSize: 11, minHeight: 26, padding: '2px 10px', gap: 4 }}
+              onClick={() => setModal({ mode: 'add', initStart: todayStr, initEnd: todayStr })}
+            >
+              <Plus size={12} /> Add
+            </button>
+          )}
           <button className="btn btn-icon" onClick={onClose} title="Close"><X size={16} /></button>
         </div>
 
-        {/* Body: calendar + upcoming */}
-        <div className="absence-body">
-          <div className="absence-cal-section">
-            {/* Day-of-week headers */}
-            <div className="absence-dow-row">
-              {DOW.map(d => <div key={d} className="absence-dow-cell">{d}</div>)}
+        {/* ── Body ── */}
+        {view === 'calendar' ? (
+          <div className="absence-body">
+            <div className="absence-cal-section">
+              <div className="absence-dow-row">
+                {DOW.map(d => <div key={d} className="absence-dow-cell">{d}</div>)}
+              </div>
+              <Legend />
+              <div className="absence-grid">
+                {grid.map((week, wi) => (
+                  <WeekRow
+                    key={wi}
+                    week={week}
+                    viewMonth={viewMonth}
+                    absences={absences}
+                    personByKey={personByKey}
+                    todayStr={todayStr}
+                    dragStart={dragStart}
+                    dragEnd={dragEnd}
+                    onDayMouseDown={handleDayMouseDown}
+                    onDayMouseEnter={handleDayMouseEnter}
+                    onDayClick={handleDayClick}
+                    onAbsenceClick={handleAbsenceClick}
+                  />
+                ))}
+              </div>
             </div>
-
-            {/* Month grid */}
-            <div className="absence-grid">
-              {grid.map((week, wi) => (
-                <WeekRow
-                  key={wi}
-                  week={week}
-                  viewMonth={viewMonth}
-                  absences={absences}
-                  personByKey={personByKey}
-                  todayStr={todayStr}
-                  dragStart={dragStart}
-                  dragEnd={dragEnd}
-                  onDayMouseDown={handleDayMouseDown}
-                  onDayMouseEnter={handleDayMouseEnter}
-                  onDayClick={handleDayClick}
-                  onAbsenceClick={handleAbsenceClick}
-                />
-              ))}
-            </div>
+            <UpcomingPanel
+              absences={absences}
+              personByKey={personByKey}
+              todayStr={todayStr}
+              onAbsenceClick={handleAbsenceClick}
+            />
           </div>
-
-          <UpcomingPanel
+        ) : (
+          <AbsenceHistory
             absences={absences}
+            people={people}
             personByKey={personByKey}
-            todayStr={todayStr}
             onAbsenceClick={handleAbsenceClick}
           />
-        </div>
+        )}
       </div>
 
-      {/* Add / edit modal */}
       {modal && (
         <AbsenceModal
           mode={modal.mode}
