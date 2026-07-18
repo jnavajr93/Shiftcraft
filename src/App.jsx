@@ -23,7 +23,7 @@ import UnassignedStaff from './components/UnassignedStaff.jsx';
 import ConflictBanner from './components/ConflictBanner.jsx';
 
 function AppContent() {
-  const { data, isAdmin, isLoading, loadError, saveStatus, assignSlot, assignTask } = useApp();
+  const { data, isAdmin, boardClinics, isLoading, loadError, saveStatus, assignSlot, assignTask } = useApp();
 
   if (isLoading) {
     return (
@@ -163,8 +163,8 @@ function AppContent() {
                     onPersonClick={openPerson}
                     onEditClinic={isAdmin ? setConfigClinicId : () => {}}
                   />
-                  <AdditionalTasks onPersonClick={openPerson} />
-                  <UnassignedStaff onPersonClick={openPerson} />
+                  {(isAdmin || boardClinics !== null) && <AdditionalTasks onPersonClick={openPerson} />}
+                  {isAdmin && <UnassignedStaff onPersonClick={openPerson} />}
                 </div>
                 {isAdmin && <HoursBar />}
               </div>
