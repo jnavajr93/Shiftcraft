@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, X, Clock, Plus, Trash2, AlertCircle, History, Building2 } from 'lucide-react';
 import { useApp, mondayOfWeek, isoWeek } from '../context/AppContext.jsx';
 import { getFederalHolidays } from '../utils/federalHolidays.js';
+import { CLOSURE_LOCATIONS, buildClosureMap } from '../utils/holidayClosures.js';
 
 // ─── Category definitions ─────────────────────────────────────────────────────
 
@@ -536,35 +537,79 @@ function UpcomingPanel({ absences, closures, personByKey, todayStr, onAbsenceCli
 
 // ─── Day panel (anchored near clicked cell) ───────────────────────────────────
 
-function DayPanel({ dateStr, rect, absences, personByKey, holidayMap, openOverrideSet, openOverrideById, dayClosures, isAdmin, managerInitials, onClose, onJumpAndClose, onAddAbsence, onAbsenceClick, onToggleHolidayOpen, onAddClosure, onDeleteClosure }) {
+function DayPanel({ dateStr, rect, absences, personByKey, holidayDetail, dayClosures, isAdmin, managerInitials, onClose, onJumpAndClose, onAddAbsence, onAbsenceClick, onToggleHolidayOpen, onMoveHoliday, onResetMove, onSetHolidayScope, onAddClosure, onDeleteClosure }) {
   const dayAbsences = absences.filter(a => a.start_date <= dateStr && a.end_date >= dateStr);
   const d = parseUTC(dateStr);
   const dateLabel = `${DOW[d.getUTCDay()]}, ${MONTHS[d.getUTCMonth()].slice(0, 3)} ${d.getUTCDate()}`;
 
-  const holidayName = holidayMap.get(dateStr) ?? null;
-  const isHolidayOpen = openOverrideSet.has(dateStr);
   const [togglingHoliday, setTogglingHoliday] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [scopeEditorOpen, setScopeEditorOpen] = useState(false);
+  const [scopeSelection, setScopeSelection] = useState(null);
+  const [scopeSaving, setScopeSaving] = useState(false);
+  const [showMoveUI, setShowMoveUI] = useState(false);
+  const [moveDate, setMoveDate] = useState('');
+  const [moveSaving, setMoveSaving] = useState(false);
 
-  const panelWidth = 280;
+  const panelWidth = 300;
   let left = Math.round(rect.left);
   if (left + panelWidth > window.innerWidth - 12) left = window.innerWidth - panelWidth - 12;
   if (left < 8) left = 8;
   let top = Math.round(rect.bottom + 6);
-  if (top + 260 > window.innerHeight - 8) top = Math.round(rect.top) - 266;
+  if (top + 320 > window.innerHeight - 8) top = Math.round(rect.top) - 326;
   if (top < 8) top = 8;
+
+  const computedDate = holidayDetail?.computedDate ?? dateStr;
+  const moveMin = (() => { const dm = parseUTC(computedDate); dm.setUTCDate(dm.getUTCDate() - 7); return dm.toISOString().slice(0, 10); })();
+  const moveMax = (() => { const dm = parseUTC(computedDate); dm.setUTCDate(dm.getUTCDate() + 7); return dm.toISOString().slice(0, 10); })();
+
+  const openScopeEditor = () => {
+    setScopeSelection(holidayDetail?.closedLocations ?? null);
+    setScopeEditorOpen(true);
+  };
+
+  const toggleScopeLocation = (loc) => {
+    setScopeSelection(prev => {
+      const current = prev ?? CLOSURE_LOCATIONS; // null means all selected
+      if (current.includes(loc)) {
+        const next = current.filter(l => l !== loc);
+        return next.length === 0 ? [] : next;
+      } else {
+        const next = [...current, loc];
+        return next.length === CLOSURE_LOCATIONS.length ? null : next; // null = all
+      }
+    });
+  };
+
+  const openMoveUI = () => {
+    setMoveDate(dateStr);
+    setShowMoveUI(true);
+  };
 
   const handleToggleHoliday = async () => {
     setTogglingHoliday(true);
-    if (isHolidayOpen) {
-      // Remove the holiday_open override → office is now closed/observed
-      const ovr = openOverrideById.get(dateStr);
-      if (ovr) await onToggleHolidayOpen('remove', ovr.id, null);
+    if (holidayDetail?.status === 'open') {
+      if (holidayDetail.openOverrideId) await onToggleHolidayOpen('remove', holidayDetail.openOverrideId, null);
     } else {
-      // Add holiday_open override → office is open on this holiday
-      await onToggleHolidayOpen('add', null, { date: dateStr, kind: 'holiday_open', label: holidayName, entered_by: managerInitials ?? null });
+      await onToggleHolidayOpen('add', null, { date: dateStr, kind: 'holiday_open', entered_by: managerInitials ?? null });
     }
     setTogglingHoliday(false);
+  };
+
+  const handleSaveScope = async () => {
+    setScopeSaving(true);
+    await onSetHolidayScope(dateStr, holidayDetail.name, scopeSelection);
+    setScopeSaving(false);
+    setScopeEditorOpen(false);
+  };
+
+  const handleMoveSubmit = async () => {
+    if (!moveDate || moveDate === computedDate) return;
+    setMoveSaving(true);
+    await onMoveHoliday(holidayDetail.name, moveDate);
+    setMoveSaving(false);
+    setShowMoveUI(false);
+    onClose();
   };
 
   const handleDeleteClosure = async (id) => {
@@ -587,24 +632,139 @@ function DayPanel({ dateStr, rect, absences, personByKey, holidayMap, openOverri
       </div>
 
       {/* Holiday section */}
-      {holidayName && (
+      {holidayDetail && (
         <div className="day-panel-holiday">
-          <span className="day-panel-holiday-dot" style={{ background: CLOSED_COLOR }} />
-          <span className="day-panel-holiday-name">
-            {holidayName}
-            <span className="day-panel-holiday-status">
-              {isHolidayOpen ? ' – Office open' : ' – Observed'}
-            </span>
-          </span>
-          {isAdmin && (
-            <button
-              className="btn btn-pill"
-              style={{ fontSize: 10, minHeight: 20, padding: '1px 7px', marginLeft: 'auto', flexShrink: 0 }}
-              onClick={handleToggleHoliday}
-              disabled={togglingHoliday}
-            >
-              {togglingHoliday ? '…' : isHolidayOpen ? 'Mark observed' : 'Mark open'}
-            </button>
+          {holidayDetail.status === 'moved_away' && (
+            <div className="day-panel-holiday-row">
+              <span className="day-panel-holiday-dot" style={{ background: CLOSED_COLOR, opacity: 0.4 }} />
+              <span className="day-panel-holiday-name day-panel-holiday-moved-away">
+                {holidayDetail.name} – moved to {formatDateDisplay(holidayDetail.movedToDate)}
+              </span>
+              {isAdmin && (
+                <button
+                  className="btn btn-pill"
+                  style={{ fontSize: 10, minHeight: 20, padding: '1px 7px', marginLeft: 'auto', flexShrink: 0 }}
+                  onClick={() => onResetMove(holidayDetail.movedOverrideId)}
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+          )}
+
+          {holidayDetail.status === 'moved_here' && (
+            <div className="day-panel-holiday-row">
+              <span className="day-panel-holiday-dot" style={{ background: CLOSED_COLOR }} />
+              <span className="day-panel-holiday-name">
+                {holidayDetail.name}{' '}
+                <span className="day-panel-holiday-status">
+                  (moved from {formatDateDisplay(holidayDetail.originalDate)}) – Observed
+                </span>
+              </span>
+              {isAdmin && (
+                <button
+                  className="btn btn-pill"
+                  style={{ fontSize: 10, minHeight: 20, padding: '1px 7px', marginLeft: 'auto', flexShrink: 0 }}
+                  onClick={() => onResetMove(holidayDetail.movedOverrideId)}
+                >
+                  Reset to {formatDateDisplay(holidayDetail.originalDate)}
+                </button>
+              )}
+            </div>
+          )}
+
+          {(holidayDetail.status === 'observed' || holidayDetail.status === 'scoped' || holidayDetail.status === 'open') && (
+            <>
+              <div className="day-panel-holiday-row">
+                <span className="day-panel-holiday-dot" style={{ background: CLOSED_COLOR, opacity: holidayDetail.status === 'open' ? 0.4 : 1 }} />
+                <span className="day-panel-holiday-name">
+                  {holidayDetail.name}
+                  <span className="day-panel-holiday-status">
+                    {holidayDetail.status === 'open' ? ' – Office open' :
+                     holidayDetail.status === 'scoped' ? ` – closed: ${(holidayDetail.closedLocations ?? []).join(', ')}` :
+                     ' – Observed (all locations)'}
+                  </span>
+                </span>
+                {isAdmin && (
+                  <button
+                    className="btn btn-pill"
+                    style={{ fontSize: 10, minHeight: 20, padding: '1px 7px', marginLeft: 'auto', flexShrink: 0 }}
+                    onClick={handleToggleHoliday}
+                    disabled={togglingHoliday}
+                  >
+                    {togglingHoliday ? '…' : holidayDetail.status === 'open' ? 'Mark observed' : 'Mark open'}
+                  </button>
+                )}
+              </div>
+
+              {/* Location scope editor (admin, not-open) */}
+              {isAdmin && holidayDetail.status !== 'open' && (
+                <div className="day-panel-holiday-scope">
+                  {!scopeEditorOpen ? (
+                    <button className="btn btn-pill" style={{ fontSize: 10, minHeight: 20, padding: '1px 7px' }}
+                      onClick={openScopeEditor}>
+                      Edit closed locations
+                    </button>
+                  ) : (
+                    <div>
+                      <div className="day-panel-scope-chips">
+                        {CLOSURE_LOCATIONS.map(loc => {
+                          const isSelected = scopeSelection === null || scopeSelection.includes(loc);
+                          return (
+                            <button
+                              key={loc}
+                              className={`day-panel-scope-chip${isSelected ? ' day-panel-scope-chip--on' : ''}`}
+                              onClick={() => toggleScopeLocation(loc)}
+                            >
+                              {loc}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                        <button className="btn btn-pill btn-primary" style={{ fontSize: 10, minHeight: 20 }}
+                          onClick={handleSaveScope} disabled={scopeSaving}>
+                          {scopeSaving ? '…' : 'Save'}
+                        </button>
+                        <button className="btn btn-pill" style={{ fontSize: 10, minHeight: 20 }}
+                          onClick={() => setScopeEditorOpen(false)}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Move observed day (admin, not-open) */}
+              {isAdmin && holidayDetail.status !== 'open' && (
+                <div className="day-panel-holiday-move">
+                  {!showMoveUI ? (
+                    <button className="btn btn-pill" style={{ fontSize: 10, minHeight: 20, padding: '1px 7px' }}
+                      onClick={openMoveUI}>
+                      Move observed day
+                    </button>
+                  ) : (
+                    <div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Move to:</div>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <input type="date" className="setup-input" style={{ fontSize: 11, flex: 1 }}
+                          value={moveDate} min={moveMin} max={moveMax}
+                          onChange={e => setMoveDate(e.target.value)} />
+                        <button className="btn btn-pill btn-primary" style={{ fontSize: 10, minHeight: 20 }}
+                          onClick={handleMoveSubmit} disabled={moveSaving || !moveDate || moveDate === computedDate}>
+                          {moveSaving ? '…' : 'Set'}
+                        </button>
+                        <button className="btn btn-pill" style={{ fontSize: 10, minHeight: 20 }}
+                          onClick={() => setShowMoveUI(false)}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -633,10 +793,10 @@ function DayPanel({ dateStr, rect, absences, personByKey, holidayMap, openOverri
       )}
 
       <div className="day-panel-absence-list">
-        {dayAbsences.length === 0 && !holidayName && dayClosures.length === 0 && (
+        {dayAbsences.length === 0 && !holidayDetail && dayClosures.length === 0 && (
           <div className="day-panel-empty">No absences this day</div>
         )}
-        {dayAbsences.length === 0 && (holidayName || dayClosures.length > 0) && (
+        {dayAbsences.length === 0 && (holidayDetail || dayClosures.length > 0) && (
           <div className="day-panel-empty">No staff absences</div>
         )}
         {dayAbsences.map(a => {
@@ -875,29 +1035,32 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
 
   // Federal holidays for current + adjacent years
   const federalHolidays = useMemo(() => {
-    const years = [viewYear - 1, viewYear, viewYear + 1];
-    return years.flatMap(y => getFederalHolidays(y));
+    return [
+      ...getFederalHolidays(viewYear - 1),
+      ...getFederalHolidays(viewYear),
+      ...getFederalHolidays(viewYear + 1),
+    ];
   }, [viewYear]);
 
-  // Map: dateStr → holiday name (for observed holidays)
-  const holidayMap = useMemo(
-    () => new Map(federalHolidays.map(h => [h.date, h.name])),
-    [federalHolidays],
+  // movedByName: Map<holidayName, override> — holiday_moved overrides
+  const movedByName = useMemo(
+    () => new Map((calendarOverrides ?? []).filter(o => o.kind === 'holiday_moved').map(o => [o.holiday_name, o])),
+    [calendarOverrides]
   );
 
-  // Set of dates where the office is open despite a holiday (holiday_open overrides)
-  const openOverrideSet = useMemo(
-    () => new Set((calendarOverrides ?? []).filter(o => o.kind === 'holiday_open').map(o => o.date)),
-    [calendarOverrides],
-  );
-
-  // Map: dateStr → override object for holiday_open (to get id for deletion)
-  const openOverrideById = useMemo(
+  // openByDate: Map<dateStr, override> — holiday_open overrides
+  const openByDate = useMemo(
     () => new Map((calendarOverrides ?? []).filter(o => o.kind === 'holiday_open').map(o => [o.date, o])),
-    [calendarOverrides],
+    [calendarOverrides]
   );
 
-  // Map: dateStr → office_closed override objects
+  // scopeByDate: Map<dateStr, override> — holiday_scope overrides
+  const scopeByDate = useMemo(
+    () => new Map((calendarOverrides ?? []).filter(o => o.kind === 'holiday_scope').map(o => [o.date, o])),
+    [calendarOverrides]
+  );
+
+  // officeClosedByDate: Map<dateStr, override[]>
   const officeClosedByDate = useMemo(() => {
     const map = new Map();
     (calendarOverrides ?? []).filter(o => o.kind === 'office_closed').forEach(o => {
@@ -907,17 +1070,114 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
     return map;
   }, [calendarOverrides]);
 
-  // Combined closures list for WeekRow and UpcomingPanel
-  // Observed holidays (not open-overridden) + office-closed entries
+  // movedToByDate: Map<movedToDate, { name, originalDate, id }>
+  const movedToByDate = useMemo(() => {
+    const map = new Map();
+    for (const [name, ovr] of movedByName) {
+      const originalHoliday = federalHolidays.find(h => h.name === name);
+      if (originalHoliday) {
+        map.set(ovr.date, { name, originalDate: originalHoliday.date, id: ovr.id });
+      }
+    }
+    return map;
+  }, [movedByName, federalHolidays]);
+
+  // closureMap: use buildClosureMap — accounts for moves, open overrides, scope
+  const closureMap = useMemo(
+    () => buildClosureMap(federalHolidays, calendarOverrides ?? []),
+    [federalHolidays, calendarOverrides]
+  );
+
+  // allClosures: display-only array for WeekRow bars
   const allClosures = useMemo(() => {
-    const holidays = federalHolidays
-      .filter(h => !openOverrideSet.has(h.date))
-      .map(h => ({ kind: 'holiday', date: h.date, label: h.name, id: null }));
-    const officeClosed = (calendarOverrides ?? [])
-      .filter(o => o.kind === 'office_closed')
-      .map(o => ({ kind: 'office_closed', date: o.date, label: o.label, id: o.id }));
-    return [...holidays, ...officeClosed].sort((a, b) => a.date.localeCompare(b.date));
-  }, [federalHolidays, openOverrideSet, calendarOverrides]);
+    const result = [];
+    for (const [date, entry] of closureMap) {
+      const locationSuffix = entry.closedLocations
+        ? ` – ${entry.closedLocations.join(', ')}`
+        : '';
+      result.push({
+        kind: entry.kind,
+        date,
+        label: `${entry.name}${entry.moved ? ' (moved)' : ''}${locationSuffix}`,
+      });
+    }
+    return result.sort((a, b) => a.date.localeCompare(b.date));
+  }, [closureMap]);
+
+  // Per-date holiday detail for the DayPanel
+  const holidayDetailByDate = useMemo(() => {
+    const map = new Map();
+
+    // Original computed holiday dates
+    for (const h of federalHolidays) {
+      const movedOvr = movedByName.get(h.name);
+      const openOvr = openByDate.get(h.date);
+      const scopeOvr = scopeByDate.get(h.date);
+
+      if (movedOvr) {
+        map.set(h.date, {
+          status: 'moved_away',
+          name: h.name,
+          movedToDate: movedOvr.date,
+          movedOverrideId: movedOvr.id,
+          computedDate: h.date,
+          closedLocations: null,
+          scopeOverrideId: null,
+          openOverrideId: null,
+        });
+      } else if (openOvr) {
+        map.set(h.date, {
+          status: 'open',
+          name: h.name,
+          openOverrideId: openOvr.id,
+          computedDate: h.date,
+          movedToDate: null,
+          movedOverrideId: null,
+          closedLocations: null,
+          scopeOverrideId: null,
+        });
+      } else if (scopeOvr) {
+        map.set(h.date, {
+          status: 'scoped',
+          name: h.name,
+          closedLocations: scopeOvr.locations ?? [],
+          scopeOverrideId: scopeOvr.id,
+          computedDate: h.date,
+          movedToDate: null,
+          movedOverrideId: null,
+          openOverrideId: null,
+        });
+      } else {
+        map.set(h.date, {
+          status: 'observed',
+          name: h.name,
+          closedLocations: null,
+          computedDate: h.date,
+          movedToDate: null,
+          movedOverrideId: null,
+          openOverrideId: null,
+          scopeOverrideId: null,
+        });
+      }
+    }
+
+    // Moved-to dates (where the holiday now lives)
+    for (const [date, info] of movedToByDate) {
+      map.set(date, {
+        status: 'moved_here',
+        name: info.name,
+        originalDate: info.originalDate,
+        movedOverrideId: info.id,
+        computedDate: null,
+        movedToDate: date,
+        closedLocations: null,
+        scopeOverrideId: null,
+        openOverrideId: null,
+      });
+    }
+
+    return map;
+  }, [federalHolidays, movedByName, openByDate, scopeByDate, movedToByDate]);
 
   // ──────────────────────────────────────────────────────────────────────────
 
@@ -1018,6 +1278,28 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
       await removeCalendarOverride(id);
     }
   }, [addCalendarOverride, removeCalendarOverride]);
+
+  // Move a holiday to a new date (replaces any existing holiday_moved override for that holiday)
+  const handleMoveHoliday = useCallback(async (holidayName, newDate) => {
+    const existing = (calendarOverrides ?? []).find(o => o.kind === 'holiday_moved' && o.holiday_name === holidayName);
+    if (existing) await removeCalendarOverride(existing.id);
+    await addCalendarOverride({ date: newDate, kind: 'holiday_moved', holiday_name: holidayName });
+  }, [calendarOverrides, removeCalendarOverride, addCalendarOverride]);
+
+  // Reset a moved holiday back to its computed date
+  const handleResetMove = useCallback(async (overrideId) => {
+    await removeCalendarOverride(overrideId);
+  }, [removeCalendarOverride]);
+
+  // Set location scope for a holiday (null = all; array = specific closed locations)
+  const handleSetHolidayScope = useCallback(async (dateStr, holidayName, locations) => {
+    const existing = (calendarOverrides ?? []).find(o => o.kind === 'holiday_scope' && o.date === dateStr);
+    if (existing) await removeCalendarOverride(existing.id);
+    // If locations is null or all 5 locations selected: no scope override needed (all closed = default)
+    if (locations !== null && locations.length > 0 && locations.length < CLOSURE_LOCATIONS.length) {
+      await addCalendarOverride({ date: dateStr, kind: 'holiday_scope', holiday_name: holidayName, locations });
+    }
+  }, [calendarOverrides, removeCalendarOverride, addCalendarOverride]);
 
   const handleAddClosure = useCallback(async (payload) => {
     await addCalendarOverride(payload);
@@ -1123,9 +1405,7 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
           rect={dayPanel.rect}
           absences={absences}
           personByKey={personByKey}
-          holidayMap={holidayMap}
-          openOverrideSet={openOverrideSet}
-          openOverrideById={openOverrideById}
+          holidayDetail={holidayDetailByDate.get(dayPanel.dateStr) ?? null}
           dayClosures={officeClosedByDate.get(dayPanel.dateStr) ?? []}
           isAdmin={isAdmin}
           managerInitials={managerInitials}
@@ -1140,6 +1420,9 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
           }}
           onAbsenceClick={handleAbsenceClick}
           onToggleHolidayOpen={handleToggleHolidayOpen}
+          onMoveHoliday={handleMoveHoliday}
+          onResetMove={handleResetMove}
+          onSetHolidayScope={handleSetHolidayScope}
           onAddClosure={(ds) => {
             setDayPanel(null);
             setClosureModal({ dateStr: ds });

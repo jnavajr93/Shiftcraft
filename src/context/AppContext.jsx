@@ -29,6 +29,8 @@ import {
   CHANGELOG_KEY,
 } from '../services/dataService.js';
 import { computeHistoryScores } from '../data/patterns.js';
+import { getFederalHolidays } from '../utils/federalHolidays.js';
+import { buildClosureMap, computeClinicHolidaySets } from '../utils/holidayClosures.js';
 
 // localStorage keys kept only for migration and per-device flags
 const STORAGE_KEY = 'shiftcraft.v5';
@@ -1931,6 +1933,50 @@ export function AppProvider({ children }) {
     return ids;
   }, [absences, globalData, currentWeek]);
 
+  // ─── Holiday closure enforcement ──────────────────────────────────────────────
+  const holidayClosedClinicIds = useMemo(() => {
+    if (!globalData) return new Set();
+    const monday = mondayOfWeek(currentWeek);
+    const year = monday.getUTCFullYear();
+    const federalHolidays = [
+      ...getFederalHolidays(year - 1),
+      ...getFederalHolidays(year),
+      ...getFederalHolidays(year + 1),
+    ];
+    const closureMap = buildClosureMap(federalHolidays, calendarOverrides ?? []);
+    const DAYS_LIST = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+    const weekDateMap = {};
+    for (let i = 0; i < 5; i++) {
+      const d = new Date(monday);
+      d.setUTCDate(monday.getUTCDate() + i);
+      weekDateMap[DAYS_LIST[i]] = d.toISOString().slice(0, 10);
+    }
+    const { closedClinicIds } = computeClinicHolidaySets(closureMap, getBoardClinics(globalData.clinics), weekDateMap);
+    return closedClinicIds;
+  }, [calendarOverrides, globalData, currentWeek]);
+
+  // ─── Holiday-worked tag (clinics open on a partial-holiday date) ──────────────
+  const holidayWorkedMap = useMemo(() => {
+    if (!globalData) return new Map();
+    const monday = mondayOfWeek(currentWeek);
+    const year = monday.getUTCFullYear();
+    const federalHolidays = [
+      ...getFederalHolidays(year - 1),
+      ...getFederalHolidays(year),
+      ...getFederalHolidays(year + 1),
+    ];
+    const closureMap = buildClosureMap(federalHolidays, calendarOverrides ?? []);
+    const DAYS_LIST = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+    const weekDateMap = {};
+    for (let i = 0; i < 5; i++) {
+      const d = new Date(monday);
+      d.setUTCDate(monday.getUTCDate() + i);
+      weekDateMap[DAYS_LIST[i]] = d.toISOString().slice(0, 10);
+    }
+    const { workedHolidayMap } = computeClinicHolidaySets(closureMap, getBoardClinics(globalData.clinics), weekDateMap);
+    return workedHolidayMap;
+  }, [calendarOverrides, globalData, currentWeek]);
+
   return (
     <AppContext.Provider value={{
       data,
@@ -1956,6 +2002,8 @@ export function AppProvider({ children }) {
       calendarOverrides, addCalendarOverride, removeCalendarOverride,
       isDirty, postedSnapshot, dirtyWeeks, boardClinics, postWeek,
       doctorOffClinicIds,
+      holidayClosedClinicIds,
+      holidayWorkedMap,
     }}>
       {children}
     </AppContext.Provider>

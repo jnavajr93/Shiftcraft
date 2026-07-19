@@ -2050,3 +2050,37 @@ html, body, #root {
 .day-panel-closure-label {
   flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+
+/* ─── Holiday-worked tag on clinic cards ─────────────────────────────────────── */
+.clinic-holiday-tag {
+  font-size: 10px; font-weight: 600;
+  color: #92400e; background: #fef3c7;
+  border-bottom: 0.5px solid #fde68a;
+  padding: 3px 10px;
+  letter-spacing: 0.02em;
+}
+
+/* ─── Day panel: holiday scope editor ───────────────────────────────────────── */
+.day-panel-holiday-row {
+  display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+}
+.day-panel-holiday-moved-away {
+  opacity: 0.55; font-style: italic;
+}
+.day-panel-holiday-scope {
+  padding: 5px 0 3px;
+}
+.day-panel-scope-chips {
+  display: flex; gap: 4px; flex-wrap: wrap;
+}
+.day-panel-scope-chip {
+  font-size: 10px; padding: 2px 7px; border-radius: 999px;
+  border: 0.5px solid var(--border-strong); background: var(--bg-surface);
+  color: var(--text-muted); cursor: pointer; transition: all 80ms;
+}
+.day-panel-scope-chip--on {
+  background: #64748b; color: #fff; border-color: #64748b;
+}
+.day-panel-holiday-move {
+  padding: 4px 0 2px;
+}

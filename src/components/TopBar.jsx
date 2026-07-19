@@ -33,6 +33,7 @@ import ChangeLogDrawer from './ChangeLogDrawer.jsx';
 import ChatPanel from './ChatPanel.jsx';
 import AbsenceCalendar, { ABSENCE_TYPES } from './AbsenceCalendar.jsx';
 import { getFederalHolidays } from '../utils/federalHolidays.js';
+import { buildClosureMap } from '../utils/holidayClosures.js';
 import { generateSchedule } from '../engine/adapter.js';
 import { validateAndRepairAssignments, findObsViolations, findInvalidSlotAssignments, getPostViolations } from '../engine/validator.js';
 import { fetchAbsencesForWeek } from '../services/dataService.js';
@@ -45,15 +46,28 @@ function formatPostedTime(isoString) {
 }
 
 // Generate and download a PDF schedule grid (landscape letter)
-function generateSchedulePDF(data, weekLabel, weekMonday, postedBy, filename) {
+function generateSchedulePDF(data, weekLabel, weekMonday, postedBy, filename, calendarOverrides = []) {
   const DAYS_LIST = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
   const LOC_ORDER = ['Phoenix', 'Chandler', 'Estrella', 'Scottsdale', 'OBS'];
   const personById = new Map((data.people ?? []).map(p => [p.id, p]));
 
+  // Build holiday closure map for PDF column header annotation
+  const pdfYear = weekMonday.getUTCFullYear();
+  const pdfHolidays = [
+    ...getFederalHolidays(pdfYear - 1),
+    ...getFederalHolidays(pdfYear),
+    ...getFederalHolidays(pdfYear + 1),
+  ];
+  const pdfClosureMap = buildClosureMap(pdfHolidays, calendarOverrides);
+
   const dayDates = DAYS_LIST.map((day, i) => {
     const d = new Date(weekMonday);
     d.setUTCDate(weekMonday.getUTCDate() + i);
-    return `${day} ${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
+    const dateStr = d.toISOString().slice(0, 10);
+    const dateLabel = `${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
+    const holidayEntry = pdfClosureMap.get(dateStr);
+    const holidayNote = holidayEntry ? `\n★ ${holidayEntry.name}${holidayEntry.closedLocations ? ' (partial)' : ''}` : '';
+    return `${day} ${dateLabel}${holidayNote}`;
   });
 
   const allLocs = [...new Set(data.clinics.filter(c => c.open).map(c => c.location))];
@@ -643,6 +657,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
     historyScores, presentManagers, conflictToast, setConflictToast,
     isDirty, postedSnapshot, dirtyWeeks, postWeek,
     doctorOffClinicIds,
+    holidayClosedClinicIds,
   } = useApp();
   const weekLabelRef = useRef(null);
   const undoTimerRef = useRef(null);
@@ -747,7 +762,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
     // PDF download
     try {
       const pdfFilename = `shiftcraft_week_${monday.toISOString().slice(0, 10)}.pdf`;
-      generateSchedulePDF(data, weekLabel, monday, managerInitials, pdfFilename);
+      generateSchedulePDF(data, weekLabel, monday, managerInitials, pdfFilename, calendarOverrides ?? []);
     } catch (pdfErr) {
       console.error('[Shiftcraft] PDF generation failed:', pdfErr);
     }
@@ -822,7 +837,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
     }
 
     try {
-      const { assignments: raw, issues } = generateSchedule(data, { historyScores, doctorOffClinicIds });
+      const { assignments: raw, issues } = generateSchedule(data, { historyScores, doctorOffClinicIds, holidayClosedClinicIds });
 
       let assignments = raw;
 
