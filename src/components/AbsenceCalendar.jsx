@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, X, Clock, Plus, Trash2, AlertCircle, History } from 'lucide-react';
-import { useApp } from '../context/AppContext.jsx';
+import { useApp, mondayOfWeek, isoWeek } from '../context/AppContext.jsx';
 
 // ─── Category definitions ─────────────────────────────────────────────────────
 
@@ -69,17 +69,25 @@ function buildGrid(year, month) {
   return grid;
 }
 
-// ─── Legend ───────────────────────────────────────────────────────────────────
+// ─── Legend (filter chips) ────────────────────────────────────────────────────
 
-function Legend() {
+function Legend({ activeCategories, onToggle }) {
   return (
     <div className="absence-legend">
-      {SELECTABLE_TYPES.map(t => (
-        <div key={t.key} className="absence-legend-item">
-          <span className="absence-legend-dot" style={{ background: t.color }} />
-          <span>{t.label}</span>
-        </div>
-      ))}
+      {SELECTABLE_TYPES.map(t => {
+        const active = activeCategories.has(t.key);
+        return (
+          <button
+            key={t.key}
+            className={`absence-legend-item${active ? '' : ' absence-legend-item--off'}`}
+            onClick={() => onToggle(t.key)}
+            title={active ? `Hide ${t.label}` : `Show ${t.label}`}
+          >
+            <span className="absence-legend-dot" style={{ background: t.color }} />
+            <span>{t.label}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -281,30 +289,45 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, doc
 
 // ─── Week row with spanning bars ──────────────────────────────────────────────
 
-function WeekRow({ week, viewMonth, absences, personByKey, todayStr, dragStart, dragEnd, onDayMouseDown, onDayMouseEnter, onDayClick, onAbsenceClick }) {
+function WeekRow({ week, viewMonth, absences, personByKey, todayStr, onDayClick, onDayDoubleClick, onAbsenceClick, activeCategories, currentWeekDates, dayPanelDate }) {
   const weekStart = toDateStr(week[0]);
   const weekEnd   = toDateStr(week[6]);
-  const dragMin = dragStart && dragEnd ? (dragStart < dragEnd ? dragStart : dragEnd) : dragStart;
-  const dragMax = dragStart && dragEnd ? (dragStart > dragEnd ? dragStart : dragEnd) : dragStart;
+  const clickTimerRef = useRef(null);
+
+  // Highlight if any day of this calendar row falls in the board's current week
+  const isCurrentWeek = week.some(d => currentWeekDates.has(toDateStr(d)));
 
   const weekAbsences = absences
-    .filter(a => a.end_date >= weekStart && a.start_date <= weekEnd)
+    .filter(a => a.end_date >= weekStart && a.start_date <= weekEnd && activeCategories.has(a.type))
     .sort((a, b) => a.start_date.localeCompare(b.start_date) || a.person_name.localeCompare(b.person_name));
 
+  // Distinguish single-click (open day panel) from double-click (jump to week)
+  const handleCellInteraction = (ds, e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (clickTimerRef.current) {
+      clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+      onDayDoubleClick(ds);
+      return;
+    }
+    clickTimerRef.current = setTimeout(() => {
+      clickTimerRef.current = null;
+      onDayClick(ds, rect);
+    }, 220);
+  };
+
   return (
-    <div className="absence-week-row">
+    <div className={`absence-week-row${isCurrentWeek ? ' absence-week-row--current-week' : ''}`}>
       {week.map((day, col) => {
         const ds = toDateStr(day);
         const isThisMonth = day.getUTCMonth() === viewMonth;
         const isToday = ds === todayStr;
-        const inDrag = dragMin && dragMax && ds >= dragMin && ds <= dragMax;
+        const isPanelDay = ds === dayPanelDate;
         return (
           <div
             key={col}
-            className={`absence-day-cell${inDrag ? ' absence-day-cell--drag' : ''}`}
-            onMouseDown={() => onDayMouseDown(ds)}
-            onMouseEnter={() => onDayMouseEnter(ds)}
-            onClick={() => onDayClick(ds)}
+            className={`absence-day-cell${isPanelDay ? ' absence-day-cell--selected' : ''}`}
+            onClick={(e) => handleCellInteraction(ds, e)}
           >
             <span className={`absence-day-num${isToday ? ' absence-day-num--today' : ''}${!isThisMonth ? ' absence-day-num--other' : ''}`}>
               {day.getUTCDate()}
@@ -356,10 +379,10 @@ function WeekRow({ week, viewMonth, absences, personByKey, todayStr, dragStart, 
 
 // ─── Upcoming panel ───────────────────────────────────────────────────────────
 
-function UpcomingPanel({ absences, personByKey, todayStr, onAbsenceClick }) {
+function UpcomingPanel({ absences, personByKey, todayStr, onAbsenceClick, activeCategories }) {
   const cutoff = (() => { const d = parseUTC(todayStr); d.setUTCDate(d.getUTCDate() + 30); return toDateStr(d); })();
   const upcoming = absences
-    .filter(a => a.end_date >= todayStr && a.start_date <= cutoff)
+    .filter(a => a.end_date >= todayStr && a.start_date <= cutoff && activeCategories.has(a.type))
     .sort((a, b) => a.start_date.localeCompare(b.start_date));
 
   return (
@@ -388,6 +411,65 @@ function UpcomingPanel({ absences, personByKey, todayStr, onAbsenceClick }) {
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Day panel (anchored near clicked cell) ───────────────────────────────────
+
+function DayPanel({ dateStr, rect, absences, personByKey, onClose, onJumpAndClose, onAddAbsence, onAbsenceClick }) {
+  const dayAbsences = absences.filter(a => a.start_date <= dateStr && a.end_date >= dateStr);
+  const d = parseUTC(dateStr);
+  const dateLabel = `${DOW[d.getUTCDay()]}, ${MONTHS[d.getUTCMonth()].slice(0, 3)} ${d.getUTCDate()}`;
+
+  const panelWidth = 264;
+  let left = Math.round(rect.left);
+  if (left + panelWidth > window.innerWidth - 12) left = window.innerWidth - panelWidth - 12;
+  if (left < 8) left = 8;
+  let top = Math.round(rect.bottom + 6);
+  if (top + 220 > window.innerHeight - 8) top = Math.round(rect.top) - 226;
+  if (top < 8) top = 8;
+
+  return (
+    <div
+      className="day-panel"
+      style={{ top, left, width: panelWidth }}
+      onClick={e => e.stopPropagation()}
+    >
+      <div className="day-panel-header">
+        <span className="day-panel-date">{dateLabel}</span>
+        <button className="btn btn-icon" style={{ minHeight: 24, padding: '2px 4px' }} onClick={onClose}>
+          <X size={13} />
+        </button>
+      </div>
+      <div className="day-panel-absence-list">
+        {dayAbsences.length === 0 && (
+          <div className="day-panel-empty">No absences this day</div>
+        )}
+        {dayAbsences.map(a => {
+          const person = personByKey.get(a.person_name);
+          const color = colorOf(a.type);
+          return (
+            <div key={a.id} className="day-panel-absence-item" onClick={() => onAbsenceClick(a)}>
+              <span className="day-panel-dot" style={{ background: color }} />
+              <span className="day-panel-name">{person?.name ?? a.person_name}</span>
+              <span className="day-panel-type" style={{ color }}>{shortOf(a.type)}</span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="day-panel-actions">
+        <button className="btn btn-pill" style={{ fontSize: 11, minHeight: 26 }} onClick={onJumpAndClose}>
+          Go to this week
+        </button>
+        <button
+          className="btn btn-pill btn-primary"
+          style={{ fontSize: 11, minHeight: 26, gap: 4 }}
+          onClick={() => onAddAbsence(dateStr)}
+        >
+          <Plus size={11} /> Add absence
+        </button>
       </div>
     </div>
   );
@@ -550,31 +632,64 @@ function AbsenceHistory({ absences, people, personByKey, onAbsenceClick }) {
 
 // ─── Main calendar ────────────────────────────────────────────────────────────
 
-export default function AbsenceCalendar({ onClose }) {
+export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) {
   const { data, absences, addAbsence, editAbsence, removeAbsence, managerInitials, addLog } = useApp();
   const people      = data.people ?? [];
   const doctors     = (data.providers ?? []).map(p => p.name);
-  const personByKey = new Map(people.map(p => [p.name.trim().toLowerCase(), p]));
+  const personByKey = useMemo(
+    () => new Map(people.map(p => [p.name.trim().toLowerCase(), p])),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data.people],
+  );
 
-  const todayStr  = toDateStr(new Date());
-  const todayDate = new Date();
+  const todayStr = toDateStr(new Date());
 
+  // Open focused on the month containing the currently viewed board week
+  const initMonday = currentWeek ? mondayOfWeek(currentWeek) : new Date();
   const [view,      setView]      = useState('calendar'); // 'calendar' | 'history'
-  const [viewYear,  setViewYear]  = useState(todayDate.getUTCFullYear());
-  const [viewMonth, setViewMonth] = useState(todayDate.getUTCMonth());
+  const [viewYear,  setViewYear]  = useState(initMonday.getUTCFullYear());
+  const [viewMonth, setViewMonth] = useState(initMonday.getUTCMonth());
   const [modal,     setModal]     = useState(null);
+  const [dayPanel,  setDayPanel]  = useState(null); // { dateStr, rect }
 
-  // Close on Escape (only when no sub-modal is open)
+  // Category filter chips — all on by default
+  const [activeCategories, setActiveCategories] = useState(
+    () => new Set(SELECTABLE_TYPES.map(t => t.key)),
+  );
+  const toggleCategory = useCallback((key) => {
+    setActiveCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) { if (next.size > 1) next.delete(key); }
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+  // Set of dateStr for Mon–Sun of the currently viewed board week (for row highlight)
+  const currentWeekDates = useMemo(() => {
+    if (!currentWeek) return new Set();
+    const mon = mondayOfWeek(currentWeek);
+    const dates = new Set();
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(mon);
+      d.setUTCDate(mon.getUTCDate() + i);
+      dates.add(toDateStr(d));
+    }
+    return dates;
+  }, [currentWeek]);
+
+  // Escape layering: modal → dayPanel → calendar
   useEffect(() => {
-    const handler = (e) => { if (e.key === 'Escape' && !modal) onClose(); };
+    const handler = (e) => {
+      if (e.key === 'Escape') {
+        if (modal)    { setModal(null);    return; }
+        if (dayPanel) { setDayPanel(null); return; }
+        onClose();
+      }
+    };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [modal, onClose]);
-
-  // Drag state
-  const [dragStart, setDragStart] = useState(null);
-  const [dragEnd,   setDragEnd]   = useState(null);
-  const dragging = useRef(false);
+  }, [modal, dayPanel, onClose]);
 
   const grid = buildGrid(viewYear, viewMonth);
 
@@ -586,45 +701,25 @@ export default function AbsenceCalendar({ onClose }) {
     if (viewMonth === 11) { setViewYear(y => y + 1); setViewMonth(0); }
     else setViewMonth(m => m + 1);
   };
-  const goToday = () => { setViewYear(todayDate.getUTCFullYear()); setViewMonth(todayDate.getUTCMonth()); };
+  const goToday = () => {
+    const now = new Date();
+    setViewYear(now.getUTCFullYear());
+    setViewMonth(now.getUTCMonth());
+  };
 
-  const handleDayMouseDown = useCallback((ds) => {
-    dragging.current = true;
-    setDragStart(ds);
-    setDragEnd(ds);
+  // Single-click: open day panel anchored near the cell
+  const handleDayClick = useCallback((ds, rect) => {
+    setDayPanel({ dateStr: ds, rect });
   }, []);
 
-  const handleDayMouseEnter = useCallback((ds) => {
-    if (dragging.current) setDragEnd(ds);
-  }, []);
-
-  const handleDayClick = useCallback((ds) => {
-    if (dragging.current) {
-      const start = dragStart < ds ? dragStart : ds;
-      const end   = dragStart > ds ? dragStart : ds;
-      dragging.current = false;
-      setDragStart(null);
-      setDragEnd(null);
-      setModal({ mode: 'add', initStart: start, initEnd: end });
-    }
-  }, [dragStart]);
-
-  useEffect(() => {
-    const onUp = () => {
-      if (dragging.current && dragStart) {
-        const start = dragStart < (dragEnd ?? dragStart) ? dragStart : (dragEnd ?? dragStart);
-        const end   = dragStart > (dragEnd ?? dragStart) ? dragStart : (dragEnd ?? dragStart);
-        dragging.current = false;
-        setDragStart(null);
-        setDragEnd(null);
-        setModal({ mode: 'add', initStart: start, initEnd: end });
-      }
-    };
-    window.addEventListener('mouseup', onUp);
-    return () => window.removeEventListener('mouseup', onUp);
-  }, [dragStart, dragEnd]);
+  // Double-click: jump to the week containing that day and close calendar
+  const handleDayDoubleClick = useCallback((ds) => {
+    if (onJumpToWeek) onJumpToWeek(isoWeek(parseUTC(ds)));
+    onClose();
+  }, [onJumpToWeek, onClose]);
 
   const handleAbsenceClick = useCallback((absence) => {
+    setDayPanel(null);
     setModal({ mode: 'edit', absence });
   }, []);
 
@@ -707,7 +802,7 @@ export default function AbsenceCalendar({ onClose }) {
               <div className="absence-dow-row">
                 {DOW.map(d => <div key={d} className="absence-dow-cell">{d}</div>)}
               </div>
-              <Legend />
+              <Legend activeCategories={activeCategories} onToggle={toggleCategory} />
               <div className="absence-grid">
                 {grid.map((week, wi) => (
                   <WeekRow
@@ -717,12 +812,12 @@ export default function AbsenceCalendar({ onClose }) {
                     absences={absences}
                     personByKey={personByKey}
                     todayStr={todayStr}
-                    dragStart={dragStart}
-                    dragEnd={dragEnd}
-                    onDayMouseDown={handleDayMouseDown}
-                    onDayMouseEnter={handleDayMouseEnter}
                     onDayClick={handleDayClick}
+                    onDayDoubleClick={handleDayDoubleClick}
                     onAbsenceClick={handleAbsenceClick}
+                    activeCategories={activeCategories}
+                    currentWeekDates={currentWeekDates}
+                    dayPanelDate={dayPanel?.dateStr ?? null}
                   />
                 ))}
               </div>
@@ -732,6 +827,7 @@ export default function AbsenceCalendar({ onClose }) {
               personByKey={personByKey}
               todayStr={todayStr}
               onAbsenceClick={handleAbsenceClick}
+              activeCategories={activeCategories}
             />
           </div>
         ) : (
@@ -743,6 +839,26 @@ export default function AbsenceCalendar({ onClose }) {
           />
         )}
       </div>
+
+      {/* Day panel — anchored near clicked cell, above modal layer */}
+      {dayPanel && !modal && (
+        <DayPanel
+          dateStr={dayPanel.dateStr}
+          rect={dayPanel.rect}
+          absences={absences}
+          personByKey={personByKey}
+          onClose={() => setDayPanel(null)}
+          onJumpAndClose={() => {
+            if (onJumpToWeek) onJumpToWeek(isoWeek(parseUTC(dayPanel.dateStr)));
+            onClose();
+          }}
+          onAddAbsence={(ds) => {
+            setDayPanel(null);
+            setModal({ mode: 'add', initStart: ds, initEnd: ds });
+          }}
+          onAbsenceClick={handleAbsenceClick}
+        />
+      )}
 
       {modal && (
         <AbsenceModal

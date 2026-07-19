@@ -31,7 +31,7 @@ function todayTargetWeek() {
 import { useTour } from './Tour.jsx';
 import ChangeLogDrawer from './ChangeLogDrawer.jsx';
 import ChatPanel from './ChatPanel.jsx';
-import AbsenceCalendar from './AbsenceCalendar.jsx';
+import AbsenceCalendar, { ABSENCE_TYPES } from './AbsenceCalendar.jsx';
 import { generateSchedule } from '../engine/adapter.js';
 import { validateAndRepairAssignments, findObsViolations, findInvalidSlotAssignments, getPostViolations } from '../engine/validator.js';
 import { fetchAbsencesForWeek } from '../services/dataService.js';
@@ -522,85 +522,106 @@ OUTPUT: respond ONLY with valid JSON, no explanation, no markdown, no code fence
 
 Only include slots that should be filled. Omit middle/training unless needed. If a slot cannot be filled, omit it entirely.`;
 
-// ─── Week Date Picker ──────────────────────────
-const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-const DAY_HDRS = ['Mo','Tu','We','Th','Fr','Sa','Su'];
+// ─── Hover preview (read-only mini month + next 7 days) ──────────────────────
 
-function WeekDatePicker({ currentWeek, onSelectWeek, onClose, triggerRef, dirtyWeeks }) {
-  const ref = useRef(null);
+const HP_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function HoverPreview({ anchorRef, absences, currentWeek, people }) {
+  if (!anchorRef?.current) return null;
+  const rect = anchorRef.current.getBoundingClientRect();
+
+  const colorOf = (key) => ABSENCE_TYPES.find(t => t.key === key)?.color ?? '#6b7280';
+  const personByKey = new Map((people ?? []).map(p => [p.name.trim().toLowerCase(), p]));
+
   const monday = mondayOfWeek(currentWeek);
-  const [viewYear, setViewYear] = useState(monday.getUTCFullYear());
-  const [viewMonth, setViewMonth] = useState(monday.getUTCMonth());
+  const year   = monday.getUTCFullYear();
+  const month  = monday.getUTCMonth();
 
-  useEffect(() => {
-    const handler = (e) => {
-      if (ref.current && !ref.current.contains(e.target) &&
-          !(triggerRef?.current && triggerRef.current.contains(e.target))) onClose();
-    };
-    const keyH = (e) => { if (e.key === 'Escape') onClose(); };
-    const t = setTimeout(() => {
-      document.addEventListener('mousedown', handler);
-      document.addEventListener('keydown', keyH);
-    }, 0);
-    return () => { clearTimeout(t); document.removeEventListener('mousedown', handler); document.removeEventListener('keydown', keyH); };
-  }, [onClose, triggerRef]);
-
-  const today = new Date();
-  const prevMonth = () => { if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y-1); } else setViewMonth(m => m-1); };
-  const nextMonth = () => { if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y+1); } else setViewMonth(m => m+1); };
-
-  // Build grid, Mon-start
-  const firstDow = new Date(viewYear, viewMonth, 1).getDay();
-  const startOffset = firstDow === 0 ? 6 : firstDow - 1;
-  const cells = Array.from({ length: 42 }, (_, i) => new Date(viewYear, viewMonth, 1 - startOffset + i));
-  const showSix = cells.slice(35).some(d => d.getMonth() === viewMonth);
+  // 6-row × 7-col grid, Sun→Sat
+  const firstDow = new Date(Date.UTC(year, month, 1)).getUTCDay();
+  const cells = Array.from({ length: 42 }, (_, i) =>
+    new Date(Date.UTC(year, month, 1 - firstDow + i)),
+  );
+  const showSix = cells.slice(35).some(d => d.getUTCMonth() === month);
   const grid = showSix ? cells : cells.slice(0, 35);
 
+  const toDs = (d) => d.toISOString().slice(0, 10);
+  const todayDs = toDs(new Date());
+  const next7d = new Date();
+  next7d.setDate(next7d.getDate() + 7);
+  const endDs = toDs(next7d);
+
+  const next7 = (absences ?? [])
+    .filter(a => a.end_date >= todayDs && a.start_date <= endDs)
+    .sort((a, b) => a.start_date.localeCompare(b.start_date))
+    .slice(0, 5);
+
+  const width = 264;
+  let left = Math.round(rect.left + rect.width / 2 - width / 2);
+  if (left + width > window.innerWidth - 12) left = window.innerWidth - width - 12;
+  if (left < 8) left = 8;
+  const top = Math.round(rect.bottom + 8);
+
   return (
-    <div ref={ref} className="week-date-picker" onClick={e => e.stopPropagation()}>
-      <div className="wdp-header">
-        <button className="btn btn-icon" style={{ minHeight: 28, padding: '3px 6px' }} onClick={prevMonth}><ChevronLeft size={14} /></button>
-        <span className="wdp-month-label">{MONTHS[viewMonth]} {viewYear}</span>
-        <button className="btn btn-icon" style={{ minHeight: 28, padding: '3px 6px' }} onClick={nextMonth}><ChevronRight size={14} /></button>
-      </div>
-      <div className="wdp-grid">
-        {DAY_HDRS.map(d => <div key={d} className="wdp-day-header">{d}</div>)}
+    <div className="hover-preview" style={{ top, left, width }}>
+      <div className="hover-preview-month">{HP_MONTHS[month]} {year}</div>
+      <div className="hover-preview-grid">
+        {['S','M','T','W','T','F','S'].map((h, i) => (
+          <div key={i} className="hover-preview-hdr">{h}</div>
+        ))}
         {grid.map((d, i) => {
-          const wk = isoWeek(d);
-          const otherMonth = d.getMonth() !== viewMonth;
-          const isToday = d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
-          const isSel = wk === currentWeek;
-          const isDirtyWk = dirtyWeeks?.has(wk);
-          const dow = d.getDay();
+          const ds = toDs(d);
+          const isOther = d.getUTCMonth() !== month;
+          const dots = isOther ? [] : (absences ?? []).filter(a => a.start_date <= ds && a.end_date >= ds);
           return (
-            <div
-              key={i}
-              className={['wdp-day', otherMonth?'wdp-other-month':'', isSel?'wdp-sel-week':'', isSel&&dow===1?'wdp-week-start':'', isSel&&dow===0?'wdp-week-end':'', isToday?'wdp-today':''].filter(Boolean).join(' ')}
-              onClick={() => { onSelectWeek(wk); onClose(); }}
-            >
-              {d.getDate()}
-              {isDirtyWk && <span className="wdp-dirty-dot" title="Unposted changes" />}
+            <div key={i} className={`hover-preview-day${isOther ? ' hover-preview-day--other' : ''}`}>
+              <span>{d.getUTCDate()}</span>
+              {dots.length > 0 && (
+                <div className="hover-preview-dots">
+                  {dots.slice(0, 3).map((a, j) => (
+                    <span key={j} className="hover-preview-dot" style={{ background: colorOf(a.type) }} />
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}
       </div>
+      {next7.length > 0 && (
+        <>
+          <div className="hover-preview-divider" />
+          <div className="hover-preview-next-title">Next 7 days</div>
+          {next7.map(a => {
+            const person = personByKey.get(a.person_name);
+            const name = person?.name ?? a.person_name;
+            const dateShort = a.start_date.slice(5).replace('-', '/');
+            return (
+              <div key={a.id} className="hover-preview-next-item">
+                <span className="hover-preview-dot" style={{ background: colorOf(a.type), flexShrink: 0 }} />
+                <span className="hover-preview-next-name">{name}</span>
+                <span className="hover-preview-next-date">{dateShort}</span>
+              </div>
+            );
+          })}
+        </>
+      )}
     </div>
   );
 }
-
 
 export default function TopBar({ activeTab, setActiveTab }) {
   const {
     isAdmin, setIsAdmin, managerInitials, setManagerInitials, theme, setTheme,
     weekLabel, currentWeek, navigateWeek, jumpToWeek, weekIsEmpty, copyFromTwoWeeksAgo, clearWeek,
-    data, addLog, applyBulkAssignments, restoreClinicSlots, lastSaved, saveStatus,
+    data, absences, addLog, applyBulkAssignments, restoreClinicSlots, lastSaved, saveStatus,
     historyScores, presentManagers, conflictToast, setConflictToast,
     isDirty, postedSnapshot, dirtyWeeks, postWeek,
     doctorOffClinicIds,
   } = useApp();
   const weekLabelRef = useRef(null);
   const undoTimerRef = useRef(null);
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  const hoverTimerRef = useRef(null);
+  const [showPreview, setShowPreview] = useState(false);
   const [showPinModal, setShowPinModal] = useState(false);
   const { showWelcomeCard } = useTour();
 
@@ -900,8 +921,14 @@ export default function TopBar({ activeTab, setActiveTab }) {
             ref={weekLabelRef}
             data-tour="week-nav"
             className="topbar-week-label"
-            onClick={() => setShowDatePicker(s => !s)}
-            aria-label="Jump to week"
+            onClick={() => { clearTimeout(hoverTimerRef.current); setShowPreview(false); setShowAbsences(s => !s); }}
+            onMouseEnter={() => {
+              if (showAbsences) return;
+              clearTimeout(hoverTimerRef.current);
+              hoverTimerRef.current = setTimeout(() => setShowPreview(true), 300);
+            }}
+            onMouseLeave={() => { clearTimeout(hoverTimerRef.current); setShowPreview(false); }}
+            aria-label="Open absence calendar"
           >
             {isAdmin ? (
               <span
@@ -910,8 +937,8 @@ export default function TopBar({ activeTab, setActiveTab }) {
                 tabIndex={0}
                 title="Absence calendar"
                 aria-label="Absence calendar"
-                onClick={e => { e.stopPropagation(); setShowAbsences(s => !s); }}
-                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); setShowAbsences(s => !s); } }}
+                onClick={e => { e.stopPropagation(); clearTimeout(hoverTimerRef.current); setShowPreview(false); setShowAbsences(s => !s); }}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); clearTimeout(hoverTimerRef.current); setShowPreview(false); setShowAbsences(s => !s); } }}
               >
                 <Calendar size={19} strokeWidth={1.5} style={{ flexShrink: 0 }} />
               </span>
@@ -924,15 +951,6 @@ export default function TopBar({ activeTab, setActiveTab }) {
           <button className="btn btn-icon topbar-nav-btn" onClick={() => navigateWeek(1)} aria-label="Next week">
             <ChevronRight size={16} />
           </button>
-          {showDatePicker && (
-            <WeekDatePicker
-              currentWeek={currentWeek}
-              onSelectWeek={jumpToWeek}
-              onClose={() => setShowDatePicker(false)}
-              triggerRef={weekLabelRef}
-              dirtyWeeks={dirtyWeeks}
-            />
-          )}
         </div>
 
         <div className="topbar-right">
@@ -943,8 +961,8 @@ export default function TopBar({ activeTab, setActiveTab }) {
           )}
           {isAdmin && !weekIsEmpty() && (
             <button
-              className="btn btn-pill topbar-mobile-hidden"
-              style={{ fontSize: 12, minHeight: 32, color: 'var(--red, #dc2626)', gap: 5 }}
+              className="btn btn-pill topbar-mobile-hidden btn-clear-week"
+              style={{ fontSize: 12, minHeight: 32, gap: 5 }}
               onClick={() => setShowClearModal(true)}
             >
               <RotateCcw size={13} /> Clear Week
@@ -1170,7 +1188,21 @@ export default function TopBar({ activeTab, setActiveTab }) {
       )}
       {showLog && <ChangeLogDrawer onClose={() => setShowLog(false)} />}
       {showChat && <ChatPanel onClose={() => setShowChat(false)} />}
-      {showAbsences && <AbsenceCalendar onClose={() => setShowAbsences(false)} />}
+      {showAbsences && (
+        <AbsenceCalendar
+          onClose={() => setShowAbsences(false)}
+          currentWeek={currentWeek}
+          onJumpToWeek={jumpToWeek}
+        />
+      )}
+      {showPreview && !showAbsences && (
+        <HoverPreview
+          anchorRef={weekLabelRef}
+          absences={absences ?? []}
+          currentWeek={currentWeek}
+          people={data?.people ?? []}
+        />
+      )}
       {showPinModal && (
         <ManagerModal
           onSuccess={(inits) => { setShowPinModal(false); setIsAdmin(true); setManagerInitials(inits); }}
