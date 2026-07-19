@@ -259,7 +259,7 @@ function MobileClinicCard({ clinic, people, onPersonClick }) {
             } else if (slotType === 'opener') {
               time = formatOpenerTimeDisplay(clinic, slotVal);
             } else if (slotType === 'openingFrontDesk') {
-              time = formatOpeningFDTimeDisplay(slotVal);
+              time = formatOpeningFDTimeDisplay(slotVal, clinic);
             } else if (slotType === 'closing') {
               time = formatClosingOverlayDisplay(slotVal, clinic);
             } else if (slotType === 'closingFrontDesk') {

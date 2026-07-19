@@ -105,16 +105,23 @@ export function getSlotLabel(slotType, location) {
 
 export function formatOpenerTimeDisplay(clinic, slotVal) {
   const obj = (slotVal && typeof slotVal === 'object') ? slotVal : {};
-  const startStr = obj.start != null ? minutesToTime(obj.start) : 'Open';
-  const endStr   = obj.end   != null ? minutesToTime(obj.end)   : minutesToTime(Math.min(1020, clinic?.endTime ?? 1020));
+  // Display "Open" for null start OR for stored literal openTime (migration compat — pre-fix rows
+  // may hold clinic.startTime-15 as a literal; normalised to null on next save).
+  const openTime = clinic ? (clinic.startTime - 15) : null;
+  const startIsOpen = obj.start == null || (openTime != null && obj.start === openTime);
+  const startStr = startIsOpen ? 'Open' : minutesToTime(obj.start);
+  const endStr   = obj.end != null ? minutesToTime(obj.end) : minutesToTime(Math.min(1020, clinic?.endTime ?? 1020));
   return `${startStr} – ${endStr}`;
 }
 
 // Opening Front Desk: defaults Open → 3:30 PM
-export function formatOpeningFDTimeDisplay(slotVal) {
+// clinic is optional; when provided, stored literal openTime is also displayed as 'Open' (migration compat)
+export function formatOpeningFDTimeDisplay(slotVal, clinic) {
   const obj = (slotVal && typeof slotVal === 'object') ? slotVal : {};
-  const startStr = obj.start != null ? minutesToTime(obj.start) : 'Open';
-  const endStr   = obj.end   != null ? minutesToTime(obj.end)   : '3:30 PM';
+  const openTime = clinic ? (clinic.startTime - 15) : null;
+  const startIsOpen = obj.start == null || (openTime != null && obj.start === openTime);
+  const startStr = startIsOpen ? 'Open' : minutesToTime(obj.start);
+  const endStr   = obj.end != null ? minutesToTime(obj.end) : '3:30 PM';
   return `${startStr} – ${endStr}`;
 }
 

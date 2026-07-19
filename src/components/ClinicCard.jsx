@@ -75,15 +75,22 @@ function OpenerTimeEditor({ slotVal, clinicId, clinic, slotType = 'opener', onCl
   const { updateSlotTime } = useApp();
   const obj = (slotVal && typeof slotVal === 'object') ? slotVal : {};
   const openTime = clinic ? (clinic.startTime - 15) : null;
+  // Migration compat: treat stored literal openTime as the Open semantic so the editor
+  // opens with the Open badge active on existing slots that pre-date this change.
+  const defaultStartIsOpen = obj.start == null || (openTime != null && obj.start === openTime);
   return (
     <div className="variable-time-editor" onClick={e => e.stopPropagation()}>
       <TimeRangePicker
-        defaultStart={obj.start ?? null}
+        defaultStart={defaultStartIsOpen ? null : obj.start}
         defaultEnd={obj.end != null && obj.end !== 'close' ? obj.end : null}
         defaultEndIsClose={obj.end === 'close'}
+        defaultStartIsOpen={defaultStartIsOpen}
+        openSemantic={true}
         openTime={openTime}
         onSave={(s, e) => {
-          updateSlotTime(clinicId, slotType, s, e === 'close' ? null : e);
+          // Also catch manual-typed exact openTime → store null (Open semantic)
+          const finalStart = (s != null && openTime != null && s === openTime) ? null : s;
+          updateSlotTime(clinicId, slotType, finalStart, e === 'close' ? null : e);
           onClose();
         }}
         onCancel={onClose}
@@ -151,7 +158,7 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
   const showScribeTimeRow = isScribe && ((isAdmin && clinicOpen) || scribeHasOverride);
   // Opener display (uses clinic start time)
   const openerDisplay = isOpener ? formatOpenerTimeDisplay(clinic, slotVal)
-    : isOpeningFrontDesk ? formatOpeningFDTimeDisplay(slotVal) : null;
+    : isOpeningFrontDesk ? formatOpeningFDTimeDisplay(slotVal, clinic) : null;
   // Closing / Closing FD display pieces
   const isClosingType = isClosing || isClosingFrontDesk;
   const closingObj = (isClosingType && slotVal && typeof slotVal === 'object') ? slotVal : {};

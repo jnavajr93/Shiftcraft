@@ -77,7 +77,7 @@ function generateSchedulePDF(data, weekLabel, weekMonday, postedBy, filename, ca
   const slotTimeStr = (clinic, slotType, slotVal) => {
     if (slotType === 'scribe')           return formatScribeTimeDisplay(slotVal) ?? '1st Patient – Close';
     if (slotType === 'opener')           return formatOpenerTimeDisplay(clinic, slotVal);
-    if (slotType === 'openingFrontDesk') return formatOpeningFDTimeDisplay(slotVal);
+    if (slotType === 'openingFrontDesk') return formatOpeningFDTimeDisplay(slotVal, clinic);
     if (slotType === 'closing')          return formatClosingOverlayDisplay(slotVal, clinic);
     if (slotType === 'closingFrontDesk') return formatClosingFDOverlayDisplay(slotVal);
     if (['frontDesk', 'middle', 'training'].includes(slotType))
