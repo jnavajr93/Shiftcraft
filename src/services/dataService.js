@@ -280,3 +280,39 @@ export async function fetchAllPostedSnapshots(wk) {
   }
   return { status: 'ok', data: data ?? [] };
 }
+
+// ─── Calendar overrides (holidays observed/open, office-closed days) ──────────
+
+export async function fetchAllCalendarOverrides() {
+  const { data, error } = await supabase
+    .from('calendar_overrides')
+    .select('*')
+    .order('date', { ascending: true });
+  if (error) {
+    if (error.code === '42P01') return { status: 'empty', data: [] };
+    return { status: 'error', error, data: [] };
+  }
+  return { status: 'ok', data: data ?? [] };
+}
+
+export async function saveCalendarOverride(payload) {
+  const { data, error } = await supabase
+    .from('calendar_overrides')
+    .insert(payload)
+    .select()
+    .single();
+  if (error) return { error };
+  return { error: null, data };
+}
+
+export async function deleteCalendarOverride(id) {
+  const { error } = await supabase.from('calendar_overrides').delete().eq('id', id);
+  return { error };
+}
+
+export function subscribeCalendarOverrides(callback) {
+  return supabase
+    .channel('calendar-overrides-realtime')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'calendar_overrides' }, callback)
+    .subscribe();
+}

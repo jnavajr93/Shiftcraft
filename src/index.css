@@ -2011,3 +2011,39 @@ html, body, #root {
   text-align: center;
   font-style: italic;
 }
+
+/* ─── Holiday / office-closed bars ──────────────────────────────────────────── */
+.closure-bar {
+  opacity: 0.82;
+}
+
+/* ─── Day panel: holiday section ────────────────────────────────────────────── */
+.day-panel-holiday {
+  display: flex; align-items: center; gap: 7px;
+  padding: 7px 12px 5px;
+  border-bottom: 0.5px solid var(--border);
+  flex-wrap: wrap;
+}
+.day-panel-holiday-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.day-panel-holiday-name {
+  font-size: 12px; font-weight: 600; color: var(--text-primary); flex: 1;
+}
+.day-panel-holiday-status {
+  font-weight: 400; color: var(--text-muted);
+}
+
+/* ─── Day panel: office-closed entries ──────────────────────────────────────── */
+.day-panel-closures {
+  padding: 5px 12px;
+  border-bottom: 0.5px solid var(--border);
+  display: flex; flex-direction: column; gap: 4px;
+}
+.day-panel-closure-item {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--text-secondary);
+}
+.day-panel-closure-label {
+  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}

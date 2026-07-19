@@ -32,6 +32,7 @@ import { useTour } from './Tour.jsx';
 import ChangeLogDrawer from './ChangeLogDrawer.jsx';
 import ChatPanel from './ChatPanel.jsx';
 import AbsenceCalendar, { ABSENCE_TYPES } from './AbsenceCalendar.jsx';
+import { getFederalHolidays } from '../utils/federalHolidays.js';
 import { generateSchedule } from '../engine/adapter.js';
 import { validateAndRepairAssignments, findObsViolations, findInvalidSlotAssignments, getPostViolations } from '../engine/validator.js';
 import { fetchAbsencesForWeek } from '../services/dataService.js';
@@ -526,7 +527,9 @@ Only include slots that should be filled. Omit middle/training unless needed. If
 
 const HP_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-function HoverPreview({ anchorRef, absences, currentWeek, people }) {
+const CLOSED_COLOR_HP = '#64748b';
+
+function HoverPreview({ anchorRef, absences, currentWeek, people, calendarOverrides }) {
   if (!anchorRef?.current) return null;
   const rect = anchorRef.current.getBoundingClientRect();
 
@@ -551,6 +554,14 @@ function HoverPreview({ anchorRef, absences, currentWeek, people }) {
   next7d.setDate(next7d.getDate() + 7);
   const endDs = toDs(next7d);
 
+  // Build closure set for this month (observed holidays + office-closed)
+  const holidays = getFederalHolidays(year);
+  const openOverrides = new Set((calendarOverrides ?? []).filter(o => o.kind === 'holiday_open').map(o => o.date));
+  const closedDates = new Set([
+    ...holidays.filter(h => !openOverrides.has(h.date)).map(h => h.date),
+    ...(calendarOverrides ?? []).filter(o => o.kind === 'office_closed').map(o => o.date),
+  ]);
+
   const next7 = (absences ?? [])
     .filter(a => a.end_date >= todayDs && a.start_date <= endDs)
     .sort((a, b) => a.start_date.localeCompare(b.start_date))
@@ -573,12 +584,14 @@ function HoverPreview({ anchorRef, absences, currentWeek, people }) {
           const ds = toDs(d);
           const isOther = d.getUTCMonth() !== month;
           const dots = isOther ? [] : (absences ?? []).filter(a => a.start_date <= ds && a.end_date >= ds);
+          const isClosed = !isOther && closedDates.has(ds);
           return (
             <div key={i} className={`hover-preview-day${isOther ? ' hover-preview-day--other' : ''}`}>
               <span>{d.getUTCDate()}</span>
-              {dots.length > 0 && (
+              {(dots.length > 0 || isClosed) && (
                 <div className="hover-preview-dots">
-                  {dots.slice(0, 3).map((a, j) => (
+                  {isClosed && <span className="hover-preview-dot" style={{ background: CLOSED_COLOR_HP }} />}
+                  {dots.slice(0, isClosed ? 2 : 3).map((a, j) => (
                     <span key={j} className="hover-preview-dot" style={{ background: colorOf(a.type) }} />
                   ))}
                 </div>
@@ -613,7 +626,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
   const {
     isAdmin, setIsAdmin, managerInitials, setManagerInitials, theme, setTheme,
     weekLabel, currentWeek, navigateWeek, jumpToWeek, weekIsEmpty, copyFromTwoWeeksAgo, clearWeek,
-    data, absences, addLog, applyBulkAssignments, restoreClinicSlots, lastSaved, saveStatus,
+    data, absences, calendarOverrides, addLog, applyBulkAssignments, restoreClinicSlots, lastSaved, saveStatus,
     historyScores, presentManagers, conflictToast, setConflictToast,
     isDirty, postedSnapshot, dirtyWeeks, postWeek,
     doctorOffClinicIds,
@@ -1201,6 +1214,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
           absences={absences ?? []}
           currentWeek={currentWeek}
           people={data?.people ?? []}
+          calendarOverrides={calendarOverrides ?? []}
         />
       )}
       {showPinModal && (

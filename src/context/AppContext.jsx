@@ -20,6 +20,10 @@ import {
   updateAbsence as updateAbsenceDB,
   deleteAbsence as deleteAbsenceDB,
   subscribeAbsences,
+  fetchAllCalendarOverrides as fetchAllCalendarOverridesDB,
+  saveCalendarOverride as saveCalendarOverrideDB,
+  deleteCalendarOverride as deleteCalendarOverrideDB,
+  subscribeCalendarOverrides,
   weekKey,
   SCHEDULE_KEY,
   CHANGELOG_KEY,
@@ -629,6 +633,9 @@ export function AppProvider({ children }) {
   // ─── Absence state ─────────────────────────────
   const [absences, setAbsences] = useState([]);
 
+  // ─── Calendar overrides state ───────────────────
+  const [calendarOverrides, setCalendarOverrides] = useState([]);
+
   // ─── Verified save helper ─────────────────────
   // Versioned conditional save via upsert_schedule_data RPC.
   // On conflict (another manager saved between our load and this save):
@@ -1123,6 +1130,39 @@ export function AppProvider({ children }) {
     const { error } = await deleteAbsenceDB(id);
     if (error) { console.error('[Shiftcraft] removeAbsence error:', error); return { error }; }
     setAbsences(prev => prev.filter(a => a.id !== id));
+    return { error: null };
+  }, []);
+
+  // ─── Calendar overrides load + realtime ──────────
+  useEffect(() => {
+    fetchAllCalendarOverridesDB().then(({ data }) => {
+      if (data) setCalendarOverrides(data);
+    });
+    const channel = subscribeCalendarOverrides((payload) => {
+      setCalendarOverrides(prev => {
+        if (payload.eventType === 'INSERT')
+          return [...prev, payload.new].sort((a, b) => a.date.localeCompare(b.date));
+        if (payload.eventType === 'UPDATE')
+          return prev.map(o => o.id === payload.new.id ? payload.new : o);
+        if (payload.eventType === 'DELETE')
+          return prev.filter(o => o.id !== payload.old.id);
+        return prev;
+      });
+    });
+    return () => supabase.removeChannel(channel);
+  }, []);
+
+  const addCalendarOverride = useCallback(async (payload) => {
+    const { error, data } = await saveCalendarOverrideDB(payload);
+    if (error) { console.error('[Shiftcraft] addCalendarOverride error:', error); return { error }; }
+    setCalendarOverrides(prev => [...prev, data].sort((a, b) => a.date.localeCompare(b.date)));
+    return { error: null, data };
+  }, []);
+
+  const removeCalendarOverride = useCallback(async (id) => {
+    const { error } = await deleteCalendarOverrideDB(id);
+    if (error) { console.error('[Shiftcraft] removeCalendarOverride error:', error); return { error }; }
+    setCalendarOverrides(prev => prev.filter(o => o.id !== id));
     return { error: null };
   }, []);
 
@@ -1913,6 +1953,7 @@ export function AppProvider({ children }) {
       dismissPattern, undismissPattern,
       presentManagers, conflictToast, setConflictToast,
       absences, addAbsence, editAbsence, removeAbsence,
+      calendarOverrides, addCalendarOverride, removeCalendarOverride,
       isDirty, postedSnapshot, dirtyWeeks, boardClinics, postWeek,
       doctorOffClinicIds,
     }}>

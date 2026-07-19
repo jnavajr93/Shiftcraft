@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, X, Clock, Plus, Trash2, AlertCircle, History } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Clock, Plus, Trash2, AlertCircle, History, Building2 } from 'lucide-react';
 import { useApp, mondayOfWeek, isoWeek } from '../context/AppContext.jsx';
+import { getFederalHolidays } from '../utils/federalHolidays.js';
 
 // ─── Category definitions ─────────────────────────────────────────────────────
 
@@ -23,6 +24,9 @@ const TYPE_MAP  = new Map(ABSENCE_TYPES.map(t => [t.key, t]));
 const colorOf   = (key) => TYPE_MAP.get(key)?.color ?? '#6b7280';
 const labelOf   = (key) => TYPE_MAP.get(key)?.label ?? key;
 const shortOf   = (key) => TYPE_MAP.get(key)?.short ?? key;
+
+// Holidays / office-closed are shown in neutral slate
+const CLOSED_COLOR = '#64748b';
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
@@ -88,6 +92,65 @@ function Legend({ activeCategories, onToggle }) {
           </button>
         );
       })}
+      {/* Closed / Holiday chip */}
+      <button
+        className={`absence-legend-item${activeCategories.has('Closed') ? '' : ' absence-legend-item--off'}`}
+        onClick={() => onToggle('Closed')}
+        title={activeCategories.has('Closed') ? 'Hide holidays & closures' : 'Show holidays & closures'}
+      >
+        <span className="absence-legend-dot" style={{ background: CLOSED_COLOR }} />
+        <span>Closed / Holiday</span>
+      </button>
+    </div>
+  );
+}
+
+// ─── Closure modal ────────────────────────────────────────────────────────────
+
+function ClosureModal({ dateStr, managerInitials, onSave, onClose }) {
+  const [label, setLabel] = useState('');
+  const [saving, setSaving] = useState(false);
+  const d = parseUTC(dateStr);
+  const dateLabel = `${DOW[d.getUTCDay()]}, ${MONTHS[d.getUTCMonth()].slice(0, 3)} ${d.getUTCDate()}`;
+
+  const handleSave = async () => {
+    if (!label.trim()) return;
+    setSaving(true);
+    await onSave({ date: dateStr, kind: 'office_closed', label: label.trim(), entered_by: managerInitials ?? null });
+    setSaving(false);
+  };
+
+  return (
+    <div className="overlay-backdrop" style={{ zIndex: 320 }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="overlay-modal" style={{ maxWidth: 380 }} onClick={e => e.stopPropagation()}>
+        <div className="overlay-header">
+          <span style={{ fontWeight: 600, fontSize: 15 }}>Add office closure</span>
+          <button className="overlay-close" onClick={onClose}><X size={16} /></button>
+        </div>
+        <div className="overlay-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <label className="setup-label">Date</label>
+            <div style={{ fontSize: 13, color: 'var(--text-primary)', padding: '6px 0' }}>{dateLabel}</div>
+          </div>
+          <div>
+            <label className="setup-label">Reason / label</label>
+            <input
+              className="setup-input"
+              autoFocus
+              value={label}
+              onChange={e => setLabel(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && label.trim()) handleSave(); }}
+              placeholder="e.g. Office closed – staff training"
+            />
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '12px 24px', borderTop: '0.5px solid var(--border)', flexShrink: 0 }}>
+          <button className="btn btn-pill" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary btn-pill" onClick={handleSave} disabled={!label.trim() || saving}>
+            {saving ? 'Saving…' : 'Add closure'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -289,7 +352,7 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, doc
 
 // ─── Week row with spanning bars ──────────────────────────────────────────────
 
-function WeekRow({ week, viewMonth, absences, personByKey, todayStr, onDayClick, onDayDoubleClick, onAbsenceClick, activeCategories, currentWeekDates, dayPanelDate }) {
+function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, onDayClick, onDayDoubleClick, onAbsenceClick, activeCategories, currentWeekDates, dayPanelDate }) {
   const weekStart = toDateStr(week[0]);
   const weekEnd   = toDateStr(week[6]);
   const clickTimerRef = useRef(null);
@@ -300,6 +363,11 @@ function WeekRow({ week, viewMonth, absences, personByKey, todayStr, onDayClick,
   const weekAbsences = absences
     .filter(a => a.end_date >= weekStart && a.start_date <= weekEnd && activeCategories.has(a.type))
     .sort((a, b) => a.start_date.localeCompare(b.start_date) || a.person_name.localeCompare(b.person_name));
+
+  // Closure bars (holidays + office-closed) filtered to this week
+  const weekClosures = activeCategories.has('Closed')
+    ? closures.filter(c => c.date >= weekStart && c.date <= weekEnd)
+    : [];
 
   // Distinguish single-click (open day panel) from double-click (jump to week)
   const handleCellInteraction = (ds, e) => {
@@ -315,6 +383,8 @@ function WeekRow({ week, viewMonth, absences, personByKey, todayStr, onDayClick,
       onDayClick(ds, rect);
     }, 220);
   };
+
+  const allBars = weekClosures.length + weekAbsences.length;
 
   return (
     <div className={`absence-week-row${isCurrentWeek ? ' absence-week-row--current-week' : ''}`}>
@@ -336,9 +406,35 @@ function WeekRow({ week, viewMonth, absences, personByKey, todayStr, onDayClick,
         );
       })}
 
-      {weekAbsences.length > 0 && (
+      {allBars > 0 && (
         <div className="absence-bars-layer" style={{ pointerEvents: 'none' }}>
-          {weekAbsences.map((absence, laneIdx) => {
+          {/* Closure bars first (holidays + office-closed) */}
+          {weekClosures.map((closure, laneIdx) => {
+            const col = week.findIndex(d => toDateStr(d) === closure.date);
+            if (col < 0) return null;
+            return (
+              <div
+                key={`c-${closure.id ?? closure.date}-${closure.kind}`}
+                className="absence-bar closure-bar"
+                style={{
+                  left:       `calc(${col} / 7 * 100% + 2px)`,
+                  width:      `calc(1 / 7 * 100% - 4px)`,
+                  top:        `${30 + laneIdx * 22}px`,
+                  background: CLOSED_COLOR,
+                  borderRadius: 3,
+                  pointerEvents: 'none',
+                }}
+                title={closure.label}
+              >
+                <span className="absence-bar-label">{closure.label}</span>
+                {closure.kind === 'office_closed' && <Building2 size={9} style={{ flexShrink: 0, marginLeft: 3, opacity: 0.9 }} />}
+              </div>
+            );
+          })}
+
+          {/* Absence bars after closure bars */}
+          {weekAbsences.map((absence, idx) => {
+            const laneIdx = weekClosures.length + idx;
             const barStart = absence.start_date < weekStart ? weekStart : absence.start_date;
             const barEnd   = absence.end_date   > weekEnd   ? weekEnd   : absence.end_date;
             const startCol = week.findIndex(d => toDateStr(d) === barStart);
@@ -379,38 +475,60 @@ function WeekRow({ week, viewMonth, absences, personByKey, todayStr, onDayClick,
 
 // ─── Upcoming panel ───────────────────────────────────────────────────────────
 
-function UpcomingPanel({ absences, personByKey, todayStr, onAbsenceClick, activeCategories }) {
+function UpcomingPanel({ absences, closures, personByKey, todayStr, onAbsenceClick, activeCategories }) {
   const cutoff = (() => { const d = parseUTC(todayStr); d.setUTCDate(d.getUTCDate() + 30); return toDateStr(d); })();
-  const upcoming = absences
+
+  const upcomingAbsences = absences
     .filter(a => a.end_date >= todayStr && a.start_date <= cutoff && activeCategories.has(a.type))
-    .sort((a, b) => a.start_date.localeCompare(b.start_date));
+    .map(a => ({
+      key: `a-${a.id}`,
+      date: a.start_date,
+      color: colorOf(a.type),
+      title: personByKey.get(a.person_name)?.name ?? a.person_name,
+      detail: `${labelOf(a.type)} · ${formatRange(a.start_date, a.end_date)}`,
+      note: a.type === 'Partial' && a.partial_start ? `${a.partial_start}–${a.partial_end}` : (a.note ?? null),
+      onClick: () => onAbsenceClick(a),
+    }));
+
+  const upcomingClosures = activeCategories.has('Closed')
+    ? closures
+        .filter(c => c.date >= todayStr && c.date <= cutoff)
+        .map(c => ({
+          key: `c-${c.id ?? c.date}-${c.kind}`,
+          date: c.date,
+          color: CLOSED_COLOR,
+          title: c.label,
+          detail: formatDateDisplay(c.date),
+          note: null,
+          onClick: null,
+        }))
+    : [];
+
+  const upcoming = [...upcomingAbsences, ...upcomingClosures]
+    .sort((a, b) => a.date.localeCompare(b.date));
 
   return (
     <div className="absence-upcoming-section">
       <div className="absence-upcoming-title">Upcoming 30 days</div>
       <div className="absence-upcoming-list">
         {upcoming.length === 0 && (
-          <div style={{ color: 'var(--text-muted)', fontSize: 12, padding: '16px 0', textAlign: 'center' }}>No upcoming absences</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 12, padding: '16px 0', textAlign: 'center' }}>No upcoming absences or closures</div>
         )}
-        {upcoming.map(a => {
-          const person = personByKey.get(a.person_name);
-          const color  = colorOf(a.type);
-          return (
-            <div key={a.id} className="absence-upcoming-item" onClick={() => onAbsenceClick(a)}>
-              <div className="absence-upcoming-dot" style={{ background: color }} />
-              <div className="absence-upcoming-info">
-                <div className="absence-upcoming-name">{person?.name ?? a.person_name}</div>
-                <div className="absence-upcoming-detail">
-                  {labelOf(a.type)} · {formatRange(a.start_date, a.end_date)}
-                  {a.type === 'Partial' && a.partial_start && (
-                    <span style={{ marginLeft: 4, opacity: 0.7 }}>({a.partial_start}–{a.partial_end})</span>
-                  )}
-                </div>
-                {a.note && <div className="absence-upcoming-note">{a.note}</div>}
-              </div>
+        {upcoming.map(item => (
+          <div
+            key={item.key}
+            className={`absence-upcoming-item${item.onClick ? '' : ' absence-upcoming-item--static'}`}
+            onClick={item.onClick ?? undefined}
+            style={item.onClick ? undefined : { cursor: 'default' }}
+          >
+            <div className="absence-upcoming-dot" style={{ background: item.color }} />
+            <div className="absence-upcoming-info">
+              <div className="absence-upcoming-name">{item.title}</div>
+              <div className="absence-upcoming-detail">{item.detail}</div>
+              {item.note && <div className="absence-upcoming-note">{item.note}</div>}
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -418,18 +536,42 @@ function UpcomingPanel({ absences, personByKey, todayStr, onAbsenceClick, active
 
 // ─── Day panel (anchored near clicked cell) ───────────────────────────────────
 
-function DayPanel({ dateStr, rect, absences, personByKey, onClose, onJumpAndClose, onAddAbsence, onAbsenceClick }) {
+function DayPanel({ dateStr, rect, absences, personByKey, holidayMap, openOverrideSet, openOverrideById, dayClosures, isAdmin, managerInitials, onClose, onJumpAndClose, onAddAbsence, onAbsenceClick, onToggleHolidayOpen, onAddClosure, onDeleteClosure }) {
   const dayAbsences = absences.filter(a => a.start_date <= dateStr && a.end_date >= dateStr);
   const d = parseUTC(dateStr);
   const dateLabel = `${DOW[d.getUTCDay()]}, ${MONTHS[d.getUTCMonth()].slice(0, 3)} ${d.getUTCDate()}`;
 
-  const panelWidth = 264;
+  const holidayName = holidayMap.get(dateStr) ?? null;
+  const isHolidayOpen = openOverrideSet.has(dateStr);
+  const [togglingHoliday, setTogglingHoliday] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
+
+  const panelWidth = 280;
   let left = Math.round(rect.left);
   if (left + panelWidth > window.innerWidth - 12) left = window.innerWidth - panelWidth - 12;
   if (left < 8) left = 8;
   let top = Math.round(rect.bottom + 6);
-  if (top + 220 > window.innerHeight - 8) top = Math.round(rect.top) - 226;
+  if (top + 260 > window.innerHeight - 8) top = Math.round(rect.top) - 266;
   if (top < 8) top = 8;
+
+  const handleToggleHoliday = async () => {
+    setTogglingHoliday(true);
+    if (isHolidayOpen) {
+      // Remove the holiday_open override → office is now closed/observed
+      const ovr = openOverrideById.get(dateStr);
+      if (ovr) await onToggleHolidayOpen('remove', ovr.id, null);
+    } else {
+      // Add holiday_open override → office is open on this holiday
+      await onToggleHolidayOpen('add', null, { date: dateStr, kind: 'holiday_open', label: holidayName, entered_by: managerInitials ?? null });
+    }
+    setTogglingHoliday(false);
+  };
+
+  const handleDeleteClosure = async (id) => {
+    setDeletingId(id);
+    await onDeleteClosure(id);
+    setDeletingId(null);
+  };
 
   return (
     <div
@@ -443,9 +585,59 @@ function DayPanel({ dateStr, rect, absences, personByKey, onClose, onJumpAndClos
           <X size={13} />
         </button>
       </div>
+
+      {/* Holiday section */}
+      {holidayName && (
+        <div className="day-panel-holiday">
+          <span className="day-panel-holiday-dot" style={{ background: CLOSED_COLOR }} />
+          <span className="day-panel-holiday-name">
+            {holidayName}
+            <span className="day-panel-holiday-status">
+              {isHolidayOpen ? ' – Office open' : ' – Observed'}
+            </span>
+          </span>
+          {isAdmin && (
+            <button
+              className="btn btn-pill"
+              style={{ fontSize: 10, minHeight: 20, padding: '1px 7px', marginLeft: 'auto', flexShrink: 0 }}
+              onClick={handleToggleHoliday}
+              disabled={togglingHoliday}
+            >
+              {togglingHoliday ? '…' : isHolidayOpen ? 'Mark observed' : 'Mark open'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Office-closed entries */}
+      {dayClosures.length > 0 && (
+        <div className="day-panel-closures">
+          {dayClosures.map(c => (
+            <div key={c.id} className="day-panel-closure-item">
+              <Building2 size={11} style={{ color: CLOSED_COLOR, flexShrink: 0 }} />
+              <span className="day-panel-closure-label">{c.label}</span>
+              {isAdmin && (
+                <button
+                  className="btn btn-icon"
+                  style={{ minHeight: 20, padding: '1px 3px', marginLeft: 'auto', color: 'var(--text-muted)' }}
+                  onClick={() => handleDeleteClosure(c.id)}
+                  disabled={deletingId === c.id}
+                  title="Delete closure"
+                >
+                  {deletingId === c.id ? '…' : <Trash2 size={11} />}
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="day-panel-absence-list">
-        {dayAbsences.length === 0 && (
+        {dayAbsences.length === 0 && !holidayName && dayClosures.length === 0 && (
           <div className="day-panel-empty">No absences this day</div>
+        )}
+        {dayAbsences.length === 0 && (holidayName || dayClosures.length > 0) && (
+          <div className="day-panel-empty">No staff absences</div>
         )}
         {dayAbsences.map(a => {
           const person = personByKey.get(a.person_name);
@@ -459,6 +651,7 @@ function DayPanel({ dateStr, rect, absences, personByKey, onClose, onJumpAndClos
           );
         })}
       </div>
+
       <div className="day-panel-actions">
         <button className="btn btn-pill" style={{ fontSize: 11, minHeight: 26 }} onClick={onJumpAndClose}>
           Go to this week
@@ -470,6 +663,15 @@ function DayPanel({ dateStr, rect, absences, personByKey, onClose, onJumpAndClos
         >
           <Plus size={11} /> Add absence
         </button>
+        {isAdmin && (
+          <button
+            className="btn btn-pill"
+            style={{ fontSize: 11, minHeight: 26, gap: 4, color: CLOSED_COLOR, borderColor: CLOSED_COLOR }}
+            onClick={() => onAddClosure(dateStr)}
+          >
+            <Building2 size={11} /> Add closure
+          </button>
+        )}
       </div>
     </div>
   );
@@ -633,7 +835,10 @@ function AbsenceHistory({ absences, people, personByKey, onAbsenceClick }) {
 // ─── Main calendar ────────────────────────────────────────────────────────────
 
 export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) {
-  const { data, absences, addAbsence, editAbsence, removeAbsence, managerInitials, addLog } = useApp();
+  const {
+    data, absences, addAbsence, editAbsence, removeAbsence, managerInitials, addLog,
+    calendarOverrides, addCalendarOverride, removeCalendarOverride, isAdmin,
+  } = useApp();
   const people      = data.people ?? [];
   const doctors     = (data.providers ?? []).map(p => p.name);
   const personByKey = useMemo(
@@ -649,12 +854,13 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
   const [view,      setView]      = useState('calendar'); // 'calendar' | 'history'
   const [viewYear,  setViewYear]  = useState(initMonday.getUTCFullYear());
   const [viewMonth, setViewMonth] = useState(initMonday.getUTCMonth());
-  const [modal,     setModal]     = useState(null);
+  const [modal,     setModal]     = useState(null); // absence modal
+  const [closureModal, setClosureModal] = useState(null); // { dateStr }
   const [dayPanel,  setDayPanel]  = useState(null); // { dateStr, rect }
 
-  // Category filter chips — all on by default
+  // Category filter chips — all on by default (including 'Closed')
   const [activeCategories, setActiveCategories] = useState(
-    () => new Set(SELECTABLE_TYPES.map(t => t.key)),
+    () => new Set([...SELECTABLE_TYPES.map(t => t.key), 'Closed']),
   );
   const toggleCategory = useCallback((key) => {
     setActiveCategories(prev => {
@@ -664,6 +870,56 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
       return next;
     });
   }, []);
+
+  // ─── Holiday / override derived data ───────────────────────────────────────
+
+  // Federal holidays for current + adjacent years
+  const federalHolidays = useMemo(() => {
+    const years = [viewYear - 1, viewYear, viewYear + 1];
+    return years.flatMap(y => getFederalHolidays(y));
+  }, [viewYear]);
+
+  // Map: dateStr → holiday name (for observed holidays)
+  const holidayMap = useMemo(
+    () => new Map(federalHolidays.map(h => [h.date, h.name])),
+    [federalHolidays],
+  );
+
+  // Set of dates where the office is open despite a holiday (holiday_open overrides)
+  const openOverrideSet = useMemo(
+    () => new Set((calendarOverrides ?? []).filter(o => o.kind === 'holiday_open').map(o => o.date)),
+    [calendarOverrides],
+  );
+
+  // Map: dateStr → override object for holiday_open (to get id for deletion)
+  const openOverrideById = useMemo(
+    () => new Map((calendarOverrides ?? []).filter(o => o.kind === 'holiday_open').map(o => [o.date, o])),
+    [calendarOverrides],
+  );
+
+  // Map: dateStr → office_closed override objects
+  const officeClosedByDate = useMemo(() => {
+    const map = new Map();
+    (calendarOverrides ?? []).filter(o => o.kind === 'office_closed').forEach(o => {
+      if (!map.has(o.date)) map.set(o.date, []);
+      map.get(o.date).push(o);
+    });
+    return map;
+  }, [calendarOverrides]);
+
+  // Combined closures list for WeekRow and UpcomingPanel
+  // Observed holidays (not open-overridden) + office-closed entries
+  const allClosures = useMemo(() => {
+    const holidays = federalHolidays
+      .filter(h => !openOverrideSet.has(h.date))
+      .map(h => ({ kind: 'holiday', date: h.date, label: h.name, id: null }));
+    const officeClosed = (calendarOverrides ?? [])
+      .filter(o => o.kind === 'office_closed')
+      .map(o => ({ kind: 'office_closed', date: o.date, label: o.label, id: o.id }));
+    return [...holidays, ...officeClosed].sort((a, b) => a.date.localeCompare(b.date));
+  }, [federalHolidays, openOverrideSet, calendarOverrides]);
+
+  // ──────────────────────────────────────────────────────────────────────────
 
   // Set of dateStr for Mon–Sun of the currently viewed board week (for row highlight)
   const currentWeekDates = useMemo(() => {
@@ -678,10 +934,11 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
     return dates;
   }, [currentWeek]);
 
-  // Escape layering: modal → dayPanel → calendar
+  // Escape layering: closure modal → absence modal → dayPanel → calendar
   useEffect(() => {
     const handler = (e) => {
       if (e.key === 'Escape') {
+        if (closureModal) { setClosureModal(null); return; }
         if (modal)    { setModal(null);    return; }
         if (dayPanel) { setDayPanel(null); return; }
         onClose();
@@ -689,7 +946,7 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [modal, dayPanel, onClose]);
+  }, [closureModal, modal, dayPanel, onClose]);
 
   const grid = buildGrid(viewYear, viewMonth);
 
@@ -754,6 +1011,23 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
     }
   }, [modal, removeAbsence, addLog, personByKey]);
 
+  const handleToggleHolidayOpen = useCallback(async (action, id, payload) => {
+    if (action === 'add') {
+      await addCalendarOverride(payload);
+    } else {
+      await removeCalendarOverride(id);
+    }
+  }, [addCalendarOverride, removeCalendarOverride]);
+
+  const handleAddClosure = useCallback(async (payload) => {
+    await addCalendarOverride(payload);
+    setClosureModal(null);
+  }, [addCalendarOverride]);
+
+  const handleDeleteClosure = useCallback(async (id) => {
+    await removeCalendarOverride(id);
+  }, [removeCalendarOverride]);
+
   return (
     <div className="absence-overlay">
       <div className="absence-panel">
@@ -810,6 +1084,7 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
                     week={week}
                     viewMonth={viewMonth}
                     absences={absences}
+                    closures={allClosures}
                     personByKey={personByKey}
                     todayStr={todayStr}
                     onDayClick={handleDayClick}
@@ -824,6 +1099,7 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
             </div>
             <UpcomingPanel
               absences={absences}
+              closures={allClosures}
               personByKey={personByKey}
               todayStr={todayStr}
               onAbsenceClick={handleAbsenceClick}
@@ -841,12 +1117,18 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
       </div>
 
       {/* Day panel — anchored near clicked cell, above modal layer */}
-      {dayPanel && !modal && (
+      {dayPanel && !modal && !closureModal && (
         <DayPanel
           dateStr={dayPanel.dateStr}
           rect={dayPanel.rect}
           absences={absences}
           personByKey={personByKey}
+          holidayMap={holidayMap}
+          openOverrideSet={openOverrideSet}
+          openOverrideById={openOverrideById}
+          dayClosures={officeClosedByDate.get(dayPanel.dateStr) ?? []}
+          isAdmin={isAdmin}
+          managerInitials={managerInitials}
           onClose={() => setDayPanel(null)}
           onJumpAndClose={() => {
             if (onJumpToWeek) onJumpToWeek(isoWeek(parseUTC(dayPanel.dateStr)));
@@ -857,6 +1139,12 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
             setModal({ mode: 'add', initStart: ds, initEnd: ds });
           }}
           onAbsenceClick={handleAbsenceClick}
+          onToggleHolidayOpen={handleToggleHolidayOpen}
+          onAddClosure={(ds) => {
+            setDayPanel(null);
+            setClosureModal({ dateStr: ds });
+          }}
+          onDeleteClosure={handleDeleteClosure}
         />
       )}
 
@@ -873,6 +1161,15 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
           onSave={handleSave}
           onDelete={handleDelete}
           onClose={() => setModal(null)}
+        />
+      )}
+
+      {closureModal && (
+        <ClosureModal
+          dateStr={closureModal.dateStr}
+          managerInitials={managerInitials}
+          onSave={handleAddClosure}
+          onClose={() => setClosureModal(null)}
         />
       )}
     </div>
