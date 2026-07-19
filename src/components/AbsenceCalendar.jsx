@@ -156,6 +156,116 @@ function ClosureModal({ dateStr, managerInitials, onSave, onClose }) {
   );
 }
 
+// ─── Person typeahead ─────────────────────────────────────────────────────────
+
+function PersonTypeahead({ value, onChange, roster, placeholder }) {
+  // value = personKey string (empty string when unset)
+  // roster = [{ label: string, key: string }]
+  const [query, setQuery]           = useState('');
+  const [open, setOpen]             = useState(false);
+  const [highlightIdx, setHighlight] = useState(-1);
+  const inputRef = useRef(null);
+  const listRef  = useRef(null);
+
+  const selected = roster.find(r => r.key === value) ?? null;
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return roster;
+    return roster.filter(r => r.label.toLowerCase().includes(q));
+  }, [query, roster]);
+
+  // Reset highlight when filtered list changes
+  useEffect(() => { setHighlight(-1); }, [filtered]);
+
+  // Scroll highlighted item into view
+  useEffect(() => {
+    if (highlightIdx >= 0 && listRef.current) {
+      const el = listRef.current.children[highlightIdx];
+      el?.scrollIntoView({ block: 'nearest' });
+    }
+  }, [highlightIdx]);
+
+  const select = (item) => {
+    onChange(item.key);
+    setQuery('');
+    setOpen(false);
+    setHighlight(-1);
+  };
+
+  const clear = () => {
+    onChange('');
+    setQuery('');
+    setHighlight(-1);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
+  const handleKeyDown = (e) => {
+    if (!open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      setOpen(true);
+      return;
+    }
+    if (e.key === 'Escape') { setOpen(false); setHighlight(-1); return; }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlight(i => Math.min(i + 1, filtered.length - 1));
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlight(i => Math.max(i - 1, 0));
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (highlightIdx >= 0 && filtered[highlightIdx]) select(filtered[highlightIdx]);
+      else if (filtered.length === 1) select(filtered[0]);
+      return;
+    }
+  };
+
+  if (selected) {
+    return (
+      <div className="typeahead-chip">
+        <span className="typeahead-chip-label">{selected.label}</span>
+        <button type="button" className="typeahead-chip-clear" onClick={clear} aria-label="Clear selection">
+          <X size={12} />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="typeahead-wrap">
+      <input
+        ref={inputRef}
+        className="setup-input typeahead-input"
+        value={query}
+        placeholder={placeholder ?? 'Search…'}
+        autoComplete="off"
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onChange={e => { setQuery(e.target.value); setOpen(true); }}
+        onKeyDown={handleKeyDown}
+      />
+      {open && filtered.length > 0 && (
+        <ul className="typeahead-dropdown" ref={listRef} onMouseDown={e => e.preventDefault()}>
+          {filtered.map((item, i) => (
+            <li
+              key={item.key}
+              className={`typeahead-option${i === highlightIdx ? ' typeahead-option--hi' : ''}`}
+              onMouseEnter={() => setHighlight(i)}
+              onMouseDown={() => select(item)}
+            >
+              {item.label}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 // ─── Absence modal ────────────────────────────────────────────────────────────
 
 function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, doctors, managerInitials, onSave, onDelete, onClose }) {
@@ -232,19 +342,21 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, doc
           <div>
             <label className="setup-label">{type === 'DoctorOff' ? 'Doctor' : 'Person'}</label>
             {type === 'DoctorOff' ? (
-              <select className="setup-input" value={personKey} onChange={e => setPersonKey(e.target.value)}>
-                <option value="">— select doctor —</option>
-                {(doctors ?? DOCTORS).map(d => (
-                  <option key={d} value={d}>{d}</option>
-                ))}
-              </select>
+              <PersonTypeahead
+                value={personKey}
+                onChange={setPersonKey}
+                roster={(doctors ?? DOCTORS).map(d => ({ key: d, label: d }))}
+                placeholder="Search doctors…"
+              />
             ) : (
-              <select className="setup-input" value={personKey} onChange={e => setPersonKey(e.target.value)}>
-                <option value="">— select —</option>
-                {[...people].sort((a, b) => a.name.localeCompare(b.name)).map(p => (
-                  <option key={p.id} value={p.name.trim().toLowerCase()}>{p.name}</option>
-                ))}
-              </select>
+              <PersonTypeahead
+                value={personKey}
+                onChange={setPersonKey}
+                roster={[...people]
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map(p => ({ key: p.name.trim().toLowerCase(), label: p.name }))}
+                placeholder="Search staff…"
+              />
             )}
           </div>
 

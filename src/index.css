@@ -2084,3 +2084,45 @@ html, body, #root {
 .day-panel-holiday-move {
   padding: 4px 0 2px;
 }
+
+/* ─── Person typeahead ───────────────────────────────────────────────────── */
+.typeahead-wrap {
+  position: relative;
+}
+.typeahead-input {
+  width: 100%; padding: 7px 10px; font-size: 14px; font-family: var(--font);
+  border: 0.5px solid var(--border-strong); border-radius: var(--radius);
+  background: var(--bg-surface); color: var(--text-primary);
+  outline: none; transition: border-color 120ms;
+}
+.typeahead-input:focus { border-color: var(--accent); }
+.typeahead-dropdown {
+  position: absolute; top: calc(100% + 3px); left: 0; right: 0; z-index: 400;
+  background: var(--bg-elevated); border: 0.5px solid var(--border-strong);
+  border-radius: var(--radius); box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+  max-height: 200px; overflow-y: auto; list-style: none; padding: 4px 0;
+}
+.typeahead-option {
+  padding: 7px 12px; font-size: 13px; color: var(--text-primary);
+  cursor: pointer; transition: background 60ms;
+}
+.typeahead-option--hi,
+.typeahead-option:hover {
+  background: var(--accent-subtle);
+}
+.typeahead-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 8px 5px 11px; border-radius: 999px;
+  background: var(--accent-subtle); border: 0.5px solid var(--border-strong);
+  font-size: 13px; color: var(--text-primary); max-width: 100%;
+}
+.typeahead-chip-label {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.typeahead-chip-clear {
+  display: flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 50%; border: none;
+  background: var(--border-strong); color: var(--text-secondary);
+  cursor: pointer; flex-shrink: 0; transition: background 80ms;
+}
+.typeahead-chip-clear:hover { background: var(--border-strong); filter: brightness(0.85); }
