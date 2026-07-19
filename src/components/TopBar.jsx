@@ -529,7 +529,7 @@ const HP_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
 
 const CLOSED_COLOR_HP = '#64748b';
 
-function HoverPreview({ anchorRef, absences, currentWeek, people, calendarOverrides }) {
+function HoverPreview({ anchorRef, absences, currentWeek, people, calendarOverrides, onMouseEnter, onMouseLeave, onDayClick }) {
   if (!anchorRef?.current) return null;
   const rect = anchorRef.current.getBoundingClientRect();
 
@@ -573,8 +573,17 @@ function HoverPreview({ anchorRef, absences, currentWeek, people, calendarOverri
   if (left < 8) left = 8;
   const top = Math.round(rect.bottom + 8);
 
+  const toIsoWeek = (d) => {
+    const thu = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+    thu.setUTCDate(thu.getUTCDate() + 4 - (thu.getUTCDay() || 7));
+    const yearStart = new Date(Date.UTC(thu.getUTCFullYear(), 0, 4));
+    yearStart.setUTCDate(yearStart.getUTCDate() + 4 - (yearStart.getUTCDay() || 7));
+    const week = Math.ceil(((thu - yearStart) / 86400000 + 1) / 7);
+    return `${thu.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+  };
+
   return (
-    <div className="hover-preview" style={{ top, left, width }}>
+    <div className="hover-preview" style={{ top, left, width }} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
       <div className="hover-preview-month">{HP_MONTHS[month]} {year}</div>
       <div className="hover-preview-grid">
         {['S','M','T','W','T','F','S'].map((h, i) => (
@@ -586,7 +595,11 @@ function HoverPreview({ anchorRef, absences, currentWeek, people, calendarOverri
           const dots = isOther ? [] : (absences ?? []).filter(a => a.start_date <= ds && a.end_date >= ds);
           const isClosed = !isOther && closedDates.has(ds);
           return (
-            <div key={i} className={`hover-preview-day${isOther ? ' hover-preview-day--other' : ''}`}>
+            <div
+              key={i}
+              className={`hover-preview-day${isOther ? ' hover-preview-day--other' : ''}`}
+              onClick={isOther ? undefined : () => onDayClick?.(toIsoWeek(d))}
+            >
               <span>{d.getUTCDate()}</span>
               {(dots.length > 0 || isClosed) && (
                 <div className="hover-preview-dots">
@@ -940,7 +953,10 @@ export default function TopBar({ activeTab, setActiveTab }) {
               clearTimeout(hoverTimerRef.current);
               hoverTimerRef.current = setTimeout(() => setShowPreview(true), 300);
             }}
-            onMouseLeave={() => { clearTimeout(hoverTimerRef.current); setShowPreview(false); }}
+            onMouseLeave={() => {
+              clearTimeout(hoverTimerRef.current);
+              hoverTimerRef.current = setTimeout(() => setShowPreview(false), 200);
+            }}
             aria-label="Open absence calendar"
           >
             {isAdmin ? (
@@ -1215,6 +1231,12 @@ export default function TopBar({ activeTab, setActiveTab }) {
           currentWeek={currentWeek}
           people={data?.people ?? []}
           calendarOverrides={calendarOverrides ?? []}
+          onMouseEnter={() => clearTimeout(hoverTimerRef.current)}
+          onMouseLeave={() => {
+            clearTimeout(hoverTimerRef.current);
+            hoverTimerRef.current = setTimeout(() => setShowPreview(false), 200);
+          }}
+          onDayClick={(weekStr) => { setShowPreview(false); jumpToWeek(weekStr); }}
         />
       )}
       {showPinModal && (

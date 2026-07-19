@@ -1854,7 +1854,6 @@ html, body, #root {
   border-radius: var(--radius-lg);
   box-shadow: 0 8px 28px rgba(0,0,0,0.16);
   padding: 12px;
-  pointer-events: none;
   animation: hoverPreviewIn 140ms ease both;
 }
 @keyframes hoverPreviewIn {
@@ -1876,8 +1875,12 @@ html, body, #root {
   font-size: 9.5px; text-align: center; color: var(--text-primary);
   min-height: 22px; display: flex; flex-direction: column;
   align-items: center; justify-content: flex-start;
+  border-radius: 4px; padding: 1px 0;
+  cursor: pointer; transition: background 80ms;
 }
-.hover-preview-day--other { opacity: 0.22; }
+.hover-preview-day:hover { background: var(--bg-hover); }
+.hover-preview-day--other { opacity: 0.22; cursor: default; }
+.hover-preview-day--other:hover { background: transparent; }
 .hover-preview-dots { display: flex; gap: 2px; justify-content: center; margin-top: 1px; }
 .hover-preview-dot { width: 5px; height: 5px; border-radius: 50%; display: inline-block; }
 .hover-preview-divider { height: 0.5px; background: var(--border); margin: 8px 0; }
