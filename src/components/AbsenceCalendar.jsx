@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, X, Clock, Plus, Trash2, AlertCircle, History, Building2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Clock, Plus, Trash2, AlertCircle, History, Building2, PhoneCall } from 'lucide-react';
 import { useApp, mondayOfWeek, isoWeek } from '../context/AppContext.jsx';
 import { getFederalHolidays } from '../utils/federalHolidays.js';
 import { CLOSURE_LOCATIONS, buildClosureMap } from '../utils/holidayClosures.js';
+import { getOnCallPerson } from '../utils/oncall.js';
+import OnCallManager from './OnCallManager.jsx';
 
 // ─── Category definitions ─────────────────────────────────────────────────────
 
@@ -54,6 +56,16 @@ function formatRange(start, end) {
     return `${formatDateDisplay(start)} – ${formatDateDisplay(end)}`;
   }
   return `${formatDateDisplay(start)} – ${formatDateDisplay(end)}, ${e.getUTCFullYear()}`;
+}
+
+// ISO week from a UTC midnight Date (avoids local-timezone getFullYear/Month/Date pitfalls)
+function isoWeekUTC(date) {
+  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const w = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(w).padStart(2, '0')}`;
 }
 
 // Build 6-row × 7-col grid (Sun→Sat)
@@ -468,10 +480,17 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, doc
 
 // ─── Week row with spanning bars ──────────────────────────────────────────────
 
-function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, onDayClick, onDayDoubleClick, onAbsenceClick, activeCategories, currentWeekDates, dayPanelDate }) {
+function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, onDayClick, onDayDoubleClick, onAbsenceClick, activeCategories, currentWeekDates, dayPanelDate, oncallSettings }) {
   const weekStart = toDateStr(week[0]);
   const weekEnd   = toDateStr(week[6]);
   const clickTimerRef = useRef(null);
+
+  // On-call tag: use Monday (index 1 in Sun–Sat row) to determine ISO week
+  const rowMonday = week[1];
+  const rowWeekStr = rowMonday ? isoWeekUTC(rowMonday) : null;
+  const onCallPerson = (oncallSettings && rowWeekStr)
+    ? getOnCallPerson(rowWeekStr, oncallSettings)
+    : null;
 
   // Highlight if any day of this calendar row falls in the board's current week
   const isCurrentWeek = week.some(d => currentWeekDates.has(toDateStr(d)));
@@ -583,6 +602,13 @@ function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, o
               </div>
             );
           })}
+        </div>
+      )}
+      {/* On-call tag — always rendered when there's an on-call person for this week */}
+      {onCallPerson && (
+        <div className="absence-oncall-tag" title={`On call this week: ${onCallPerson}`}>
+          <PhoneCall size={9} style={{ flexShrink: 0 }} />
+          {onCallPerson}
         </div>
       )}
     </div>
@@ -1117,6 +1143,7 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
   const {
     data, absences, addAbsence, editAbsence, removeAbsence, managerInitials, addLog,
     calendarOverrides, addCalendarOverride, removeCalendarOverride, isAdmin,
+    oncall,
   } = useApp();
   const people      = data.people ?? [];
   const doctors     = (data.providers ?? []).map(p => p.name);
@@ -1130,7 +1157,7 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
 
   // Open focused on the month containing the currently viewed board week
   const initMonday = currentWeek ? mondayOfWeek(currentWeek) : new Date();
-  const [view,      setView]      = useState('calendar'); // 'calendar' | 'history'
+  const [view,      setView]      = useState('calendar'); // 'calendar' | 'history' | 'oncall'
   const [viewYear,  setViewYear]  = useState(initMonday.getUTCFullYear());
   const [viewMonth, setViewMonth] = useState(initMonday.getUTCMonth());
   const [modal,     setModal]     = useState(null); // absence modal
@@ -1444,19 +1471,31 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
                 This month
               </button>
             </>
+          ) : view === 'oncall' ? (
+            <span className="absence-month-label" style={{ paddingLeft: 4 }}>On-call rotation</span>
           ) : (
             <span className="absence-month-label" style={{ paddingLeft: 4 }}>Absence History</span>
           )}
           <div style={{ flex: 1 }} />
-          {/* View toggle */}
+          {/* On call button */}
+          <button
+            className={`btn btn-pill topbar-mobile-hidden${view === 'oncall' ? ' active' : ''}`}
+            style={{ fontSize: 11, minHeight: 26, padding: '2px 10px', gap: 4 }}
+            onClick={() => setView(v => v === 'oncall' ? 'calendar' : 'oncall')}
+            title={view === 'oncall' ? 'Back to calendar' : 'Manage on-call rotation'}
+          >
+            <PhoneCall size={13} />
+            On call
+          </button>
+          {/* History toggle */}
           <button
             className={`btn btn-pill topbar-mobile-hidden${view === 'history' ? ' active' : ''}`}
             style={{ fontSize: 11, minHeight: 26, padding: '2px 10px', gap: 4 }}
-            onClick={() => setView(v => v === 'calendar' ? 'history' : 'calendar')}
-            title={view === 'calendar' ? 'View absence history' : 'Back to calendar'}
+            onClick={() => setView(v => v === 'history' ? 'calendar' : 'history')}
+            title={view === 'history' ? 'Back to calendar' : 'View absence history'}
           >
             <History size={13} />
-            {view === 'calendar' ? 'History' : 'Calendar'}
+            {view === 'history' ? 'Calendar' : 'History'}
           </button>
           {view === 'calendar' && (
             <button
@@ -1471,7 +1510,11 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
         </div>
 
         {/* ── Body ── */}
-        {view === 'calendar' ? (
+        {view === 'oncall' ? (
+          <div className="absence-oncall-body">
+            <OnCallManager />
+          </div>
+        ) : view === 'calendar' ? (
           <div className="absence-body">
             <div className="absence-cal-section">
               <div className="absence-dow-row">
@@ -1494,6 +1537,7 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
                     activeCategories={activeCategories}
                     currentWeekDates={currentWeekDates}
                     dayPanelDate={dayPanel?.dateStr ?? null}
+                    oncallSettings={oncall}
                   />
                 ))}
               </div>

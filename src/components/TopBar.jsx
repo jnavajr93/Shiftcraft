@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Calendar, Sun, Moon, ChevronLeft, ChevronRight,
   History, Sparkles, Wand2, Loader2, X, CircleHelp, RotateCcw,
-  SendHorizonal, AlertCircle, Save,
+  SendHorizonal, AlertCircle, Save, PhoneCall,
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -34,6 +34,7 @@ import ChatPanel from './ChatPanel.jsx';
 import AbsenceCalendar, { ABSENCE_TYPES } from './AbsenceCalendar.jsx';
 import { getFederalHolidays } from '../utils/federalHolidays.js';
 import { buildClosureMap } from '../utils/holidayClosures.js';
+import { getOnCallPerson } from '../utils/oncall.js';
 import { generateSchedule } from '../engine/adapter.js';
 import { validateAndRepairAssignments, findObsViolations, findInvalidSlotAssignments, getPostViolations } from '../engine/validator.js';
 import { fetchAbsencesForWeek } from '../services/dataService.js';
@@ -658,6 +659,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
     isDirty, postedSnapshot, dirtyWeeks, postWeek,
     doctorOffClinicIds,
     holidayClosedClinicIds,
+    onCallThisWeek,
   } = useApp();
   const weekLabelRef = useRef(null);
   const undoTimerRef = useRef(null);
@@ -995,6 +997,12 @@ export default function TopBar({ activeTab, setActiveTab }) {
           <button className="btn btn-icon topbar-nav-btn" onClick={() => navigateWeek(1)} aria-label="Next week">
             <ChevronRight size={16} />
           </button>
+          {onCallThisWeek && (
+            <div className="topbar-oncall-badge" title={`On call this week: ${onCallThisWeek}`}>
+              <PhoneCall size={11} />
+              {onCallThisWeek}
+            </div>
+          )}
         </div>
 
         <div className="topbar-right">

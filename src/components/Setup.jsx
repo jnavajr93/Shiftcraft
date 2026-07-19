@@ -13,6 +13,7 @@ import {
   ACCOMMODATION_TYPES, EARLY_LEAVE_REASONS, accommodationLabel,
 } from '../data/seed.js';
 import ClinicConfig from './ClinicConfig.jsx';
+import OnCallManager from './OnCallManager.jsx';
 
 const EXPORT_VERSION = 'shiftcraft-v1';
 
@@ -1119,13 +1120,13 @@ export default function Setup() {
   return (
     <div className="setup-page">
       <div className="setup-subtabs">
-        {['staff', 'clinics', 'locations', 'data'].map(t => (
+        {['staff', 'clinics', 'locations', 'data', 'oncall'].map(t => (
           <button
             key={t}
             className={`setup-subtab${subTab === t ? ' active' : ''}`}
             onClick={() => setSubTab(t)}
           >
-            {t.charAt(0).toUpperCase() + t.slice(1)}
+            {t === 'oncall' ? 'On-call' : t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
         ))}
       </div>
@@ -1133,6 +1134,12 @@ export default function Setup() {
       {subTab === 'clinics'   && <ClinicsTab />}
       {subTab === 'locations' && <LocationsTab />}
       {subTab === 'data'      && <DataTab />}
+      {subTab === 'oncall'    && (
+        <div className="setup-tab-content">
+          <div className="setup-section-header">On-call rotation</div>
+          <OnCallManager />
+        </div>
+      )}
     </div>
   );
 }

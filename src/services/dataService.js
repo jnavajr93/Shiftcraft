@@ -316,3 +316,27 @@ export function subscribeCalendarOverrides(callback) {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'calendar_overrides' }, callback)
     .subscribe();
 }
+
+// ─── On-call settings ─────────────────────────
+export const ONCALL_KEY = 'shiftcraft_on_call';
+
+export async function loadOncallSettings() {
+  const { data, error } = await supabase
+    .from('schedule_data')
+    .select('value')
+    .eq('key', ONCALL_KEY)
+    .single();
+  if (error) {
+    if (error.code === 'PGRST116') return { status: 'empty' };
+    return { status: 'error', error };
+  }
+  return { status: 'ok', data: data?.value ?? null };
+}
+
+export async function saveOncallSettings(payload) {
+  const { error } = await supabase
+    .from('schedule_data')
+    .upsert({ key: ONCALL_KEY, value: payload, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+  if (error) console.error('[Shiftcraft] Save oncall error:', error);
+  return { error: error ?? null };
+}

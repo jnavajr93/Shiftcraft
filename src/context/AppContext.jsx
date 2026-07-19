@@ -24,6 +24,8 @@ import {
   saveCalendarOverride as saveCalendarOverrideDB,
   deleteCalendarOverride as deleteCalendarOverrideDB,
   subscribeCalendarOverrides,
+  loadOncallSettings as loadOncallSettingsDB,
+  saveOncallSettings as saveOncallSettingsDB,
   weekKey,
   SCHEDULE_KEY,
   CHANGELOG_KEY,
@@ -31,6 +33,7 @@ import {
 import { computeHistoryScores } from '../data/patterns.js';
 import { getFederalHolidays } from '../utils/federalHolidays.js';
 import { buildClosureMap, computeClinicHolidaySets } from '../utils/holidayClosures.js';
+import { getOnCallPerson } from '../utils/oncall.js';
 
 // localStorage keys kept only for migration and per-device flags
 const STORAGE_KEY = 'shiftcraft.v5';
@@ -638,6 +641,10 @@ export function AppProvider({ children }) {
   // ─── Calendar overrides state ───────────────────
   const [calendarOverrides, setCalendarOverrides] = useState([]);
 
+  // ─── On-call state ───────────────────────────
+  // null = not yet loaded; object = loaded settings (rotation may be empty)
+  const [oncall, setOncall] = useState(null);
+
   // ─── Verified save helper ─────────────────────
   // Versioned conditional save via upsert_schedule_data RPC.
   // On conflict (another manager saved between our load and this save):
@@ -1166,6 +1173,25 @@ export function AppProvider({ children }) {
     if (error) { console.error('[Shiftcraft] removeCalendarOverride error:', error); return { error }; }
     setCalendarOverrides(prev => prev.filter(o => o.id !== id));
     return { error: null };
+  }, []);
+
+  // ─── On-call load ────────────────────────────
+  useEffect(() => {
+    loadOncallSettingsDB().then(result => {
+      if (result.status === 'ok' && result.data) {
+        setOncall(result.data);
+      } else {
+        // empty or error — start with default (dormant) settings
+        setOncall({ rotation: [], blockWeeks: 4, anchorWeek: null });
+      }
+    });
+  }, []);
+
+  const saveOncall = useCallback(async (settings) => {
+    setOncall(settings);
+    const { error } = await saveOncallSettingsDB(settings);
+    if (error) console.error('[Shiftcraft] saveOncall error:', error);
+    return { error: error ?? null };
   }, []);
 
   const addLog = useCallback((entry) => {
@@ -2000,6 +2026,8 @@ export function AppProvider({ children }) {
       presentManagers, conflictToast, setConflictToast,
       absences, addAbsence, editAbsence, removeAbsence,
       calendarOverrides, addCalendarOverride, removeCalendarOverride,
+      oncall, saveOncall,
+      onCallThisWeek: getOnCallPerson(currentWeek, oncall),
       isDirty, postedSnapshot, dirtyWeeks, boardClinics, postWeek,
       doctorOffClinicIds,
       holidayClosedClinicIds,
