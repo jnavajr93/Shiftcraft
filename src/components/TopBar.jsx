@@ -692,6 +692,15 @@ export default function TopBar({ activeTab, setActiveTab }) {
   const [showChat, setShowChat] = useState(false);
   const [showAbsences, setShowAbsences] = useState(false);
 
+  // Close absence calendar + hover preview when manager mode is exited
+  useEffect(() => {
+    if (!isAdmin) {
+      setShowAbsences(false);
+      setShowPreview(false);
+      clearTimeout(hoverTimerRef.current);
+    }
+  }, [isAdmin]);
+
   // ─── Post state ──────────────────────────────
   // 'idle' | 'violations' | 'confirm' — which post modal to show
   const [showPostModal, setShowPostModal] = useState(null);
@@ -963,10 +972,15 @@ export default function TopBar({ activeTab, setActiveTab }) {
           <button
             ref={weekLabelRef}
             data-tour="week-nav"
-            className="topbar-week-label"
-            onClick={() => { clearTimeout(hoverTimerRef.current); setShowPreview(false); setShowAbsences(s => !s); }}
+            className={`topbar-week-label${isAdmin ? '' : ' topbar-week-label--staff'}`}
+            onClick={() => {
+              if (!isAdmin) return;
+              clearTimeout(hoverTimerRef.current);
+              setShowPreview(false);
+              setShowAbsences(s => !s);
+            }}
             onMouseEnter={() => {
-              if (showAbsences) return;
+              if (!isAdmin || showAbsences) return;
               clearTimeout(hoverTimerRef.current);
               hoverTimerRef.current = setTimeout(() => setShowPreview(true), 300);
             }}
@@ -974,7 +988,7 @@ export default function TopBar({ activeTab, setActiveTab }) {
               clearTimeout(hoverTimerRef.current);
               hoverTimerRef.current = setTimeout(() => setShowPreview(false), 200);
             }}
-            aria-label="Open absence calendar"
+            aria-label={isAdmin ? 'Open absence calendar' : undefined}
           >
             {isAdmin ? (
               <span
@@ -1240,14 +1254,14 @@ export default function TopBar({ activeTab, setActiveTab }) {
       )}
       {showLog && <ChangeLogDrawer onClose={() => setShowLog(false)} />}
       {showChat && <ChatPanel onClose={() => setShowChat(false)} />}
-      {showAbsences && (
+      {isAdmin && showAbsences && (
         <AbsenceCalendar
           onClose={() => setShowAbsences(false)}
           currentWeek={currentWeek}
           onJumpToWeek={jumpToWeek}
         />
       )}
-      {showPreview && !showAbsences && (
+      {isAdmin && showPreview && !showAbsences && (
         <HoverPreview
           anchorRef={weekLabelRef}
           absences={absences ?? []}

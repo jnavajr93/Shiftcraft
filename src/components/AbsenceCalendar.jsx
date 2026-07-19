@@ -954,20 +954,17 @@ function DayPanel({ dateStr, rect, absences, personByKey, holidayDetail, dayClos
       </div>
 
       <div className="day-panel-actions">
-        {/* Primary actions row — always two buttons, never clip */}
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button className="btn btn-pill" style={{ fontSize: 11, minHeight: 26, flex: 1 }} onClick={onJumpAndClose}>
-            Go to this week
-          </button>
-          <button
-            className="btn btn-pill btn-primary"
-            style={{ fontSize: 11, minHeight: 26, gap: 4, flex: 1 }}
-            onClick={() => onAddAbsence(dateStr)}
-          >
-            <Plus size={11} /> Add absence
-          </button>
-        </div>
-        {/* Admin closure row — full width, never competes with other buttons */}
+        {/* Fully stacked — each button 100% width, nothing clips regardless of panel width */}
+        <button className="btn btn-pill" style={{ fontSize: 11, minHeight: 26, width: '100%' }} onClick={onJumpAndClose}>
+          Go to this week
+        </button>
+        <button
+          className="btn btn-pill btn-primary"
+          style={{ fontSize: 11, minHeight: 26, gap: 4, width: '100%' }}
+          onClick={() => onAddAbsence(dateStr)}
+        >
+          <Plus size={11} /> Add absence
+        </button>
         {isAdmin && (
           <button
             className="btn btn-pill"

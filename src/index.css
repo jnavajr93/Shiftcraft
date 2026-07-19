@@ -97,6 +97,8 @@ html, body, #root {
   transition: background 120ms;
 }
 .topbar-week-label:hover { background: var(--bg-surface); }
+.topbar-week-label--staff { cursor: default; pointer-events: none; }
+.topbar-week-label--staff:hover { background: none; }
 .topbar-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 
 /* ─── Buttons ─────────────────────────── */
@@ -2112,7 +2114,8 @@ html, body, #root {
   background: var(--accent-subtle);
 }
 .typeahead-option-dot {
-  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  display: block; width: 10px; height: 10px; border-radius: 50%;
+  flex-shrink: 0; min-width: 10px;
 }
 .typeahead-chip {
   display: inline-flex; align-items: center; gap: 6px;
@@ -2121,7 +2124,8 @@ html, body, #root {
   font-size: 13px; color: var(--text-primary); max-width: 100%;
 }
 .typeahead-chip-dot {
-  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  display: block; width: 10px; height: 10px; border-radius: 50%;
+  flex-shrink: 0; min-width: 10px;
 }
 .typeahead-chip-label {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
