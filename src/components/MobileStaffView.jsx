@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { ChevronLeft, Search, User, X } from 'lucide-react';
-import { useApp, isoWeek } from '../context/AppContext.jsx';
+import { useApp, isoWeek, mondayOfWeek } from '../context/AppContext.jsx';
 import {
   DAYS,
   getRenderedSlotEntries,
@@ -104,6 +104,7 @@ export default function MobileStaffView({ onPersonClick }) {
             personIds={myPersonIds}
             clinics={boardClinics ?? []}
             additionalTasks={data.additionalTasks}
+            monday={mondayOfWeek(currentWeek)}
           />
         </div>
       </div>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
-import { useApp } from '../context/AppContext.jsx';
+import { useApp, mondayOfWeek } from '../context/AppContext.jsx';
 import { DAYS, calcPersonWeeklyHours, getBoardClinics, getSlotLabel, getSlotPersonId, getRenderedSlotEntries, formatVariableSlotTime, formatOpenerTimeDisplay, formatOpeningFDTimeDisplay, formatClosingOverlayDisplay, formatClosingFDOverlayDisplay, formatScribeTimeDisplay, formatTaskTime, OBS_SLOT_TYPES, slotEffectiveRange } from '../data/seed.js';
 import ArcChart from './ArcChart.jsx';
 
@@ -8,11 +8,18 @@ function useIsMobile() {
   return window.matchMedia('(max-width: 640px)').matches;
 }
 
-export function WeekRows({ personIds, clinics, additionalTasks }) {
+export function WeekRows({ personIds, clinics, additionalTasks, monday }) {
   const pidSet = new Set(personIds);
   return (
     <div>
-      {DAYS.map(day => {
+      {DAYS.map((day, dayIdx) => {
+        // Date for this day: Monday + dayIdx (safe across month boundaries)
+        let dateLabel = '';
+        if (monday) {
+          const d = new Date(monday);
+          d.setUTCDate(monday.getUTCDate() + dayIdx);
+          dateLabel = ` ${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
+        }
         const assignments = [];
         clinics
           .filter(c => c.day === day && c.open)
@@ -65,7 +72,7 @@ export function WeekRows({ personIds, clinics, additionalTasks }) {
 
         return (
           <div key={day} className="day-schedule-row">
-            <div className="day-schedule-label">{day}</div>
+            <div className="day-schedule-label">{day}{dateLabel}</div>
             {assignments.length > 0 ? (
               <div className="day-schedule-detail">
                 {assignments.map((a, i) => (
@@ -83,7 +90,7 @@ export function WeekRows({ personIds, clinics, additionalTasks }) {
 }
 
 function OverlayInner({ person, onClose }) {
-  const { data, isAdmin, managerInitials, deletePerson, addLog } = useApp();
+  const { data, isAdmin, managerInitials, deletePerson, addLog, currentWeek } = useApp();
   const [confirming, setConfirming] = useState(false);
   const boardClinics = getBoardClinics(data.clinics);
 
@@ -119,7 +126,7 @@ function OverlayInner({ person, onClose }) {
         <button className="overlay-close" onClick={onClose}><X size={16} /></button>
       </div>
       <div className="overlay-body">
-        <WeekRows personIds={personIds} clinics={boardClinics} additionalTasks={data.additionalTasks} />
+        <WeekRows personIds={personIds} clinics={boardClinics} additionalTasks={data.additionalTasks} monday={currentWeek ? mondayOfWeek(currentWeek) : null} />
         {isAdmin && (
           <ArcChart
             hours={hours}
