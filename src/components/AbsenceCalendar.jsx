@@ -160,7 +160,8 @@ function ClosureModal({ dateStr, managerInitials, onSave, onClose }) {
 
 function PersonTypeahead({ value, onChange, roster, placeholder }) {
   // value = personKey string (empty string when unset)
-  // roster = [{ label: string, key: string }]
+  // roster = [{ label: string, key: string, color: string|null }]
+  // color: roster staff use their board card color; doctors/others pass null → neutral dot
   const [query, setQuery]           = useState('');
   const [open, setOpen]             = useState(false);
   const [highlightIdx, setHighlight] = useState(-1);
@@ -227,6 +228,7 @@ function PersonTypeahead({ value, onChange, roster, placeholder }) {
   if (selected) {
     return (
       <div className="typeahead-chip">
+        <span className="typeahead-chip-dot" style={{ background: selected.color ?? '#94a3b8' }} />
         <span className="typeahead-chip-label">{selected.label}</span>
         <button type="button" className="typeahead-chip-clear" onClick={clear} aria-label="Clear selection">
           <X size={12} />
@@ -257,6 +259,7 @@ function PersonTypeahead({ value, onChange, roster, placeholder }) {
               onMouseEnter={() => setHighlight(i)}
               onMouseDown={() => select(item)}
             >
+              <span className="typeahead-option-dot" style={{ background: item.color ?? '#94a3b8' }} />
               {item.label}
             </li>
           ))}
@@ -345,7 +348,7 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, doc
               <PersonTypeahead
                 value={personKey}
                 onChange={setPersonKey}
-                roster={(doctors ?? DOCTORS).map(d => ({ key: d, label: d }))}
+                roster={(doctors ?? DOCTORS).map(d => ({ key: d, label: d, color: null }))}
                 placeholder="Search doctors…"
               />
             ) : (
@@ -354,7 +357,7 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, doc
                 onChange={setPersonKey}
                 roster={[...people]
                   .sort((a, b) => a.name.localeCompare(b.name))
-                  .map(p => ({ key: p.name.trim().toLowerCase(), label: p.name }))}
+                  .map(p => ({ key: p.name.trim().toLowerCase(), label: p.name, color: p.color ?? null }))}
                 placeholder="Search staff…"
               />
             )}
@@ -925,20 +928,24 @@ function DayPanel({ dateStr, rect, absences, personByKey, holidayDetail, dayClos
       </div>
 
       <div className="day-panel-actions">
-        <button className="btn btn-pill" style={{ fontSize: 11, minHeight: 26 }} onClick={onJumpAndClose}>
-          Go to this week
-        </button>
-        <button
-          className="btn btn-pill btn-primary"
-          style={{ fontSize: 11, minHeight: 26, gap: 4 }}
-          onClick={() => onAddAbsence(dateStr)}
-        >
-          <Plus size={11} /> Add absence
-        </button>
+        {/* Primary actions row — always two buttons, never clip */}
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button className="btn btn-pill" style={{ fontSize: 11, minHeight: 26, flex: 1 }} onClick={onJumpAndClose}>
+            Go to this week
+          </button>
+          <button
+            className="btn btn-pill btn-primary"
+            style={{ fontSize: 11, minHeight: 26, gap: 4, flex: 1 }}
+            onClick={() => onAddAbsence(dateStr)}
+          >
+            <Plus size={11} /> Add absence
+          </button>
+        </div>
+        {/* Admin closure row — full width, never competes with other buttons */}
         {isAdmin && (
           <button
             className="btn btn-pill"
-            style={{ fontSize: 11, minHeight: 26, gap: 4, color: CLOSED_COLOR, borderColor: CLOSED_COLOR }}
+            style={{ fontSize: 11, minHeight: 26, gap: 4, color: CLOSED_COLOR, borderColor: CLOSED_COLOR, width: '100%' }}
             onClick={() => onAddClosure(dateStr)}
           >
             <Building2 size={11} /> Add closure
