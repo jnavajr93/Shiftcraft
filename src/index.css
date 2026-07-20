@@ -871,7 +871,13 @@ html, body, #root {
 .grade-pill.T.active { background: #7c3aed; color: #fff; border-color: #7c3aed; }
 
 /* On Call pill active state — amber, matching grade B treatment */
-.pill-oncall-active { background: var(--grade-b-bg); color: var(--grade-text); border-color: var(--grade-b-bg); }
+.pill-oncall-active {
+  background: transparent;
+  color: #f59e0b;
+  border-color: #f59e0b;
+  box-shadow: 0 0 6px 0px rgba(245, 158, 11, 0.5), inset 0 0 4px 0px rgba(245, 158, 11, 0.08);
+  text-shadow: 0 0 8px rgba(245, 158, 11, 0.7);
+}
 
 /* ─── Color Swatch ─────────────────────────── */
 .color-swatch {
