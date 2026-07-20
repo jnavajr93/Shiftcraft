@@ -1121,15 +1121,22 @@ html, body, #root {
   position: fixed; bottom: 16px; right: 16px; z-index: 300;
   background: var(--bg-elevated); color: var(--text-secondary);
   border: 0.5px solid var(--border-strong);
-  padding: 6px 12px; border-radius: var(--radius-pill);
-  font-size: 12px; font-weight: 500;
+  padding: 8px 15px; border-radius: var(--radius-pill);
+  font-size: 15px; font-weight: 500;
   box-shadow: 0 2px 8px rgba(0,0,0,0.10);
   animation: saved-in 180ms ease;
   pointer-events: none;
 }
+.saved-toast--out {
+  animation: saved-out 300ms ease forwards;
+}
 @keyframes saved-in {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: none; }
+}
+@keyframes saved-out {
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: translateY(4px); }
 }
 
 /* ─── Toast ─────────────────────────── */
@@ -2327,11 +2334,48 @@ html, body, #root {
 .oncall-rotation-grip:active { cursor: grabbing; }
 .oncall-rotation-index { font-size: 11px; color: var(--text-muted); min-width: 16px; text-align: right; flex-shrink: 0; }
 .oncall-rotation-name { font-size: 13px; font-weight: 500; color: var(--text-primary); flex: 1; }
-.oncall-rotation-remove { color: var(--text-muted) !important; }
-.oncall-rotation-remove:hover { color: var(--red) !important; }
-.oncall-empty-list { font-size: 12px; color: var(--text-muted); font-style: italic; padding: 6px 0; }
-.oncall-add-row { display: flex; gap: 8px; align-items: center; }
-.oncall-add-input { flex: 1; }
+/* Dot on sortable pool item */
+.oncall-pool-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+
+/* Pool pills in the week popover */
+.oncall-pool-pills {
+  display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0;
+}
+.oncall-pool-pill {
+  display: flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: var(--radius-pill);
+  background: var(--bg-surface); border: 1px solid var(--border);
+  font-size: 12px; font-weight: 500; color: var(--text-primary);
+  cursor: pointer; transition: background 120ms, border-color 120ms;
+}
+.oncall-pool-pill:hover:not(:disabled) {
+  background: var(--bg-hover, var(--bg-elevated)); border-color: var(--accent);
+}
+.oncall-pool-pill:disabled { opacity: 0.5; cursor: default; }
+.oncall-pool-pill-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+
+/* Block checkbox label */
+.oncall-block-checkbox {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--text-secondary); cursor: pointer;
+  margin-top: 6px;
+}
+.oncall-block-checkbox input[type="checkbox"] { cursor: pointer; }
+
+/* Empty affordance in week rows for admin (no on-call assigned) */
+.absence-oncall-affordance {
+  position: absolute; bottom: 3px; left: 3px; z-index: 5;
+  display: flex; align-items: center; gap: 3px;
+  padding: 1px 6px; border-radius: var(--radius-pill);
+  background: var(--bg-surface); border: 1px dashed var(--border);
+  font-size: 9.5px; color: var(--text-muted);
+  cursor: pointer; opacity: 0.55; transition: opacity 120ms;
+}
+.absence-oncall-affordance:hover { opacity: 1; }
 .oncall-dormant-msg {
   display: flex; align-items: center; gap: 8px;
   font-size: 12px; color: var(--text-muted); font-style: italic;

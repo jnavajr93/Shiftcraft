@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Trash2, Plus, Pencil, GripVertical, X, Upload, ArrowLeft } from 'lucide-react';
+import { Trash2, Plus, Pencil, GripVertical, X, Upload, ArrowLeft, PhoneCall } from 'lucide-react';
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
 } from '@dnd-kit/core';
@@ -374,6 +374,18 @@ function PersonCard({ person, providers, locations }) {
                   </button>
                 );
               })}
+            </div>
+            {/* On Call is an eligibility flag, not an ordered role */}
+            <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border-subtle, var(--border-muted, #e5e7eb))', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>On-call eligibility:</span>
+              <button
+                className={`pill small${person.roles.includes('On Call') ? ' active' : ''}`}
+                style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                onClick={() => up('roles', toggleArr(person.roles, 'On Call'))}
+              >
+                <PhoneCall size={10} />
+                On Call
+              </button>
             </div>
           </>
         )}

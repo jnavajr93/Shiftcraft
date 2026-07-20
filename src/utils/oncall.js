@@ -55,3 +55,26 @@ export function getBlockPosition(weekStr, settings) {
   const posInBlock = ((offset % blockWeeks) + blockWeeks) % blockWeeks;
   return { weekInBlock: posInBlock + 1, totalWeeks: blockWeeks };
 }
+
+/**
+ * Return the ISO week string n weeks after weekStr.
+ * addWeeks('2026-W01', 1) → '2026-W02'
+ */
+export function addWeeks(weekStr, n) {
+  const [y, w] = weekStr.split('-W').map(Number);
+  // Monday of week 1: Jan 4 is always in W1
+  const jan4 = new Date(Date.UTC(y, 0, 4));
+  const jan4dow = jan4.getUTCDay() || 7;
+  const week1Mon = new Date(jan4);
+  week1Mon.setUTCDate(jan4.getUTCDate() - (jan4dow - 1));
+  // Monday of target week, offset by n additional weeks
+  const targetMon = new Date(week1Mon);
+  targetMon.setUTCDate(week1Mon.getUTCDate() + (w - 1) * 7 + n * 7);
+  // Re-encode as ISO week
+  const d = new Date(Date.UTC(targetMon.getUTCFullYear(), targetMon.getUTCMonth(), targetMon.getUTCDate()));
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+}
