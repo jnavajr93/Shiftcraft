@@ -340,3 +340,35 @@ export async function saveOncallSettings(payload) {
   if (error) console.error('[Shiftcraft] Save oncall error:', error);
   return { error: error ?? null };
 }
+
+// ─── On-call overrides (per-week overrides) ───
+export async function fetchOncallOverrides() {
+  const { data, error } = await supabase
+    .from('oncall_overrides')
+    .select('*');
+  if (error) {
+    if (error.code === '42P01') return { status: 'empty', data: [] };
+    return { status: 'error', error, data: [] };
+  }
+  return { status: 'ok', data: data ?? [] };
+}
+
+export async function saveOncallOverride(payload) {
+  // payload: { week_key, person_name, note }
+  const { data, error } = await supabase
+    .from('oncall_overrides')
+    .upsert(payload, { onConflict: 'week_key' })
+    .select()
+    .single();
+  if (error) { console.error('[Shiftcraft] Save oncall override error:', error); return { error }; }
+  return { error: null, data };
+}
+
+export async function deleteOncallOverride(weekKey) {
+  const { error } = await supabase
+    .from('oncall_overrides')
+    .delete()
+    .eq('week_key', weekKey);
+  if (error) console.error('[Shiftcraft] Delete oncall override error:', error);
+  return { error: error ?? null };
+}

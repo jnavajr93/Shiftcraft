@@ -41,7 +41,6 @@ export default function OnCallManager() {
 
   const [items, setItems]           = useState([]);
   const [blockWeeks, setBlockWeeks] = useState(4);
-  const [anchorWeek, setAnchorWeek] = useState('');
   const [newName, setNewName]       = useState('');
   const [saving, setSaving]         = useState(false);
   const [savedMsg, setSavedMsg]     = useState('');
@@ -54,7 +53,6 @@ export default function OnCallManager() {
       didInitRef.current = true;
       setItems((oncall.rotation ?? []).map(name => ({ id: generateId(), name })));
       setBlockWeeks(oncall.blockWeeks ?? 4);
-      setAnchorWeek(oncall.anchorWeek ?? '');
     }
   }, [oncall]);
 
@@ -83,22 +81,23 @@ export default function OnCallManager() {
     setSaving(true);
     const rotation = items.map(i => i.name);
     await saveOncall({
+      ...(oncall ?? {}),
       rotation,
       blockWeeks: Math.max(1, Number(blockWeeks) || 4),
-      anchorWeek: anchorWeek || null,
+      anchorWeek: oncall?.anchorWeek ?? null,
     });
     setSaving(false);
     setSavedMsg('Saved');
     setTimeout(() => setSavedMsg(''), 2500);
   };
 
-  const isDormant = items.length === 0 || !anchorWeek;
-
-  const preview = isDormant ? null : getOnCallPerson(currentWeek, {
+  const isDormantEmpty  = items.length === 0;
+  const needsAnchor     = items.length > 0 && !oncall?.anchorWeek;
+  const preview = (items.length > 0 && oncall?.anchorWeek) ? getOnCallPerson(currentWeek, {
     rotation: items.map(i => i.name),
     blockWeeks: Math.max(1, Number(blockWeeks) || 4),
-    anchorWeek,
-  });
+    anchorWeek: oncall.anchorWeek,
+  }) : null;
 
   return (
     <div className="oncall-manager">
@@ -158,24 +157,15 @@ export default function OnCallManager() {
         />
       </div>
 
-      <div className="oncall-manager-section">
-        <label className="oncall-manager-label">Rotation start (anchor week)</label>
-        <div className="oncall-manager-hint">
-          The first person in the list is on call starting this week.
-        </div>
-        <input
-          type="week"
-          className="setup-input"
-          style={{ width: 200 }}
-          value={anchorWeek}
-          onChange={e => setAnchorWeek(e.target.value)}
-        />
-      </div>
-
-      {isDormant ? (
+      {isDormantEmpty ? (
         <div className="oncall-dormant-msg">
           <PhoneCall size={15} style={{ opacity: 0.4 }} />
-          Feature is dormant — add at least one person and set an anchor week to activate.
+          Feature is dormant — add at least one person to activate.
+        </div>
+      ) : needsAnchor ? (
+        <div className="oncall-dormant-msg">
+          <PhoneCall size={15} style={{ opacity: 0.4 }} />
+          Set the starting block by clicking a week on the calendar.
         </div>
       ) : (
         <div className="oncall-preview">

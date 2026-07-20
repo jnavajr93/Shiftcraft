@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, X, Clock, Plus, Trash2, AlertCircle, History, Building2, PhoneCall } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Clock, Plus, Trash2, AlertCircle, History, Building2, PhoneCall, UserCheck } from 'lucide-react';
 import { useApp, mondayOfWeek, isoWeek } from '../context/AppContext.jsx';
 import { getFederalHolidays } from '../utils/federalHolidays.js';
 import { CLOSURE_LOCATIONS, buildClosureMap } from '../utils/holidayClosures.js';
-import { getOnCallPerson } from '../utils/oncall.js';
+import { getOnCallPerson, getOnCallForWeek, getBlockPosition } from '../utils/oncall.js';
 import OnCallManager from './OnCallManager.jsx';
 
 // ─── Category definitions ─────────────────────────────────────────────────────
@@ -30,6 +30,9 @@ const shortOf   = (key) => TYPE_MAP.get(key)?.short ?? key;
 
 // Holidays / office-closed are shown in neutral slate
 const CLOSED_COLOR = '#64748b';
+
+// Tech on-call shown in teal (distinct from all absence type colors)
+const ONCALL_COLOR = '#0d9488';
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
@@ -113,6 +116,15 @@ function Legend({ activeCategories, onToggle }) {
       >
         <span className="absence-legend-dot" style={{ background: CLOSED_COLOR }} />
         <span>Closed / Holiday</span>
+      </button>
+      {/* Tech On Call chip */}
+      <button
+        className={`absence-legend-item${activeCategories.has('OnCall') ? '' : ' absence-legend-item--off'}`}
+        onClick={() => onToggle('OnCall')}
+        title={activeCategories.has('OnCall') ? 'Hide on-call chips' : 'Show on-call chips'}
+      >
+        <span className="absence-legend-dot" style={{ background: ONCALL_COLOR }} />
+        <span>Tech On Call</span>
       </button>
     </div>
   );
@@ -480,17 +492,24 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, doc
 
 // ─── Week row with spanning bars ──────────────────────────────────────────────
 
-function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, onDayClick, onDayDoubleClick, onAbsenceClick, activeCategories, currentWeekDates, dayPanelDate, oncallSettings }) {
+function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, onDayClick, onDayDoubleClick, onAbsenceClick, activeCategories, currentWeekDates, dayPanelDate, oncallSettings, oncallOverrides, people, isAdmin, onOncallChipClick }) {
   const weekStart = toDateStr(week[0]);
   const weekEnd   = toDateStr(week[6]);
   const clickTimerRef = useRef(null);
 
-  // On-call tag: use Monday (index 1 in Sun–Sat row) to determine ISO week
+  // On-call: use Monday (index 1 in Sun–Sat row) to determine ISO week
   const rowMonday = week[1];
   const rowWeekStr = rowMonday ? isoWeekUTC(rowMonday) : null;
-  const onCallPerson = (oncallSettings && rowWeekStr)
-    ? getOnCallPerson(rowWeekStr, oncallSettings)
+  const onCallResult = (activeCategories.has('OnCall') && oncallSettings && rowWeekStr)
+    ? getOnCallForWeek(rowWeekStr, oncallSettings, oncallOverrides ?? [])
     : null;
+  const onCallNameKey = onCallResult?.person?.trim()?.toLowerCase();
+  const personColor = onCallNameKey
+    ? (people ?? []).find(p => p.name.trim().toLowerCase() === onCallNameKey)?.color ?? ONCALL_COLOR
+    : ONCALL_COLOR;
+  const hasAbsenceConflict = onCallNameKey
+    ? absences.some(a => a.person_name === onCallNameKey && a.start_date <= weekEnd && a.end_date >= weekStart)
+    : false;
 
   // Highlight if any day of this calendar row falls in the board's current week
   const isCurrentWeek = week.some(d => currentWeekDates.has(toDateStr(d)));
@@ -604,11 +623,18 @@ function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, o
           })}
         </div>
       )}
-      {/* On-call tag — always rendered when there's an on-call person for this week */}
-      {onCallPerson && (
-        <div className="absence-oncall-tag" title={`On call this week: ${onCallPerson}`}>
-          <PhoneCall size={9} style={{ flexShrink: 0 }} />
-          {onCallPerson}
+      {/* On-call chip — bottom-left, clickable for admin */}
+      {onCallResult && (
+        <div
+          className={`absence-oncall-chip${onCallResult.isOverride ? ' absence-oncall-chip--override' : ''}`}
+          title={`On call: ${onCallResult.person}${onCallResult.isOverride ? ' (override)' : ''}${hasAbsenceConflict ? ' · Has absence this week' : ''}`}
+          onClick={isAdmin ? (e) => { e.stopPropagation(); onOncallChipClick(rowWeekStr, e.currentTarget.getBoundingClientRect()); } : undefined}
+          style={isAdmin ? { cursor: 'pointer' } : undefined}
+        >
+          <span className="absence-oncall-chip-dot" style={{ background: personColor }} />
+          <span className="absence-oncall-chip-name">{onCallResult.person}</span>
+          {onCallResult.isOverride && <UserCheck size={8} style={{ flexShrink: 0, opacity: 0.8 }} />}
+          {hasAbsenceConflict && <AlertCircle size={8} style={{ flexShrink: 0, color: '#ef4444' }} />}
         </div>
       )}
     </div>
@@ -617,7 +643,7 @@ function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, o
 
 // ─── Upcoming panel ───────────────────────────────────────────────────────────
 
-function UpcomingPanel({ absences, closures, personByKey, todayStr, onAbsenceClick, activeCategories }) {
+function UpcomingPanel({ absences, closures, personByKey, todayStr, onAbsenceClick, activeCategories, oncallSettings, oncallOverrides, people }) {
   const cutoff = (() => { const d = parseUTC(todayStr); d.setUTCDate(d.getUTCDate() + 30); return toDateStr(d); })();
 
   const upcomingAbsences = absences
@@ -646,7 +672,38 @@ function UpcomingPanel({ absences, closures, personByKey, todayStr, onAbsenceCli
         }))
     : [];
 
-  const upcoming = [...upcomingAbsences, ...upcomingClosures]
+  // On-call entries: one per week that falls within the next 30 days
+  const upcomingOncall = [];
+  if (activeCategories.has('OnCall') && oncallSettings?.rotation?.length > 0 && oncallSettings?.anchorWeek) {
+    const todayDate = parseUTC(todayStr);
+    const cutoffDate = parseUTC(cutoff);
+    // Start from Monday of today's week
+    let weekMon = mondayOfWeek(isoWeekUTC(todayDate));
+    while (weekMon <= cutoffDate) {
+      const monStr = toDateStr(weekMon);
+      if (monStr <= cutoff) {
+        const wk = isoWeekUTC(weekMon);
+        const result = getOnCallForWeek(wk, oncallSettings, oncallOverrides ?? []);
+        if (result) {
+          const pColor = (people ?? []).find(p => p.name.trim().toLowerCase() === result.person.trim().toLowerCase())?.color ?? ONCALL_COLOR;
+          upcomingOncall.push({
+            key: `oncall-${wk}`,
+            date: monStr,
+            color: pColor,
+            title: result.person,
+            detail: `Tech On Call · ${wk.replace('-W', ' W')}${result.isOverride ? ' (override)' : ''}`,
+            note: null,
+            onClick: null,
+          });
+        }
+      }
+      const next = new Date(weekMon);
+      next.setUTCDate(next.getUTCDate() + 7);
+      weekMon = next;
+    }
+  }
+
+  const upcoming = [...upcomingAbsences, ...upcomingClosures, ...upcomingOncall]
     .sort((a, b) => a.date.localeCompare(b.date));
 
   return (
@@ -1134,13 +1191,184 @@ function AbsenceHistory({ absences, people, personByKey, onAbsenceClick }) {
   );
 }
 
+// ─── On-call week popover ─────────────────────────────────────────────────────
+
+function OnCallWeekPopover({ weekStr, rect, settings, overrides, people, onClose, onSaveOverride, onDeleteOverride, onStartNewBlock }) {
+  const existingOverride = (overrides ?? []).find(o => o.week_key === weekStr);
+  const computed   = getOnCallForWeek(weekStr, settings, overrides ?? []);
+  const blockPos   = getBlockPosition(weekStr, settings);
+  const personColor = computed
+    ? (people ?? []).find(p => p.name.trim().toLowerCase() === computed.person.trim().toLowerCase())?.color ?? ONCALL_COLOR
+    : ONCALL_COLOR;
+
+  const roster = [...(people ?? [])]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(p => ({ key: p.name, label: p.name, color: p.color ?? null }));
+
+  const [overridePerson, setOverridePerson]   = useState(existingOverride?.person_name ?? '');
+  const [overrideNote,   setOverrideNote]     = useState(existingOverride?.note ?? '');
+  const [savingOverride, setSavingOverride]   = useState(false);
+  const [newBlockPerson, setNewBlockPerson]   = useState('');
+  const [confirmNewBlock, setConfirmNewBlock] = useState(false);
+  const [savingNewBlock, setSavingNewBlock]   = useState(false);
+
+  // Position anchored near the clicked chip
+  const popoverWidth = 288;
+  let left = Math.round(rect.left);
+  if (left + popoverWidth > window.innerWidth - 12) left = window.innerWidth - popoverWidth - 12;
+  if (left < 8) left = 8;
+  let top = Math.round(rect.bottom + 6);
+  if (top + 420 > window.innerHeight - 8) top = Math.round(rect.top) - 426;
+  if (top < 8) top = 8;
+
+  const handleSaveOverride = async () => {
+    if (!overridePerson) return;
+    setSavingOverride(true);
+    await onSaveOverride(weekStr, overridePerson, overrideNote.trim() || null);
+    setSavingOverride(false);
+    onClose();
+  };
+
+  const handleClearOverride = async () => {
+    setSavingOverride(true);
+    await onDeleteOverride(weekStr);
+    setSavingOverride(false);
+    onClose();
+  };
+
+  const handleStartNewBlock = async () => {
+    if (!newBlockPerson) return;
+    setSavingNewBlock(true);
+    await onStartNewBlock(weekStr, newBlockPerson);
+    setSavingNewBlock(false);
+    onClose();
+  };
+
+  return (
+    <div className="oncall-popover" style={{ top, left, width: popoverWidth }} onClick={e => e.stopPropagation()}>
+      <div className="oncall-popover-header">
+        <span style={{ fontWeight: 600, fontSize: 13 }}>On Call · {weekStr.replace('-W', ' W')}</span>
+        <button className="btn btn-icon" style={{ minHeight: 24, padding: '2px 4px' }} onClick={onClose}>
+          <X size={13} />
+        </button>
+      </div>
+
+      {/* Current assignment */}
+      <div className="oncall-popover-current">
+        {computed ? (
+          <>
+            <span className="oncall-popover-dot" style={{ background: personColor }} />
+            <span className="oncall-popover-name">{computed.person}</span>
+            {computed.isOverride && <span className="oncall-popover-badge">override</span>}
+            {blockPos && (
+              <span className="oncall-popover-pos">Week {blockPos.weekInBlock} of {blockPos.totalWeeks}</span>
+            )}
+          </>
+        ) : (
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No one assigned</span>
+        )}
+      </div>
+
+      <div className="oncall-popover-divider" />
+
+      {/* Override This Week */}
+      <div className="oncall-popover-section">
+        <div className="oncall-popover-section-label">Override This Week</div>
+        <PersonTypeahead
+          value={overridePerson}
+          onChange={setOverridePerson}
+          roster={roster}
+          placeholder="Pick a different tech…"
+        />
+        <input
+          className="setup-input"
+          style={{ fontSize: 12, marginTop: 6 }}
+          placeholder="Note (optional)"
+          value={overrideNote}
+          onChange={e => setOverrideNote(e.target.value)}
+        />
+        <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+          <button
+            className="btn btn-primary btn-pill"
+            style={{ fontSize: 11, minHeight: 26 }}
+            onClick={handleSaveOverride}
+            disabled={!overridePerson || savingOverride}
+          >
+            {savingOverride ? '…' : 'Set Override'}
+          </button>
+          {existingOverride && (
+            <button
+              className="btn btn-pill"
+              style={{ fontSize: 11, minHeight: 26, color: '#dc2626', borderColor: '#dc2626' }}
+              onClick={handleClearOverride}
+              disabled={savingOverride}
+            >
+              Clear Override
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="oncall-popover-divider" />
+
+      {/* Start New Block Here */}
+      <div className="oncall-popover-section">
+        <div className="oncall-popover-section-label">Start New Block Here</div>
+        {!confirmNewBlock ? (
+          <>
+            <PersonTypeahead
+              value={newBlockPerson}
+              onChange={setNewBlockPerson}
+              roster={roster}
+              placeholder="Tech to start block…"
+            />
+            <button
+              className="btn btn-pill"
+              style={{ fontSize: 11, minHeight: 26, marginTop: 6, width: '100%' }}
+              onClick={() => setConfirmNewBlock(true)}
+              disabled={!newBlockPerson}
+            >
+              Re-anchor rotation from this week
+            </button>
+          </>
+        ) : (
+          <div className="oncall-popover-confirm">
+            <AlertCircle size={13} style={{ color: '#f59e0b', flexShrink: 0 }} />
+            <div style={{ fontSize: 11, lineHeight: 1.6 }}>
+              Puts <strong>{newBlockPerson}</strong> first starting {weekStr.replace('-W', ' W')}.
+              All future weeks recompute.
+            </div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+              <button
+                className="btn btn-primary btn-pill"
+                style={{ fontSize: 11, minHeight: 26 }}
+                onClick={handleStartNewBlock}
+                disabled={savingNewBlock}
+              >
+                {savingNewBlock ? '…' : 'Confirm'}
+              </button>
+              <button
+                className="btn btn-pill"
+                style={{ fontSize: 11, minHeight: 26 }}
+                onClick={() => setConfirmNewBlock(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main calendar ────────────────────────────────────────────────────────────
 
 export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) {
   const {
     data, absences, addAbsence, editAbsence, removeAbsence, managerInitials, addLog,
     calendarOverrides, addCalendarOverride, removeCalendarOverride, isAdmin,
-    oncall,
+    oncall, oncallOverrides, saveOncallOverride, deleteOncallOverride, saveOncall,
   } = useApp();
   const people      = data.people ?? [];
   const doctors     = (data.providers ?? []).map(p => p.name);
@@ -1159,11 +1387,12 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
   const [viewMonth, setViewMonth] = useState(initMonday.getUTCMonth());
   const [modal,     setModal]     = useState(null); // absence modal
   const [closureModal, setClosureModal] = useState(null); // { dateStr }
-  const [dayPanel,  setDayPanel]  = useState(null); // { dateStr, rect }
+  const [dayPanel,      setDayPanel]      = useState(null); // { dateStr, rect }
+  const [onCallPopover, setOnCallPopover] = useState(null); // { weekStr, rect }
 
-  // Category filter chips — all on by default (including 'Closed')
+  // Category filter chips — all on by default (including 'Closed' and 'OnCall')
   const [activeCategories, setActiveCategories] = useState(
-    () => new Set([...SELECTABLE_TYPES.map(t => t.key), 'Closed']),
+    () => new Set([...SELECTABLE_TYPES.map(t => t.key), 'Closed', 'OnCall']),
   );
   const toggleCategory = useCallback((key) => {
     setActiveCategories(prev => {
@@ -1341,15 +1570,16 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
   useEffect(() => {
     const handler = (e) => {
       if (e.key === 'Escape') {
-        if (closureModal) { setClosureModal(null); return; }
-        if (modal)    { setModal(null);    return; }
-        if (dayPanel) { setDayPanel(null); return; }
+        if (closureModal)  { setClosureModal(null);  return; }
+        if (modal)         { setModal(null);          return; }
+        if (onCallPopover) { setOnCallPopover(null);  return; }
+        if (dayPanel)      { setDayPanel(null);       return; }
         onClose();
       }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [closureModal, modal, dayPanel, onClose]);
+  }, [closureModal, modal, onCallPopover, dayPanel, onClose]);
 
   const grid = buildGrid(viewYear, viewMonth);
 
@@ -1453,6 +1683,33 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
     await removeCalendarOverride(id);
   }, [removeCalendarOverride]);
 
+  // ─── On-call chip handlers (manager only) ──────
+  const handleOncallChipClick = useCallback((weekStr, rect) => {
+    setDayPanel(null);
+    setOnCallPopover({ weekStr, rect });
+  }, []);
+
+  const handleSaveOncallOverride = useCallback(async (weekStr, personName, note) => {
+    await saveOncallOverride({ week_key: weekStr, person_name: personName, note: note ?? null });
+  }, [saveOncallOverride]);
+
+  const handleDeleteOncallOverride = useCallback(async (weekStr) => {
+    await deleteOncallOverride(weekStr);
+  }, [deleteOncallOverride]);
+
+  const handleStartNewBlock = useCallback(async (weekStr, personName) => {
+    if (!oncall) return;
+    const rotation = oncall.rotation ?? [];
+    const idx = rotation.findIndex(n => n.trim().toLowerCase() === personName.trim().toLowerCase());
+    let newRotation;
+    if (idx < 0) {
+      newRotation = [personName, ...rotation];
+    } else {
+      newRotation = [...rotation.slice(idx), ...rotation.slice(0, idx)];
+    }
+    await saveOncall({ ...oncall, anchorWeek: weekStr, rotation: newRotation });
+  }, [oncall, saveOncall]);
+
   return (
     <div className="absence-overlay">
       <div className="absence-panel">
@@ -1535,6 +1792,10 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
                     currentWeekDates={currentWeekDates}
                     dayPanelDate={dayPanel?.dateStr ?? null}
                     oncallSettings={oncall}
+                    oncallOverrides={oncallOverrides}
+                    people={people}
+                    isAdmin={isAdmin}
+                    onOncallChipClick={handleOncallChipClick}
                   />
                 ))}
               </div>
@@ -1546,6 +1807,9 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
               todayStr={todayStr}
               onAbsenceClick={handleAbsenceClick}
               activeCategories={activeCategories}
+              oncallSettings={oncall}
+              oncallOverrides={oncallOverrides}
+              people={people}
             />
           </div>
         ) : (
@@ -1557,6 +1821,21 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
           />
         )}
       </div>
+
+      {/* On-call week popover — manager only */}
+      {isAdmin && onCallPopover && !modal && !closureModal && (
+        <OnCallWeekPopover
+          weekStr={onCallPopover.weekStr}
+          rect={onCallPopover.rect}
+          settings={oncall}
+          overrides={oncallOverrides}
+          people={people}
+          onClose={() => setOnCallPopover(null)}
+          onSaveOverride={handleSaveOncallOverride}
+          onDeleteOverride={handleDeleteOncallOverride}
+          onStartNewBlock={handleStartNewBlock}
+        />
+      )}
 
       {/* Day panel — anchored near clicked cell, above modal layer */}
       {dayPanel && !modal && !closureModal && (

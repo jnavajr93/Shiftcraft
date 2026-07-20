@@ -26,6 +26,9 @@ import {
   subscribeCalendarOverrides,
   loadOncallSettings as loadOncallSettingsDB,
   saveOncallSettings as saveOncallSettingsDB,
+  fetchOncallOverrides as fetchOncallOverridesDB,
+  saveOncallOverride as saveOncallOverrideDB,
+  deleteOncallOverride as deleteOncallOverrideDB,
   weekKey,
   SCHEDULE_KEY,
   CHANGELOG_KEY,
@@ -644,6 +647,7 @@ export function AppProvider({ children }) {
   // ─── On-call state ───────────────────────────
   // null = not yet loaded; object = loaded settings (rotation may be empty)
   const [oncall, setOncall] = useState(null);
+  const [oncallOverrides, setOncallOverrides] = useState([]);
 
   // ─── Verified save helper ─────────────────────
   // Versioned conditional save via upsert_schedule_data RPC.
@@ -1177,6 +1181,12 @@ export function AppProvider({ children }) {
 
   // ─── On-call load ────────────────────────────
   useEffect(() => {
+    fetchOncallOverridesDB().then(result => {
+      if (result.status === 'ok') setOncallOverrides(result.data ?? []);
+    });
+  }, []);
+
+  useEffect(() => {
     loadOncallSettingsDB().then(result => {
       if (result.status === 'ok' && result.data) {
         setOncall(result.data);
@@ -1192,6 +1202,25 @@ export function AppProvider({ children }) {
     const { error } = await saveOncallSettingsDB(settings);
     if (error) console.error('[Shiftcraft] saveOncall error:', error);
     return { error: error ?? null };
+  }, []);
+
+  const saveOncallOverride = useCallback(async (payload) => {
+    const result = await saveOncallOverrideDB(payload);
+    if (!result.error) {
+      setOncallOverrides(prev => {
+        const next = prev.filter(o => o.week_key !== payload.week_key);
+        return [...next, result.data ?? payload];
+      });
+    }
+    return result;
+  }, []);
+
+  const deleteOncallOverride = useCallback(async (weekKey) => {
+    const result = await deleteOncallOverrideDB(weekKey);
+    if (!result.error) {
+      setOncallOverrides(prev => prev.filter(o => o.week_key !== weekKey));
+    }
+    return result;
   }, []);
 
   const addLog = useCallback((entry) => {
@@ -2026,7 +2055,7 @@ export function AppProvider({ children }) {
       presentManagers, conflictToast, setConflictToast,
       absences, addAbsence, editAbsence, removeAbsence,
       calendarOverrides, addCalendarOverride, removeCalendarOverride,
-      oncall, saveOncall,
+      oncall, saveOncall, oncallOverrides, saveOncallOverride, deleteOncallOverride,
       onCallThisWeek: getOnCallPerson(currentWeek, oncall),
       isDirty, postedSnapshot, dirtyWeeks, boardClinics, postWeek,
       doctorOffClinicIds,

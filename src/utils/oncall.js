@@ -30,3 +30,28 @@ export function getOnCallPerson(weekStr, settings) {
   const idx = ((Math.floor(offset / blockWeeks) % len) + len) % len;
   return rotation[idx];
 }
+
+/**
+ * Return on-call result for a week, respecting overrides.
+ * Checks oncall_overrides rows first; falls back to computed rotation.
+ * Returns { person: string, isOverride: boolean, note: string|null } or null.
+ */
+export function getOnCallForWeek(weekStr, settings, overrides = []) {
+  if (!weekStr) return null;
+  const override = (overrides ?? []).find(o => o.week_key === weekStr);
+  if (override) return { person: override.person_name, isOverride: true, note: override.note ?? null };
+  const person = getOnCallPerson(weekStr, settings);
+  return person ? { person, isOverride: false, note: null } : null;
+}
+
+/**
+ * Return the position of weekStr within its block.
+ * Returns { weekInBlock: 1-based, totalWeeks } or null if rotation not configured.
+ */
+export function getBlockPosition(weekStr, settings) {
+  const { rotation = [], blockWeeks = 4, anchorWeek } = settings ?? {};
+  if (!rotation.length || !anchorWeek || !weekStr) return null;
+  const offset = weekToIndex(weekStr) - weekToIndex(anchorWeek);
+  const posInBlock = ((offset % blockWeeks) + blockWeeks) % blockWeeks;
+  return { weekInBlock: posInBlock + 1, totalWeeks: blockWeeks };
+}
