@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Trash2, Plus, Pencil, GripVertical, X, Upload } from 'lucide-react';
+import { Trash2, Plus, Pencil, GripVertical, X, Upload, ArrowLeft } from 'lucide-react';
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
 } from '@dnd-kit/core';
@@ -1120,7 +1120,7 @@ const SETUP_TABS = [
 ];
 
 // ─── Main Setup ───────────────────────────────
-export default function Setup({ initialSection }) {
+export default function Setup({ initialSection, onBack }) {
   const [subTab, setSubTab] = useState(initialSection || 'staff');
 
   // Sync when parent navigates to a specific section (gear submenu deep-link)
@@ -1128,9 +1128,27 @@ export default function Setup({ initialSection }) {
     if (initialSection) setSubTab(initialSection);
   }, [initialSection]);
 
+  // Escape → back to board (when no modal is on top — modals handle their own Escape)
+  useEffect(() => {
+    if (!onBack) return;
+    const handler = (e) => { if (e.key === 'Escape') onBack(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onBack]);
+
   return (
     <div className="setup-page">
       <div className="setup-subtabs">
+        {/* Back to board — far left, before tabs */}
+        <button
+          className="setup-back-btn"
+          onClick={onBack}
+          title="Back to schedule board"
+        >
+          <ArrowLeft size={13} />
+          Back to Board
+        </button>
+        <div className="setup-subtabs-divider" />
         {SETUP_TABS.map(({ id, label }) => (
           <button
             key={id}

@@ -795,6 +795,7 @@ export default function TopBar({ activeTab, setActiveTab, setupSection, setSetup
     setShowExitNudge(false);
     setIsAdmin(false);
     setManagerInitials(null);
+    setActiveTab('schedule');
   };
 
   const handleExitPost = () => {
@@ -960,7 +961,19 @@ export default function TopBar({ activeTab, setActiveTab, setupSection, setSetup
   return (
     <>
       <div className="topbar">
-        <div className="topbar-brand">
+        <div
+          className="topbar-brand topbar-brand--clickable"
+          onClick={() => {
+            setActiveTab('schedule');
+            setShowAbsences(false);
+            setShowPreview(false);
+            clearTimeout(hoverTimerRef.current);
+          }}
+          title="Back to schedule board"
+          role="button"
+          tabIndex={0}
+          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveTab('schedule'); setShowAbsences(false); } }}
+        >
           <Calendar size={24} strokeWidth={1.5} />
           <span>Shiftcraft</span>
         </div>
@@ -1208,6 +1221,7 @@ export default function TopBar({ activeTab, setActiveTab, setupSection, setSetup
                 } else {
                   setIsAdmin(false);
                   setManagerInitials(null);
+                  setActiveTab('schedule');
                 }
               } else {
                 setShowPinModal(true);

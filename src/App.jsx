@@ -85,6 +85,13 @@ function AppContent() {
     );
   }
   const [activeTab, setActiveTab] = useState('schedule');
+  const [setupSection, setSetupSection] = useState('staff');
+
+  // Guard: staff view must never land on Setup. Belt-and-suspenders for the
+  // manager-pill exit fix; also catches deep-links / stale state.
+  useEffect(() => {
+    if (!isAdmin && activeTab === 'setup') setActiveTab('schedule');
+  }, [isAdmin, activeTab]);
   const [selectedPersonId, setSelectedPersonId] = useState(null);
   const [configClinicId, setConfigClinicId] = useState(null);
   const [search, setSearch] = useState('');
@@ -152,7 +159,7 @@ function AppContent() {
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="app">
-        <TopBar activeTab={activeTab} setActiveTab={setActiveTab} />
+        <TopBar activeTab={activeTab} setActiveTab={setActiveTab} setupSection={setupSection} setSetupSection={setSetupSection} />
         <div className="main">
           {activeTab === 'schedule' ? (
             <div className="admin-layout">
@@ -181,7 +188,7 @@ function AppContent() {
               </div>
             </div>
           ) : (
-            <Setup />
+            <Setup initialSection={setupSection} onBack={() => setActiveTab('schedule')} />
           )}
         </div>
 
