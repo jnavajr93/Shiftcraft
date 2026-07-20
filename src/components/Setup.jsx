@@ -314,10 +314,10 @@ function PersonCard({ person, providers, locations }) {
         </button>
       </div>
 
-      {/* Employment type */}
+      {/* Employment type + On Call eligibility (tech only) on same row */}
       <div className="form-group">
         <label className="form-label">Employment</label>
-        <div style={{ display: 'flex', gap: 4 }}>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           {EMPLOYMENT_TYPES.map(et => (
             <button
               key={et}
@@ -327,6 +327,16 @@ function PersonCard({ person, providers, locations }) {
               {et}
             </button>
           ))}
+          {person.staffType !== 'admin' && (
+            <button
+              className={`pill small${person.roles.includes('On Call') ? ' pill-oncall-active' : ''}`}
+              style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+              onClick={() => up('roles', toggleArr(person.roles, 'On Call'))}
+            >
+              <PhoneCall size={10} />
+              On Call
+            </button>
+          )}
         </div>
       </div>
 
@@ -374,18 +384,6 @@ function PersonCard({ person, providers, locations }) {
                   </button>
                 );
               })}
-            </div>
-            {/* On Call is an eligibility flag, not an ordered role */}
-            <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border-subtle, var(--border-muted, #e5e7eb))', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>On-call eligibility:</span>
-              <button
-                className={`pill small${person.roles.includes('On Call') ? ' active' : ''}`}
-                style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-                onClick={() => up('roles', toggleArr(person.roles, 'On Call'))}
-              >
-                <PhoneCall size={10} />
-                On Call
-              </button>
             </div>
           </>
         )}
