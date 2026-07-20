@@ -1768,8 +1768,8 @@ html, body, #root {
 /* Style WeekRows nicely in mobile context */
 .mobile-my-schedule-body .day-schedule-row {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: flex-start;
+  gap: 12px;
   padding: 11px 14px;
   background: var(--bg-elevated);
   border-radius: var(--radius);
@@ -1780,14 +1780,18 @@ html, body, #root {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-secondary);
-  width: 30px;
+  /* wide enough for "WED 7/30" at 12px — never truncates, never overlaps */
+  min-width: 72px;
   flex-shrink: 0;
   letter-spacing: 0.04em;
+  padding-top: 1px; /* optical alignment with detail text */
 }
 .mobile-my-schedule-body .day-schedule-detail {
   font-size: 13px;
   color: var(--text-primary);
   line-height: 1.5;
+  min-width: 0; /* allows text to wrap rather than overflow */
+  word-break: break-word;
 }
 .mobile-my-schedule-body .day-schedule-off {
   font-size: 13px;

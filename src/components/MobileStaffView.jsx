@@ -150,11 +150,10 @@ export default function MobileStaffView({ onPersonClick }) {
       {sheetOpen && (
         <div className="bottom-sheet-wrapper">
           <div className="bottom-sheet-backdrop" onClick={() => setShowMySchedule(false)} />
-          {/* Item 4: min-height ensures full week visible without initial scroll */}
-          <div className="bottom-sheet" style={{ minHeight: '72vh' }}>
+          <div className="bottom-sheet">
             <div className="sheet-handle" />
             <div className="mobile-my-schedule-header">
-              <span className="mobile-my-schedule-title">{myName}'s week</span>
+              <span className="mobile-my-schedule-title">{myName}'s Week</span>
               <button className="btn-icon" onClick={clearMyName} aria-label="Forget me" title="Forget me">
                 <X size={16} />
               </button>
@@ -182,7 +181,7 @@ function MobileNameBar({ myName, nameSearch, nameSuggestions, onNameChange, onSe
         <>
           <button className="mobile-my-btn" onClick={onShowMySchedule}>
             <User size={13} />
-            {myName}'s schedule
+            {myName}'s Schedule
           </button>
           <button
             className="btn-icon"
