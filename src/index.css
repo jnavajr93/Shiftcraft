@@ -1369,13 +1369,14 @@ html, body, #root {
 .btn-post:disabled {
   opacity: 0.6;
 }
-/* Clean/posted state — outline green, muted */
+/* Clean/posted state — solid green, white text */
 .btn-post.btn-post--clean {
-  background: transparent;
-  color: #16a34a;
-  border: 1px solid #16a34a;
-  opacity: 0.55;
+  background: #16a34a;
+  color: #fff;
+  border-color: transparent;
+  opacity: 0.85;
 }
+.btn-post.btn-post--clean:hover { opacity: 1; }
 [data-theme="dark"] .btn-post {
   background: #15803d;
 }
@@ -1383,8 +1384,9 @@ html, body, #root {
   background: #166534;
 }
 [data-theme="dark"] .btn-post.btn-post--clean {
-  color: #4ade80;
-  border-color: #4ade80;
+  background: #15803d;
+  color: #fff;
+  border-color: transparent;
 }
 
 /* Timeless variable slot — subtle red outline in manager mode */

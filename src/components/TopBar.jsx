@@ -43,7 +43,10 @@ import { fetchAbsencesForWeek } from '../services/dataService.js';
 function formatPostedTime(isoString) {
   if (!isoString) return '';
   const d = new Date(isoString);
-  return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const mo = d.getMonth() + 1;
+  const day = d.getDate();
+  const time = d.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit' });
+  return `${mo}/${day} ${time}`;
 }
 
 // Generate and download a PDF schedule grid (landscape letter)
