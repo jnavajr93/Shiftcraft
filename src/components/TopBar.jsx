@@ -1121,8 +1121,13 @@ export default function TopBar({ activeTab, setActiveTab, setupSection, setSetup
                     <div className="gear-submenu-divider" />
                     <button
                       className="gear-submenu-item"
-                      onClick={() => { setTheme(t => t === 'dark' ? 'light' : 'dark'); setShowGearMenu(false); }}
+                      onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
                     >
+                      <span className="gear-submenu-item-icon">
+                        {theme === 'dark'
+                          ? <Sun size={14} strokeWidth={1.75} />
+                          : <Moon size={14} strokeWidth={1.75} />}
+                      </span>
                       {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
                     </button>
                     <button
@@ -1130,6 +1135,9 @@ export default function TopBar({ activeTab, setActiveTab, setupSection, setSetup
                       data-tour="help-button"
                       onClick={() => { showWelcomeCard(); setShowGearMenu(false); }}
                     >
+                      <span className="gear-submenu-item-icon">
+                        <CircleHelp size={14} strokeWidth={1.75} />
+                      </span>
                       Tips
                     </button>
                   </div>
