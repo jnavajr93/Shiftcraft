@@ -72,7 +72,7 @@ html, body, #root {
 
 /* ─── Top Bar ─────────────────────────── */
 .topbar {
-  display: flex; align-items: center; gap: 12px;
+  display: flex; align-items: center;
   padding: 0 16px; height: 52px; min-height: 52px;
   background: var(--bg-elevated);
   border-bottom: 0.5px solid var(--border-strong);
@@ -88,8 +88,9 @@ html, body, #root {
 }
 .topbar-brand--clickable:hover { opacity: 0.72; }
 .topbar-week {
-  flex: 1; display: flex; align-items: center; justify-content: center;
-  gap: 4px; position: relative;
+  position: absolute; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; justify-content: center;
+  gap: 4px;
 }
 .topbar-nav-btn { min-height: 32px !important; padding: 4px 6px !important; flex-shrink: 0; }
 .topbar-today-btn { min-height: 26px !important; padding: 2px 9px !important; font-size: 11px !important; flex-shrink: 0; color: var(--text-muted) !important; border-radius: 99px !important; }
@@ -104,7 +105,7 @@ html, body, #root {
 .topbar-week-label:hover { background: var(--bg-surface); }
 .topbar-week-label--staff { cursor: default; pointer-events: none; }
 .topbar-week-label--staff:hover { background: none; }
-.topbar-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.topbar-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; margin-left: auto; }
 
 /* ─── Buttons ─────────────────────────── */
 .btn {
