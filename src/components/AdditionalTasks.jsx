@@ -82,7 +82,7 @@ function TaskTimeEditor({ task, onSave, onClose }) {
 
 // ─── Task eligibility (no role check — any staff can take any task) ───────────
 function taskIneligibleReason(person, task, clinics, allPeople) {
-  if ((person.daysOff ?? []).includes(task.day)) return 'Off this day';
+  if ((person.daysOff ?? []).includes(task.day)) return 'Off This Day';
 
   // Timeless tasks are all-shift annotations — no overlap or OBS conflicts apply.
   if (task.start == null) return null;
@@ -102,7 +102,7 @@ function taskIneligibleReason(person, task, clinics, allPeople) {
 
   if (blocking.length > 0) {
     const b = blocking[0];
-    if (b.isObs) return 'Assigned to OBS this day';
+    if (b.isObs) return 'Assigned To OBS This Day';
     const br = slotEffectiveRange(b.slotType, b.clinic);
     const label = b.clinic.provider || b.clinic.location;
     return `Overlaps ${label} ${minutesToTime(br.start)}–${minutesToTime(br.end)}`;
@@ -336,7 +336,7 @@ function TaskSlotRow({ task, onPersonClick, onEdit }) {
               <div className="task-location-tag" style={{ flexShrink: 0 }}>{task.locationTag}</div>
             )}
             {(timeDisplay || isAdmin) && (
-              <span>{timeDisplay ?? (isAdmin ? 'Set time…' : '')}</span>
+              <span>{timeDisplay ?? (isAdmin ? 'Set Time…' : '')}</span>
             )}
             {isAdmin && <Pencil size={9} style={{ opacity: 0.5 }} />}
           </div>
@@ -405,9 +405,9 @@ function AddTaskForm({ day, initialTask = null, onSubmit, onCancel }) {
           value={labelMode}
           onChange={e => setLabelMode(e.target.value)}
         >
-          <option value="">Select or type new…</option>
+          <option value="">Select Or Type New…</option>
           {presetLabels.map(t => <option key={t} value={t}>{t}</option>)}
-          <option value="__custom">+ New task type…</option>
+          <option value="__custom">+ New Task Type…</option>
         </select>
         {labelMode === '__custom' && (
           <input
@@ -423,7 +423,7 @@ function AddTaskForm({ day, initialTask = null, onSubmit, onCancel }) {
 
       {/* Location tag */}
       <div className="form-group">
-        <label className="form-label">Location tag (optional)</label>
+        <label className="form-label">Location Tag (Optional)</label>
         <select
           className="form-input"
           style={{ fontSize: 13 }}
@@ -438,20 +438,20 @@ function AddTaskForm({ day, initialTask = null, onSubmit, onCancel }) {
       {/* Time */}
       <div className="form-group">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-          <label className="form-label" style={{ marginBottom: 0 }}>Time (optional)</label>
+          <label className="form-label" style={{ marginBottom: 0 }}>Time (Optional)</label>
           {isTimeSet && (
             <button
               type="button"
               style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, padding: 0 }}
               onClick={clearTime}
             >
-              <X size={10} /> No time
+              <X size={10} /> No Time
             </button>
           )}
         </div>
         {!isTimeSet && (
           <div style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic', paddingBottom: 6 }}>
-            All shift — no set time
+            All Shift — No Set Time
           </div>
         )}
         <TimeRangePicker
@@ -540,7 +540,7 @@ export default function AdditionalTasks({ onPersonClick }) {
                       style={{ minHeight: 32, fontSize: 12, width: '100%' }}
                       onClick={() => { setEditingTask(null); setAddingDay(day); }}
                     >
-                      <Plus size={13} /> Add task
+                      <Plus size={13} /> Add Task
                     </button>
                   )
                 )}

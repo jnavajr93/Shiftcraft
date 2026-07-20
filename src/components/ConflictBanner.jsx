@@ -78,7 +78,7 @@ export default function ConflictBanner() {
           <div key={key} className="conflict-banner">
             <AlertTriangle size={15} color="var(--red)" style={{ flexShrink: 0 }} />
             <span className="conflict-banner-text">
-              <strong>{c.personName}</strong> is double-booked on {c.day} —{' '}
+              <strong>{c.personName}</strong> Is Double-Booked On {c.day} —{' '}
               {c.clinicA.provider} @ {c.clinicA.location} and {c.clinicB.provider} @ {c.clinicB.location}
             </span>
             <button

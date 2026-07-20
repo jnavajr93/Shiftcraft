@@ -140,11 +140,11 @@ function OverlayInner({ person, onClose }) {
           {confirming ? (
             <div style={{ background: 'var(--red-bg)', border: '0.5px solid var(--red)', borderRadius: 'var(--radius)', padding: '12px 14px' }}>
               <div style={{ fontSize: 13, color: 'var(--text-primary)', marginBottom: 10, lineHeight: 1.5 }}>
-                Remove <strong>{person.name}</strong> from the roster? This will unassign them from all current shifts. This cannot be undone.
+                Remove <strong>{person.name}</strong> From The Roster? This Will Unassign Them From All Current Shifts. This Cannot Be Undone.
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button className="btn btn-danger" style={{ minHeight: 36, fontSize: 13 }} onClick={handleRemove}>
-                  Yes, remove
+                  Yes, Remove
                 </button>
                 <button className="btn" style={{ minHeight: 36, fontSize: 13 }} onClick={() => setConfirming(false)}>
                   Cancel
@@ -157,7 +157,7 @@ function OverlayInner({ person, onClose }) {
               style={{ minHeight: 36, fontSize: 13 }}
               onClick={() => setConfirming(true)}
             >
-              Remove from roster
+              Remove From Roster
             </button>
           )}
         </div>

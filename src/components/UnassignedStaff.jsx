@@ -71,7 +71,7 @@ export default function UnassignedStaff({ onPersonClick }) {
               <div key={day} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {unassigned.length === 0 ? (
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic', padding: '4px 0' }}>
-                    All assigned
+                    All Assigned
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>

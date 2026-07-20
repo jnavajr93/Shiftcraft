@@ -76,7 +76,7 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic, 
             data-tour="search-bar"
             className="search-input"
             type="search"
-            placeholder="Search staff…"
+            placeholder="Search Staff…"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />

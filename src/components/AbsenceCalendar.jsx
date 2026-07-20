@@ -9,13 +9,13 @@ import OnCallManager from './OnCallManager.jsx';
 // ─── Category definitions ─────────────────────────────────────────────────────
 
 export const ABSENCE_TYPES = [
-  { key: 'Callout',  label: 'Last-minute callout', short: 'Callout',  color: '#ef4444' },
-  { key: 'Approved', label: 'Approved time off',   short: 'Approved', color: '#22c55e' },
+  { key: 'Callout',  label: 'Last-Minute Callout', short: 'Callout',  color: '#ef4444' },
+  { key: 'Approved', label: 'Approved Time Off',   short: 'Approved', color: '#22c55e' },
   { key: 'Sick',     label: 'Sick',                short: 'Sick',     color: '#3b82f6' },
   // Request/pending is retired — hidden from form/legend but kept for rendering old DB rows
-  { key: 'Request',  label: 'Request / pending',   short: 'Request',  color: '#f59e0b', hidden: true },
-  { key: 'Partial',  label: 'Partial day',         short: 'Partial',  color: '#8b5cf6' },
-  { key: 'DoctorOff', label: 'Doctor off', short: 'Dr. off', color: '#f59e0b' },
+  { key: 'Request',  label: 'Request / Pending',   short: 'Request',  color: '#f59e0b', hidden: true },
+  { key: 'Partial',  label: 'Partial Day',         short: 'Partial',  color: '#8b5cf6' },
+  { key: 'DoctorOff', label: 'Doctor Off', short: 'Dr. Off', color: '#f59e0b' },
 ];
 
 // Types available for selection in the add/edit form and shown in the legend
@@ -113,7 +113,7 @@ function Legend({ activeCategories, onToggle }) {
       <button
         className={`absence-legend-item${activeCategories.has('Closed') ? '' : ' absence-legend-item--off'}`}
         onClick={() => onToggle('Closed')}
-        title={activeCategories.has('Closed') ? 'Hide holidays & closures' : 'Show holidays & closures'}
+        title={activeCategories.has('Closed') ? 'Hide Holidays & Closures' : 'Show Holidays & Closures'}
       >
         <span className="absence-legend-dot" style={{ background: CLOSED_COLOR }} />
         <span>Closed / Holiday</span>
@@ -122,7 +122,7 @@ function Legend({ activeCategories, onToggle }) {
       <button
         className={`absence-legend-item${activeCategories.has('OnCall') ? '' : ' absence-legend-item--off'}`}
         onClick={() => onToggle('OnCall')}
-        title={activeCategories.has('OnCall') ? 'Hide on-call chips' : 'Show on-call chips'}
+        title={activeCategories.has('OnCall') ? 'Hide On-Call Chips' : 'Show On-Call Chips'}
       >
         <span className="absence-legend-dot" style={{ background: ONCALL_COLOR }} />
         <span>Tech On Call</span>
@@ -207,14 +207,14 @@ function ClinicClosedModal({ initStart, initEnd, managerInitials, onSave, onClos
           {/* Dates */}
           <div style={{ display: 'flex', gap: 12 }}>
             <div style={{ flex: 1 }}>
-              <label className="setup-label">Start date</label>
+              <label className="setup-label">Start Date</label>
               <input
                 type="date" className="setup-input" value={startD}
                 onChange={e => { setStartD(e.target.value); if (e.target.value > endD) setEndD(e.target.value); }}
               />
             </div>
             <div style={{ flex: 1 }}>
-              <label className="setup-label">End date</label>
+              <label className="setup-label">End Date</label>
               <input
                 type="date" className="setup-input" value={endD} min={startD}
                 onChange={e => setEndD(e.target.value)}
@@ -223,14 +223,14 @@ function ClinicClosedModal({ initStart, initEnd, managerInitials, onSave, onClos
           </div>
           {/* Label */}
           <div>
-            <label className="setup-label">Reason / label</label>
+            <label className="setup-label">Reason / Label</label>
             <input
               className="setup-input"
               autoFocus
               value={label}
               onChange={e => setLabel(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && canSave) handleSave(); }}
-              placeholder="e.g. Staff training"
+              placeholder="E.g. Staff Training"
             />
           </div>
         </div>
@@ -425,7 +425,7 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, doc
     <div className="overlay-backdrop" style={{ zIndex: 310 }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="overlay-modal" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
         <div className="overlay-header">
-          <span style={{ fontWeight: 600, fontSize: 15 }}>{isEdit ? 'Edit absence' : 'Add absence'}</span>
+          <span style={{ fontWeight: 600, fontSize: 15 }}>{isEdit ? 'Edit Absence' : 'Add Absence'}</span>
           <button className="overlay-close" onClick={onClose}><X size={16} /></button>
         </div>
         <div className="overlay-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -438,7 +438,7 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, doc
                 value={personKey}
                 onChange={setPersonKey}
                 roster={(doctors ?? DOCTORS).map(d => ({ key: d, label: d, color: null }))}
-                placeholder="Search doctors…"
+                placeholder="Search Doctors…"
               />
             ) : (
               <PersonTypeahead
@@ -447,7 +447,7 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, doc
                 roster={[...people]
                   .sort((a, b) => a.name.localeCompare(b.name))
                   .map(p => ({ key: p.name.trim().toLowerCase(), label: p.name, color: p.color ?? null }))}
-                placeholder="Search staff…"
+                placeholder="Search Staff…"
               />
             )}
           </div>
@@ -479,12 +479,12 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, doc
           {/* Dates */}
           <div style={{ display: 'flex', gap: 12 }}>
             <div style={{ flex: 1 }}>
-              <label className="setup-label">Start date</label>
+              <label className="setup-label">Start Date</label>
               <input type="date" className="setup-input" value={startD}
                 onChange={e => { setStartD(e.target.value); if (e.target.value > endD) setEndD(e.target.value); }} />
             </div>
             <div style={{ flex: 1 }}>
-              <label className="setup-label">End date</label>
+              <label className="setup-label">End Date</label>
               <input type="date" className="setup-input" value={endD} min={startD}
                 onChange={e => setEndD(e.target.value)} />
             </div>
@@ -494,11 +494,11 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, doc
           {type === 'Partial' && (
             <div style={{ display: 'flex', gap: 12 }}>
               <div style={{ flex: 1 }}>
-                <label className="setup-label">Partial start</label>
+                <label className="setup-label">Partial Start</label>
                 <input type="time" className="setup-input" value={pStart} onChange={e => setPStart(e.target.value)} />
               </div>
               <div style={{ flex: 1 }}>
-                <label className="setup-label">Partial end</label>
+                <label className="setup-label">Partial End</label>
                 <input type="time" className="setup-input" value={pEnd} onChange={e => setPEnd(e.target.value)} />
               </div>
             </div>
@@ -507,7 +507,7 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, doc
           {/* Note */}
           <div>
             <label className="setup-label">Note <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span></label>
-            <input className="setup-input" value={note} onChange={e => setNote(e.target.value)} placeholder="e.g. FMLA, pre-approved…" />
+            <input className="setup-input" value={note} onChange={e => setNote(e.target.value)} placeholder="E.g. FMLA, Pre-Approved…" />
           </div>
 
           {/* Duplicate warning */}
@@ -520,7 +520,7 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, doc
                 <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
                   <button className="btn btn-primary btn-pill" style={{ fontSize: 11, minHeight: 26 }}
                     onClick={() => handleSubmit(true)} disabled={saving}>
-                    {saving ? 'Adding…' : 'Add anyway'}
+                    {saving ? 'Adding…' : 'Add Anyway'}
                   </button>
                   <button className="btn btn-pill" style={{ fontSize: 11, minHeight: 26 }}
                     onClick={() => setDupWarning(null)}>
@@ -545,7 +545,7 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, doc
             <button className="btn btn-pill" onClick={onClose}>Cancel</button>
             {!dupWarning && (
               <button className="btn btn-primary btn-pill" onClick={() => handleSubmit(false)} disabled={!canSubmit || saving}>
-                {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Add absence'}
+                {saving ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Absence'}
               </button>
             )}
           </div>
@@ -588,20 +588,18 @@ function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, o
     ? closures.filter(c => c.endDate >= weekStart && c.startDate <= weekEnd)
     : [];
 
-  // Distinguish single-click (open day panel) from double-click (jump to week)
+  // Single click on cell → jump to that week directly
   const handleCellInteraction = (ds, e) => {
     if (suppressClickRef?.current) { suppressClickRef.current = false; return; }
-    const rect = e.currentTarget.getBoundingClientRect();
-    if (clickTimerRef.current) {
-      clearTimeout(clickTimerRef.current);
-      clickTimerRef.current = null;
-      onDayDoubleClick(ds);
-      return;
-    }
-    clickTimerRef.current = setTimeout(() => {
-      clickTimerRef.current = null;
-      onDayClick(ds, rect);
-    }, 220);
+    onDayDoubleClick(ds);
+  };
+
+  // + button click → open day panel (admin only)
+  const handleAddBtnClick = (ds, e) => {
+    e.stopPropagation();
+    if (suppressClickRef?.current) { suppressClickRef.current = false; return; }
+    const rect = e.currentTarget.closest('.absence-day-cell').getBoundingClientRect();
+    onDayClick(ds, rect);
   };
 
   const allBars = weekClosures.length + weekAbsences.length;
@@ -625,6 +623,15 @@ function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, o
             <span className={`absence-day-num${isToday ? ' absence-day-num--today' : ''}${!isThisMonth ? ' absence-day-num--other' : ''}`}>
               {day.getUTCDate()}
             </span>
+            {isAdmin && (
+              <button
+                className="absence-day-add-btn"
+                onClick={(e) => handleAddBtnClick(ds, e)}
+                title="Add Absence Or Closure"
+              >
+                +
+              </button>
+            )}
           </div>
         );
       })}
@@ -930,7 +937,7 @@ function DayPanel({ dateStr, rect, absences, personByKey, holidayDetail, dayClos
             <div className="day-panel-holiday-row">
               <span className="day-panel-holiday-dot" style={{ background: CLOSED_COLOR, opacity: 0.4 }} />
               <span className="day-panel-holiday-name day-panel-holiday-moved-away">
-                {holidayDetail.name} – moved to {formatDateDisplay(holidayDetail.movedToDate)}
+                {holidayDetail.name} – Moved To {formatDateDisplay(holidayDetail.movedToDate)}
               </span>
               {isAdmin && (
                 <button
@@ -950,7 +957,7 @@ function DayPanel({ dateStr, rect, absences, personByKey, holidayDetail, dayClos
               <span className="day-panel-holiday-name">
                 {holidayDetail.name}{' '}
                 <span className="day-panel-holiday-status">
-                  (moved from {formatDateDisplay(holidayDetail.originalDate)}) – Observed
+                  (Moved From {formatDateDisplay(holidayDetail.originalDate)}) – Observed
                 </span>
               </span>
               {isAdmin && (
@@ -972,9 +979,9 @@ function DayPanel({ dateStr, rect, absences, personByKey, holidayDetail, dayClos
                 <span className="day-panel-holiday-name">
                   {holidayDetail.name}
                   <span className="day-panel-holiday-status">
-                    {holidayDetail.status === 'open' ? ' – Office open' :
-                     holidayDetail.status === 'scoped' ? ` – closed: ${(holidayDetail.closedLocations ?? []).join(', ')}` :
-                     ' – Observed (all locations)'}
+                    {holidayDetail.status === 'open' ? ' – Office Open' :
+                     holidayDetail.status === 'scoped' ? ` – Closed: ${(holidayDetail.closedLocations ?? []).join(', ')}` :
+                     ' – Observed (All Locations)'}
                   </span>
                 </span>
                 {isAdmin && (
@@ -984,7 +991,7 @@ function DayPanel({ dateStr, rect, absences, personByKey, holidayDetail, dayClos
                     onClick={handleToggleHoliday}
                     disabled={togglingHoliday}
                   >
-                    {togglingHoliday ? '…' : holidayDetail.status === 'open' ? 'Mark observed' : 'Mark open'}
+                    {togglingHoliday ? '…' : holidayDetail.status === 'open' ? 'Mark Observed' : 'Mark Open'}
                   </button>
                 )}
               </div>
@@ -995,7 +1002,7 @@ function DayPanel({ dateStr, rect, absences, personByKey, holidayDetail, dayClos
                   {!scopeEditorOpen ? (
                     <button className="btn btn-pill" style={{ fontSize: 10, minHeight: 20, padding: '1px 7px' }}
                       onClick={openScopeEditor}>
-                      Edit closed locations
+                      Edit Closed Locations
                     </button>
                   ) : (
                     <div>
@@ -1034,11 +1041,11 @@ function DayPanel({ dateStr, rect, absences, personByKey, holidayDetail, dayClos
                   {!showMoveUI ? (
                     <button className="btn btn-pill" style={{ fontSize: 10, minHeight: 20, padding: '1px 7px' }}
                       onClick={openMoveUI}>
-                      Move observed day
+                      Move Observed Day
                     </button>
                   ) : (
                     <div>
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Move to:</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Move To:</div>
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                         <input type="date" className="setup-input" style={{ fontSize: 11, flex: 1 }}
                           value={moveDate} min={moveMin} max={moveMax}
@@ -1081,7 +1088,7 @@ function DayPanel({ dateStr, rect, absences, personByKey, holidayDetail, dayClos
                   style={{ minHeight: 20, padding: '1px 3px', marginLeft: 'auto', color: 'var(--text-muted)' }}
                   onClick={() => handleDeleteClosure(c.id)}
                   disabled={deletingId === c.id}
-                  title="Delete closure"
+                  title="Delete Closure"
                 >
                   {deletingId === c.id ? '…' : <Trash2 size={11} />}
                 </button>
@@ -1093,7 +1100,7 @@ function DayPanel({ dateStr, rect, absences, personByKey, holidayDetail, dayClos
 
       <div className="day-panel-absence-list">
         {dayAbsences.length === 0 && !holidayDetail && dayClosures.length === 0 && (
-          <div className="day-panel-empty">No absences this day</div>
+          <div className="day-panel-empty">No Absences This Day</div>
         )}
         {dayAbsences.length === 0 && (holidayDetail || dayClosures.length > 0) && (
           <div className="day-panel-empty">No staff absences</div>
@@ -1113,15 +1120,12 @@ function DayPanel({ dateStr, rect, absences, personByKey, holidayDetail, dayClos
 
       <div className="day-panel-actions">
         {/* Fully stacked — each button 100% width, nothing clips regardless of panel width */}
-        <button className="btn btn-pill" style={{ fontSize: 11, minHeight: 26, width: '100%' }} onClick={onJumpAndClose}>
-          Go to this week
-        </button>
         <button
           className="btn btn-pill btn-primary"
           style={{ fontSize: 11, minHeight: 26, gap: 4, width: '100%' }}
           onClick={() => onAddAbsence(dateStr)}
         >
-          <Plus size={11} /> Add absence
+          <Plus size={11} /> Add Absence
         </button>
         {isAdmin && (
           <button
@@ -1191,7 +1195,7 @@ function AbsenceHistory({ absences, people, personByKey, onAbsenceClick }) {
           value={selectedKey}
           onChange={e => setSelectedKey(e.target.value)}
         >
-          <option value="">All staff</option>
+          <option value="">All Staff</option>
           {[...people].sort((a, b) => a.name.localeCompare(b.name)).map(p => (
             <option key={p.id} value={p.name.trim().toLowerCase()}>{p.name}</option>
           ))}
@@ -1202,7 +1206,7 @@ function AbsenceHistory({ absences, people, personByKey, onAbsenceClick }) {
           <button
             className={`pill small${selectedYear === 'all' ? ' active' : ''}`}
             onClick={() => setSelectedYear('all')}
-          >All time</button>
+          >All Time</button>
           {allYears.map(y => (
             <button
               key={y}
@@ -1238,9 +1242,9 @@ function AbsenceHistory({ absences, people, personByKey, onAbsenceClick }) {
           <div className="absence-history-summary-header">
             {selectedPerson
               ? <><span style={{ fontWeight: 700 }}>{selectedPerson.name}</span> — </>
-              : 'All staff — '
+              : 'All Staff — '
             }
-            {selectedYear !== 'all' ? selectedYear : 'all time'} · {totalDays} day{totalDays !== 1 ? 's' : ''} total
+            {selectedYear !== 'all' ? selectedYear : 'All Time'} · {totalDays} Day{totalDays !== 1 ? 's' : ''} Total
           </div>
           <div className="absence-history-summary-counts">
             {ABSENCE_TYPES.filter(t => counts[t.key] > 0).map(t => (
@@ -1257,7 +1261,7 @@ function AbsenceHistory({ absences, people, personByKey, onAbsenceClick }) {
       <div className="absence-history-list">
         {personAbsences.length === 0 && (
           <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: '32px 0', textAlign: 'center' }}>
-            {selectedKey ? 'No absences recorded for this person' : 'No absences match the selected filters'}
+            {selectedKey ? 'No Absences Recorded For This Person' : 'No Absences Match The Selected Filters'}
           </div>
         )}
         {personAbsences.map(a => {
@@ -1282,7 +1286,7 @@ function AbsenceHistory({ absences, people, personByKey, onAbsenceClick }) {
               </div>
               {a.note && <div className="absence-history-row-note">{a.note}</div>}
               {a.entered_by && (
-                <div className="absence-history-row-meta">entered by {a.entered_by}</div>
+                <div className="absence-history-row-meta">Entered By {a.entered_by}</div>
               )}
             </div>
           );
@@ -1385,13 +1389,13 @@ function OnCallWeekPopover({ weekStr, rect, settings, overrides, eligiblePool, o
           <>
             <span className="oncall-popover-dot" style={{ background: personColor }} />
             <span className="oncall-popover-name">{computed.person}</span>
-            {computed.isOverride && <span className="oncall-popover-badge">override</span>}
+            {computed.isOverride && <span className="oncall-popover-badge">Override</span>}
             {blockPos && (
               <span className="oncall-popover-pos">Week {blockPos.weekInBlock} of {blockPos.totalWeeks}</span>
             )}
           </>
         ) : (
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No one assigned</span>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No One Assigned</span>
         )}
       </div>
 
@@ -1399,14 +1403,14 @@ function OnCallWeekPopover({ weekStr, rect, settings, overrides, eligiblePool, o
 
       {pool.length === 0 ? (
         <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '10px 0', textAlign: 'center', lineHeight: 1.6 }}>
-          No on-call eligible techs.<br />
-          Mark techs with the On Call role in Staff setup.
+          No On-Call Eligible Techs.<br />
+          Mark Techs With The On Call Role In Staff Setup.
         </div>
       ) : hasAnchor ? (
         /* ─── Rotation active: assign override ─── */
         <div className="oncall-popover-section">
           <div className="oncall-popover-section-label">
-            {applyBlock ? `Assign ${blockLength}-week block:` : 'Assign this week:'}
+            {applyBlock ? `Assign ${blockLength}-Week Block:` : 'Assign This Week:'}
           </div>
           <div className="oncall-pool-pills">
             {pool.map(p => (
@@ -1427,7 +1431,7 @@ function OnCallWeekPopover({ weekStr, rect, settings, overrides, eligiblePool, o
               checked={applyBlock}
               onChange={e => setApplyBlock(e.target.checked)}
             />
-            Apply as {blockLength}-week block
+            Apply As {blockLength}-Week Block
           </label>
           {existingOverride && (
             <button
@@ -1436,7 +1440,7 @@ function OnCallWeekPopover({ weekStr, rect, settings, overrides, eligiblePool, o
               onClick={handleClearOverride}
               disabled={assigning}
             >
-              Clear override
+              Clear Override
             </button>
           )}
         </div>
@@ -1448,8 +1452,8 @@ function OnCallWeekPopover({ weekStr, rect, settings, overrides, eligiblePool, o
             <div className="oncall-popover-confirm">
               <AlertCircle size={13} style={{ color: '#f59e0b', flexShrink: 0 }} />
               <div style={{ fontSize: 11, lineHeight: 1.6 }}>
-                <strong>{startConfirmPerson}</strong> goes first starting {weekStr.replace('-W', ' W')}.
-                Auto-rotation activates from here.
+                <strong>{startConfirmPerson}</strong> Goes First Starting {weekStr.replace('-W', ' W')}.
+                Auto-Rotation Activates From Here.
               </div>
               <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
                 <button
@@ -1472,7 +1476,7 @@ function OnCallWeekPopover({ weekStr, rect, settings, overrides, eligiblePool, o
           ) : (
             <>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, lineHeight: 1.5 }}>
-                Pick a tech to set this week as block 1 and activate the auto-rotation.
+                Pick A Tech To Set This Week As Block 1 And Activate The Auto-Rotation.
               </div>
               <div className="oncall-pool-pills">
                 {pool.map(p => (
@@ -1969,7 +1973,7 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
               <span className="absence-month-label">{MONTHS[viewMonth]} {viewYear}</span>
               <button className="btn btn-icon" onClick={nextMonth} title="Next month"><ChevronRight size={16} /></button>
               <button className="btn btn-pill" style={{ fontSize: 11, minHeight: 26, padding: '2px 10px' }} onClick={goToday}>
-                This month
+                This Month
               </button>
             </>
           ) : (
@@ -1982,10 +1986,10 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
               className={`btn btn-pill topbar-mobile-hidden${showOncallPanel ? ' active' : ''}`}
               style={{ fontSize: 11, minHeight: 26, padding: '2px 10px', gap: 4 }}
               onClick={() => setShowOncallPanel(s => !s)}
-              title={showOncallPanel ? 'Close on-call panel' : 'Manage on-call rotation'}
+              title={showOncallPanel ? 'Close On-Call Panel' : 'Manage On-Call Rotation'}
             >
               <PhoneCall size={13} />
-              On call
+              On Call
             </button>
           )}
           {/* History toggle */}
@@ -1993,7 +1997,7 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
             className={`btn btn-pill topbar-mobile-hidden${view === 'history' ? ' active' : ''}`}
             style={{ fontSize: 11, minHeight: 26, padding: '2px 10px', gap: 4 }}
             onClick={() => setView(v => v === 'history' ? 'calendar' : 'history')}
-            title={view === 'history' ? 'Back to calendar' : 'View absence history'}
+            title={view === 'history' ? 'Back To Calendar' : 'View Absence History'}
           >
             <History size={13} />
             {view === 'history' ? 'Calendar' : 'History'}

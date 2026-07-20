@@ -62,7 +62,7 @@ export default function HoursBar() {
       {!collapsed && (
         <div className="hours-bar-body">
           {assigned.length === 0 && (
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No staff assigned yet</span>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No Staff Assigned Yet</span>
           )}
           {assigned.map(({ person, hours }) => {
             const target = person.targetHours ?? 40;

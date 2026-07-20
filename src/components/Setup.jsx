@@ -128,7 +128,7 @@ function AvailabilityConstraints({ windows, daysOff, onChange }) {
           style={{ minHeight: 30, fontSize: 12, marginTop: constrainedDays.length > 0 ? 4 : 0 }}
           onClick={addConstraint}
         >
-          <Plus size={12} /> Add availability constraint
+          <Plus size={12} /> Add Availability Constraint
         </button>
       )}
     </div>
@@ -185,7 +185,7 @@ function AddAccommodationForm({ locations, providers, onAdd, onCancel }) {
       <div className="form-group">
         <label className="form-label">Type</label>
         <select className="form-input" value={type} onChange={e => setType(e.target.value)}>
-          <option value="">Select type…</option>
+          <option value="">Select Type…</option>
           {ACCOMMODATION_TYPES.map(t => (
             <option key={t} value={t}>{typeLabels[t]}</option>
           ))}
@@ -195,20 +195,20 @@ function AddAccommodationForm({ locations, providers, onAdd, onCancel }) {
         <div className="form-group">
           <label className="form-label">Day</label>
           <select className="form-input" value={day} onChange={e => setDay(e.target.value)}>
-            <option value="*">All days</option>
+            <option value="*">All Days</option>
             {DAYS.map(d => <option key={d}>{d}</option>)}
           </select>
         </div>
       )}
       {needsStart && (
         <div className="form-group">
-          <label className="form-label">{type === 'late_start' ? 'Start time' : 'Lunch start'}</label>
+          <label className="form-label">{type === 'late_start' ? 'Start Time' : 'Lunch Start'}</label>
           <input type="time" className="form-input" value={start} onChange={e => setStart(e.target.value)} />
         </div>
       )}
       {needsEnd && (
         <div className="form-group">
-          <label className="form-label">{type === 'early_leave' ? 'Leave by' : 'Lunch end'}</label>
+          <label className="form-label">{type === 'early_leave' ? 'Leave By' : 'Lunch End'}</label>
           <input type="time" className="form-input" value={end} onChange={e => setEnd(e.target.value)} />
         </div>
       )}
@@ -493,7 +493,7 @@ function PersonCard({ person, providers, locations }) {
             style={{ minHeight: 32, fontSize: 12, marginTop: 4 }}
             onClick={() => setShowAccForm(true)}
           >
-            <Plus size={13} /> Add accommodation
+            <Plus size={13} /> Add Accommodation
           </button>
         )}
       </div>
@@ -623,7 +623,7 @@ function AddPersonModal({ onClose, existingPeople, providers, locations, default
       <div className="overlay-modal" style={{ maxWidth: 520, maxHeight: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '0.5px solid var(--border)', flexShrink: 0 }}>
-          <div style={{ fontWeight: 500, fontSize: 16 }}>Add new staff member</div>
+          <div style={{ fontWeight: 500, fontSize: 16 }}>Add New Staff Member</div>
           <button className="overlay-close" style={{ position: 'static' }} onClick={onClose}><X size={16} /></button>
         </div>
 
@@ -637,7 +637,7 @@ function AddPersonModal({ onClose, existingPeople, providers, locations, default
               className={`form-input${shake ? ' shake' : ''}`}
               style={{ fontWeight: 500 }}
               autoFocus
-              placeholder="Full name"
+              placeholder="Full Name"
               value={form.name}
               onChange={e => { set('name', e.target.value); setNameError(''); }}
             />
@@ -650,7 +650,7 @@ function AddPersonModal({ onClose, existingPeople, providers, locations, default
                   onChange={e => setLinkPerson(e.target.checked)}
                   style={{ width: 15, height: 15, cursor: 'pointer', flexShrink: 0 }}
                 />
-                Same person as <strong style={{ color: 'var(--text-primary)' }}>{matchingOtherType.name}</strong> in {matchingOtherType.staffType === 'admin' ? 'Admin' : 'Tech'}? Link their hours
+                Same Person As <strong style={{ color: 'var(--text-primary)' }}>{matchingOtherType.name}</strong> In {matchingOtherType.staffType === 'admin' ? 'Admin' : 'Tech'}? Link Their Hours
               </label>
             )}
           </div>
@@ -703,7 +703,7 @@ function AddPersonModal({ onClose, existingPeople, providers, locations, default
               <>
                 <label className="form-label">Roles</label>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic', padding: '2px 0' }}>
-                  Roles will be configured later
+                  Roles Will Be Configured Later
                 </div>
               </>
             ) : (
@@ -786,7 +786,7 @@ function AddPersonModal({ onClose, existingPeople, providers, locations, default
         {/* Footer */}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '12px 20px', borderTop: '0.5px solid var(--border)', flexShrink: 0 }}>
           <button className="btn" style={{ minHeight: 40 }} onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" style={{ minHeight: 40 }} onClick={handleSave}>Add to roster</button>
+          <button className="btn btn-primary" style={{ minHeight: 40 }} onClick={handleSave}>Add To Roster</button>
         </div>
       </div>
     </div>
@@ -885,7 +885,7 @@ function ClinicRow({ c, onEdit, onDeleted }) {
           style={{ minHeight: 32, fontSize: 12, padding: '4px 10px' }}
           onClick={handleDelete}
         >
-          Yes, delete
+          Yes, Delete
         </button>
         <button
           className="btn"
@@ -963,7 +963,7 @@ function ClinicsTab() {
               ))}
               <div className="section-add">
                 <button className="btn" style={{ minHeight: 36, fontSize: 13 }} onClick={() => handleAdd(day)}>
-                  <Plus size={14} /> Add clinic
+                  <Plus size={14} /> Add Clinic
                 </button>
               </div>
             </div>
@@ -1005,7 +1005,7 @@ function LocationsTab() {
       <div style={{ display: 'flex', gap: 8, marginTop: 12, maxWidth: 360 }}>
         <input
           className="form-input"
-          placeholder="New location…"
+          placeholder="New Location…"
           value={newLoc}
           onChange={e => setNewLoc(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }}
@@ -1024,7 +1024,7 @@ function ImportModal({ importWeekLabel, exportedAt, onConfirm, onCancel }) {
     <div className="overlay-backdrop" style={{ zIndex: 250 }} onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
       <div className="overlay-modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()}>
         <div className="overlay-header">
-          <div style={{ fontWeight: 500, fontSize: 16 }}>Import this week?</div>
+          <div style={{ fontWeight: 500, fontSize: 16 }}>Import This Week?</div>
           <button className="overlay-close" onClick={onCancel}><X size={16} /></button>
         </div>
         <div className="overlay-body">
@@ -1104,7 +1104,7 @@ function DataTab() {
         style={{ fontSize: 13, minHeight: 36, gap: 6 }}
         onClick={() => fileInputRef.current?.click()}
       >
-        <Upload size={14} /> Choose backup file…
+        <Upload size={14} /> Choose Backup File…
       </button>
       <input ref={fileInputRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleFileChange} />
       {toast && (

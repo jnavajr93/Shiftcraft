@@ -69,7 +69,7 @@ function AppContent() {
         <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.5px', color: 'var(--text-primary)' }}>
           Shiftcraft
         </div>
-        <div style={{ fontSize: 14 }}>Loading schedule…</div>
+        <div style={{ fontSize: 14 }}>Loading Schedule…</div>
       </div>
     );
   }
@@ -97,7 +97,7 @@ function AppContent() {
           textAlign: 'center',
         }}>
           <div style={{ fontWeight: 600, color: '#dc2626', marginBottom: 10, fontSize: 15 }}>
-            Schedule could not be loaded
+            Schedule Could Not Be Loaded
           </div>
           <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
             {loadError}

@@ -111,7 +111,7 @@ export default function ClinicConfig({ clinicId, onClose }) {
           onChange={(v) => set('endTime', v)}
         />
         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: -8 }}>
-          Closing tech stays 1–1.5h after this
+          Closing Tech Stays 1–1.5h After This
         </div>
 
         <div className="form-group">
@@ -126,7 +126,7 @@ export default function ClinicConfig({ clinicId, onClose }) {
           {clinic.patientCount != null && (
             <div className={`patient-indicator ${ptClass}`} style={{ marginTop: 6 }}>
               <div className={`pt-dot ${ptClass}`} />
-              {ptClass === 'neutral' ? 'Light day' : ptClass === 'amber' ? 'Busy' : 'High volume'}
+              {ptClass === 'neutral' ? 'Light Day' : ptClass === 'amber' ? 'Busy' : 'High Volume'}
             </div>
           )}
         </div>
@@ -148,7 +148,7 @@ export default function ClinicConfig({ clinicId, onClose }) {
                   onClose();
                 }}
               >
-                Yes, delete
+                Yes, Delete
               </button>
               <button className="btn" style={{ minHeight: 34, fontSize: 13 }} onClick={() => setConfirmDelete(false)}>
                 Cancel

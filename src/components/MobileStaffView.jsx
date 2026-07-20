@@ -103,7 +103,7 @@ export default function MobileStaffView({ onPersonClick }) {
       {boardClinics === null ? (
         <div className="mobile-not-posted">
           <span style={{ fontSize: 20, opacity: 0.4 }}>📋</span>
-          Schedule not yet posted for this week.
+          Schedule Not Yet Posted For This Week.
         </div>
       ) : (
         <>
@@ -131,7 +131,7 @@ export default function MobileStaffView({ onPersonClick }) {
             onTouchEnd={handleTouchEnd}
           >
             {dayClinics.length === 0 ? (
-              <div className="mobile-empty-day">No open clinics on {day}</div>
+              <div className="mobile-empty-day">No Open Clinics On {day}</div>
             ) : (
               dayClinics.map(clinic => (
                 <MobileClinicCard
@@ -154,7 +154,7 @@ export default function MobileStaffView({ onPersonClick }) {
             <div className="sheet-handle" />
             <div className="mobile-my-schedule-header">
               <span className="mobile-my-schedule-title">{myName}'s Week</span>
-              <button className="btn-icon" onClick={clearMyName} aria-label="Forget me" title="Forget me">
+              <button className="btn-icon" onClick={clearMyName} aria-label="Forget Me" title="Forget Me">
                 <X size={16} />
               </button>
             </div>
@@ -199,7 +199,7 @@ function MobileNameBar({ myName, nameSearch, nameSuggestions, onNameChange, onSe
           <input
             className="mobile-name-input"
             type="text"
-            placeholder="Find my schedule…"
+            placeholder="Find My Schedule…"
             value={nameSearch}
             onChange={e => onNameChange(e.target.value)}
             autoComplete="off"
@@ -230,7 +230,7 @@ function MobileClinicCard({ clinic, people, onPersonClick }) {
     <div className="mobile-clinic-card">
       <div className="mobile-clinic-location">{clinic.location}</div>
       {slots.length === 0 ? (
-        <div className="mobile-clinic-empty">No staff assigned</div>
+        <div className="mobile-clinic-empty">No Staff Assigned</div>
       ) : (
         <div className="mobile-clinic-slots">
           {slots.map(([slotType, slotVal]) => {

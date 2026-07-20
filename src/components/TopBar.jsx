@@ -169,7 +169,7 @@ function PostValidationModal({ violations, onClose, onJump, setActiveTab }) {
         <div className="overlay-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <AlertCircle size={16} style={{ color: 'var(--red)' }} />
-            <span style={{ fontWeight: 600, fontSize: 15 }}>Cannot post — fix these issues first</span>
+            <span style={{ fontWeight: 600, fontSize: 15 }}>Cannot Post — Fix These Issues First</span>
           </div>
           <button className="overlay-close" onClick={onClose}><X size={16} /></button>
         </div>
@@ -208,12 +208,12 @@ function PostConfirmModal({ weekLabel, onConfirm, onCancel }) {
     <div className="overlay-backdrop" style={{ zIndex: 260 }} onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
       <div className="overlay-modal" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()}>
         <div className="overlay-header">
-          <div style={{ fontWeight: 500, fontSize: 16 }}>Post Week of {weekLabel}?</div>
+          <div style={{ fontWeight: 500, fontSize: 16 }}>Post Week Of {weekLabel}?</div>
           <button className="overlay-close" onClick={onCancel}><X size={16} /></button>
         </div>
         <div className="overlay-body">
           <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
-            This will publish the schedule to all staff immediately. A JSON backup and a printable PDF will download automatically.
+            This Will Publish The Schedule To All Staff Immediately. A JSON Backup And A Printable PDF Will Download Automatically.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '12px 24px', borderTop: '0.5px solid var(--border)', flexShrink: 0 }}>
@@ -239,17 +239,17 @@ function ExitNudgeModal({ postedSnapshot, onPost, onLeave, onCancel }) {
     <div className="overlay-backdrop" style={{ zIndex: 300, backdropFilter: 'blur(4px)' }} onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
       <div className="overlay-modal" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
         <div className="overlay-header">
-          <div style={{ fontWeight: 600, fontSize: 15 }}>Unposted changes</div>
+          <div style={{ fontWeight: 600, fontSize: 15 }}>Unposted Changes</div>
         </div>
         <div className="overlay-body">
           <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
             {postedSnapshot
-              ? 'This week has changes that staff haven\'t seen yet. Post before leaving manager mode?'
-              : 'This week hasn\'t been posted yet — staff can\'t see it. Post before leaving manager mode?'}
+              ? 'This Week Has Changes That Staff Haven\'t Seen Yet. Post Before Leaving Manager Mode?'
+              : 'This Week Hasn\'t Been Posted Yet — Staff Can\'t See It. Post Before Leaving Manager Mode?'}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '12px 24px', borderTop: '0.5px solid var(--border)', flexShrink: 0 }}>
-          <button className="btn" style={{ gap: 6, background: 'var(--amber)', color: '#ffffff', border: '1px solid var(--amber)' }} onClick={onLeave}><Save size={14} /> Save and Close</button>
+          <button className="btn" style={{ gap: 6, background: 'var(--amber)', color: '#ffffff', border: '1px solid var(--amber)' }} onClick={onLeave}><Save size={14} /> Save And Close</button>
           <button className="btn btn-post" style={{ minHeight: 38, gap: 6 }} onClick={onPost}>
             <SendHorizonal size={13} /> Post
           </button>
@@ -271,7 +271,7 @@ function GenerateModal({ weekLabel, keepExisting, onKeepChange, onConfirm, onCan
         <div className="overlay-header">
           <div>
             <div style={{ fontWeight: 500, fontSize: 16 }}>
-              Generate schedule for Week of {weekLabel}?
+              Generate Schedule For Week Of {weekLabel}?
             </div>
           </div>
           <button className="overlay-close" onClick={onCancel}><X size={16} /></button>
@@ -279,8 +279,8 @@ function GenerateModal({ weekLabel, keepExisting, onKeepChange, onConfirm, onCan
         <div className="overlay-body">
           <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 16 }}>
             {isRegen
-              ? 'This will replace the current AI-generated assignments. Claude will re-fill all slots based on your current configuration.'
-              : 'Claude will fill all empty slots based on your staff settings, skills, availability, and clinic configuration. Existing assignments will be replaced.'}
+              ? 'This Will Replace The Current AI-Generated Assignments. Claude Will Re-Fill All Slots Based On Your Current Configuration.'
+              : 'Claude Will Fill All Empty Slots Based On Your Staff Settings, Skills, Availability, And Clinic Configuration. Existing Assignments Will Be Replaced.'}
           </p>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14, color: 'var(--text-primary)' }}>
             <input
@@ -289,7 +289,7 @@ function GenerateModal({ weekLabel, keepExisting, onKeepChange, onConfirm, onCan
               onChange={e => onKeepChange(e.target.checked)}
               style={{ width: 15, height: 15, cursor: 'pointer' }}
             />
-            Keep existing assignments — only fill empty slots
+            Keep Existing Assignments — Only Fill Empty Slots
           </label>
         </div>
         <div style={{
@@ -316,13 +316,13 @@ function ClearWeekModal({ weekLabel, onConfirm, onCancel }) {
     >
       <div className="overlay-modal" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()}>
         <div className="overlay-header">
-          <div style={{ fontWeight: 500, fontSize: 16 }}>Clear this week's schedule?</div>
+          <div style={{ fontWeight: 500, fontSize: 16 }}>Clear This Week's Schedule?</div>
           <button className="overlay-close" onClick={onCancel}><X size={16} /></button>
         </div>
         <div className="overlay-body">
           <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
-            This will remove all staff assignments for <strong>Week of {weekLabel}</strong>.
-            Clinic settings and times are kept. This cannot be undone.
+            This Will Remove All Staff Assignments For <strong>Week Of {weekLabel}</strong>.
+            Clinic Settings And Times Are Kept. This Cannot Be Undone.
           </p>
         </div>
         <div style={{
@@ -442,8 +442,8 @@ function ManagerModal({ onSuccess, onCancel }) {
         style={{ maxWidth: 320, textAlign: 'center', padding: '32px 24px' }}
         onClick={e => e.stopPropagation()}
       >
-        <div style={{ fontWeight: 600, fontSize: 17, marginBottom: 6 }}>Manager access</div>
-        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>Enter PIN and your initials</div>
+        <div style={{ fontWeight: 600, fontSize: 17, marginBottom: 6 }}>Manager Access</div>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>Enter PIN And Your Initials</div>
 
         <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'left', marginBottom: 6 }}>PIN</div>
         <div
@@ -499,7 +499,7 @@ function ManagerModal({ onSuccess, onCancel }) {
           }}
         />
         {initialsError && (
-          <div style={{ fontSize: 12, color: '#dc2626', marginBottom: 12 }}>2–3 letters required</div>
+          <div style={{ fontSize: 12, color: '#dc2626', marginBottom: 12 }}>2–3 Letters Required</div>
         )}
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
@@ -1065,7 +1065,7 @@ export default function TopBar({ activeTab, setActiveTab, setupSection, setSetup
                 style={{ fontSize: 12, minHeight: 32, gap: 5 }}
                 onClick={genState === 'idle' || genState === 'error' ? handleGenerateClick : undefined}
                 disabled={genState === 'loading'}
-                title={genState === 'error' ? genError : 'Generate schedule with AI'}
+                title={genState === 'error' ? genError : 'Generate Schedule With AI'}
               >
                 {genButtonContent()}
               </button>

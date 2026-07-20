@@ -101,15 +101,15 @@ export default function OnCallManager() {
       {isDormant ? (
         <div className="oncall-dormant-msg">
           <PhoneCall size={15} style={{ opacity: 0.4 }} />
-          Feature is dormant — mark at least one tech with the On Call role to activate.
+          Feature Is Dormant — Mark At Least One Tech With The On Call Role To Activate.
         </div>
       ) : (
         <>
           <div className="oncall-manager-section">
             <div className="oncall-manager-label">Rotation order</div>
             <div className="oncall-manager-hint">
-              Drag to reorder. Each person takes {blockWeeks} consecutive week{blockWeeks !== 1 ? 's' : ''} on call.
-              Techs with the On Call role appear here automatically.
+              Drag To Reorder. Each Person Takes {blockWeeks} Consecutive Week{blockWeeks !== 1 ? 's' : ''} On Call.
+              Techs With The On Call Role Appear Here Automatically.
             </div>
 
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -139,12 +139,12 @@ export default function OnCallManager() {
           {needsAnchor ? (
             <div className="oncall-dormant-msg">
               <PhoneCall size={15} style={{ opacity: 0.4 }} />
-              Set the starting block by clicking a week on the calendar.
+              Set The Starting Block By Clicking A Week On The Calendar.
             </div>
           ) : preview ? (
             <div className="oncall-preview">
               <PhoneCall size={14} />
-              <span>On call this week: <strong>{preview}</strong></span>
+              <span>On Call This Week: <strong>{preview}</strong></span>
             </div>
           ) : null}
 
@@ -155,7 +155,7 @@ export default function OnCallManager() {
               onClick={handleSave}
               disabled={saving}
             >
-              {saving ? 'Saving…' : 'Save rotation'}
+              {saving ? 'Saving…' : 'Save Rotation'}
             </button>
             {savedMsg && <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 500 }}>{savedMsg}</span>}
           </div>
