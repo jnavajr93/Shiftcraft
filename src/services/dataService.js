@@ -318,6 +318,10 @@ export function subscribeCalendarOverrides(callback) {
 }
 
 // ─── On-call settings ─────────────────────────
+// Settings are stored as a JSON blob in schedule_data under this key.
+// NOTE: The Supabase tables `oncall_rotation` and `oncall_settings` are
+// LEGACY and UNUSED — they predate this approach and have no app reads or
+// writes.  Do not treat them as authoritative; all on-call state lives here.
 export const ONCALL_KEY = 'shiftcraft_on_call';
 
 export async function loadOncallSettings() {

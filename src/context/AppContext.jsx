@@ -1211,6 +1211,11 @@ export function AppProvider({ children }) {
         const next = prev.filter(o => o.week_key !== payload.week_key);
         return [...next, result.data ?? payload];
       });
+    } else {
+      // Surface DB failures via the existing save-error toast so they can't hide silently
+      setSaveStatus('error');
+      clearTimeout(saveStatusTimerRef.current);
+      saveStatusTimerRef.current = setTimeout(() => setSaveStatus('idle'), 4000);
     }
     return result;
   }, []);
@@ -1219,6 +1224,10 @@ export function AppProvider({ children }) {
     const result = await deleteOncallOverrideDB(weekKey);
     if (!result.error) {
       setOncallOverrides(prev => prev.filter(o => o.week_key !== weekKey));
+    } else {
+      setSaveStatus('error');
+      clearTimeout(saveStatusTimerRef.current);
+      saveStatusTimerRef.current = setTimeout(() => setSaveStatus('idle'), 4000);
     }
     return result;
   }, []);

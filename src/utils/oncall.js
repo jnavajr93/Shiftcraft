@@ -10,10 +10,41 @@
  * anchorWeek — ISO week "YYYY-Www" marking the first block's start
  */
 
-/** Convert an ISO week string ("YYYY-Www") to a monotonic integer. */
-function weekToIndex(weekStr) {
+/**
+ * Return the UTC millisecond timestamp of 00:00 on the Monday that opens
+ * the given ISO week.  The "Jan 4 is always in W1" rule anchors the calc.
+ */
+function isoWeekMondayMs(weekStr) {
   const [y, w] = weekStr.split('-W').map(Number);
-  return y * 53 + w;
+  const jan4dow = new Date(Date.UTC(y, 0, 4)).getUTCDay() || 7; // 1=Mon … 7=Sun
+  const week1MonMs = Date.UTC(y, 0, 4) - (jan4dow - 1) * 86400000;
+  return week1MonMs + (w - 1) * 7 * 86400000;
+}
+
+/**
+ * Re-encode a UTC-ms timestamp as an ISO week string.
+ * The Thursday of the week (ISO rule) determines the year.
+ */
+function msToIsoWeek(ms) {
+  const thu = new Date(ms + 3 * 86400000); // Thursday of the same ISO week
+  const year = thu.getUTCFullYear();
+  const yearStartMs = Date.UTC(year, 0, 1);
+  const week = Math.ceil(((thu.getTime() - yearStartMs) / 86400000 + 1) / 7);
+  return `${year}-W${String(week).padStart(2, '0')}`;
+}
+
+/**
+ * Convert an ISO week string to a continuous monotonic integer that advances
+ * by exactly 1 per ISO week, with no skip at year boundaries.
+ *
+ * The old formula (y * 53 + w) was NOT monotonic: most ISO years have 52
+ * weeks, so crossing from a 52-week year into January produced a gap of 2
+ * instead of 1 (e.g. 2027-W52 → 2028-W01 diffed as 2).  This function
+ * fixes that by converting to Monday-date milliseconds first.
+ */
+function weekToIndex(weekStr) {
+  // Dividing by ms-per-week yields an integer that grows by exactly 1 each week.
+  return Math.floor(isoWeekMondayMs(weekStr) / (7 * 86400000));
 }
 
 /**
@@ -59,22 +90,8 @@ export function getBlockPosition(weekStr, settings) {
 /**
  * Return the ISO week string n weeks after weekStr.
  * addWeeks('2026-W01', 1) → '2026-W02'
+ * Uses isoWeekMondayMs / msToIsoWeek so the same arithmetic powers all helpers.
  */
 export function addWeeks(weekStr, n) {
-  const [y, w] = weekStr.split('-W').map(Number);
-  // Monday of week 1: Jan 4 is always in W1
-  const jan4 = new Date(Date.UTC(y, 0, 4));
-  const jan4dow = jan4.getUTCDay() || 7;
-  const week1Mon = new Date(jan4);
-  week1Mon.setUTCDate(jan4.getUTCDate() - (jan4dow - 1));
-  // Monday of target week, offset by n additional weeks
-  const targetMon = new Date(week1Mon);
-  targetMon.setUTCDate(week1Mon.getUTCDate() + (w - 1) * 7 + n * 7);
-  // Re-encode as ISO week
-  const d = new Date(Date.UTC(targetMon.getUTCFullYear(), targetMon.getUTCMonth(), targetMon.getUTCDate()));
-  const day = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - day);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  const week = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
-  return `${d.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+  return msToIsoWeek(isoWeekMondayMs(weekStr) + n * 7 * 86400000);
 }
