@@ -38,6 +38,7 @@ const ONCALL_COLOR = '#0d9488';
 
 function toDateStr(d) { return d.toISOString().slice(0, 10); }
 function parseUTC(str) { return new Date(str + 'T00:00:00Z'); }
+function dayAfter(dateStr) { const d = parseUTC(dateStr); d.setUTCDate(d.getUTCDate() + 1); return toDateStr(d); }
 
 const MONTHS = [
   'January','February','March','April','May','June',
@@ -132,31 +133,95 @@ function Legend({ activeCategories, onToggle }) {
 
 // ─── Closure modal ────────────────────────────────────────────────────────────
 
-function ClosureModal({ dateStr, managerInitials, onSave, onClose }) {
-  const [label, setLabel] = useState('');
-  const [saving, setSaving] = useState(false);
-  const d = parseUTC(dateStr);
-  const dateLabel = `${DOW[d.getUTCDay()]}, ${MONTHS[d.getUTCMonth()].slice(0, 3)} ${d.getUTCDate()}`;
+// Saves one calendar_overrides row per day in range (existing schema has one date per row).
+// Same label + locations across days — grouping for display happens at read time.
+function ClinicClosedModal({ initStart, initEnd, managerInitials, onSave, onClose }) {
+  const [startD, setStartD] = useState(initStart ?? '');
+  const [endD,   setEndD]   = useState(initEnd   ?? '');
+  const [selectedLocs, setSelectedLocs] = useState([...CLOSURE_LOCATIONS]); // default: all
+  const [label,   setLabel]   = useState('');
+  const [saving,  setSaving]  = useState(false);
+
+  const allSelected = selectedLocs.length === CLOSURE_LOCATIONS.length;
+
+  const toggleLoc = (loc) => {
+    setSelectedLocs(prev =>
+      prev.includes(loc) ? prev.filter(l => l !== loc) : [...prev, loc]
+    );
+  };
+  const toggleAll = () => {
+    setSelectedLocs(allSelected ? [] : [...CLOSURE_LOCATIONS]);
+  };
+
+  const canSave = startD && endD && endD >= startD && selectedLocs.length > 0 && label.trim();
 
   const handleSave = async () => {
-    if (!label.trim()) return;
+    if (!canSave) return;
     setSaving(true);
-    await onSave({ date: dateStr, kind: 'office_closed', label: label.trim(), entered_by: managerInitials ?? null });
+    // null = all locations (schema convention: null means every location is closed)
+    const locations = allSelected ? null : selectedLocs;
+    const entered_by = managerInitials ?? null;
+    const labelStr = label.trim();
+    // Write one row per calendar day in the range
+    let d = parseUTC(startD);
+    const endDate = parseUTC(endD);
+    const payloads = [];
+    while (d <= endDate) {
+      payloads.push({ date: toDateStr(d), kind: 'office_closed', label: labelStr, locations, entered_by });
+      d = new Date(d);
+      d.setUTCDate(d.getUTCDate() + 1);
+    }
+    await onSave(payloads);
     setSaving(false);
   };
 
   return (
     <div className="overlay-backdrop" style={{ zIndex: 320 }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="overlay-modal" style={{ maxWidth: 380 }} onClick={e => e.stopPropagation()}>
+      <div className="overlay-modal" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
         <div className="overlay-header">
-          <span style={{ fontWeight: 600, fontSize: 15 }}>Add office closure</span>
+          <span style={{ fontWeight: 600, fontSize: 15 }}>Clinic Closed</span>
           <button className="overlay-close" onClick={onClose}><X size={16} /></button>
         </div>
-        <div className="overlay-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div className="overlay-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Locations — first field, most important */}
           <div>
-            <label className="setup-label">Date</label>
-            <div style={{ fontSize: 13, color: 'var(--text-primary)', padding: '6px 0' }}>{dateLabel}</div>
+            <label className="setup-label">Locations</label>
+            <div className="pill-group" style={{ marginTop: 4 }}>
+              <button
+                className={`pill small${allSelected ? ' active' : ''}`}
+                onClick={toggleAll}
+              >
+                All Locations
+              </button>
+              {CLOSURE_LOCATIONS.map(loc => (
+                <button
+                  key={loc}
+                  className={`pill small${selectedLocs.includes(loc) ? ' active' : ''}`}
+                  onClick={() => toggleLoc(loc)}
+                >
+                  {loc}
+                </button>
+              ))}
+            </div>
           </div>
+          {/* Dates */}
+          <div style={{ display: 'flex', gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <label className="setup-label">Start date</label>
+              <input
+                type="date" className="setup-input" value={startD}
+                onChange={e => { setStartD(e.target.value); if (e.target.value > endD) setEndD(e.target.value); }}
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label className="setup-label">End date</label>
+              <input
+                type="date" className="setup-input" value={endD} min={startD}
+                onChange={e => setEndD(e.target.value)}
+              />
+            </div>
+          </div>
+          {/* Label */}
           <div>
             <label className="setup-label">Reason / label</label>
             <input
@@ -164,15 +229,15 @@ function ClosureModal({ dateStr, managerInitials, onSave, onClose }) {
               autoFocus
               value={label}
               onChange={e => setLabel(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && label.trim()) handleSave(); }}
-              placeholder="e.g. Office closed – staff training"
+              onKeyDown={e => { if (e.key === 'Enter' && canSave) handleSave(); }}
+              placeholder="e.g. Staff training"
             />
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '12px 24px', borderTop: '0.5px solid var(--border)', flexShrink: 0 }}>
           <button className="btn btn-pill" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary btn-pill" onClick={handleSave} disabled={!label.trim() || saving}>
-            {saving ? 'Saving…' : 'Add closure'}
+          <button className="btn btn-primary btn-pill" onClick={handleSave} disabled={!canSave || saving}>
+            {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
       </div>
@@ -492,7 +557,7 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, doc
 
 // ─── Week row with spanning bars ──────────────────────────────────────────────
 
-function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, onDayClick, onDayDoubleClick, onAbsenceClick, activeCategories, currentWeekDates, dayPanelDate, oncallSettings, oncallOverrides, people, isAdmin, onOncallChipClick, eligiblePool }) {
+function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, onDayClick, onDayDoubleClick, onAbsenceClick, activeCategories, currentWeekDates, dayPanelDate, oncallSettings, oncallOverrides, people, isAdmin, onOncallChipClick, eligiblePool, dragRange, onCellMouseDown, onCellMouseEnter, suppressClickRef }) {
   const weekStart = toDateStr(week[0]);
   const weekEnd   = toDateStr(week[6]);
   const clickTimerRef = useRef(null);
@@ -518,13 +583,14 @@ function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, o
     .filter(a => a.end_date >= weekStart && a.start_date <= weekEnd && activeCategories.has(a.type))
     .sort((a, b) => a.start_date.localeCompare(b.start_date) || a.person_name.localeCompare(b.person_name));
 
-  // Closure bars (holidays + office-closed) filtered to this week
+  // Closure bars — filter spans that overlap this week (startDate/endDate)
   const weekClosures = activeCategories.has('Closed')
-    ? closures.filter(c => c.date >= weekStart && c.date <= weekEnd)
+    ? closures.filter(c => c.endDate >= weekStart && c.startDate <= weekEnd)
     : [];
 
   // Distinguish single-click (open day panel) from double-click (jump to week)
   const handleCellInteraction = (ds, e) => {
+    if (suppressClickRef?.current) { suppressClickRef.current = false; return; }
     const rect = e.currentTarget.getBoundingClientRect();
     if (clickTimerRef.current) {
       clearTimeout(clickTimerRef.current);
@@ -547,11 +613,14 @@ function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, o
         const isThisMonth = day.getUTCMonth() === viewMonth;
         const isToday = ds === todayStr;
         const isPanelDay = ds === dayPanelDate;
+        const isInDragRange = dragRange && ds >= dragRange.start && ds <= dragRange.end;
         return (
           <div
             key={col}
-            className={`absence-day-cell${isPanelDay ? ' absence-day-cell--selected' : ''}`}
+            className={`absence-day-cell${isPanelDay ? ' absence-day-cell--selected' : ''}${isInDragRange ? ' absence-day-cell--drag' : ''}`}
             onClick={(e) => handleCellInteraction(ds, e)}
+            onMouseDown={isAdmin ? (e) => { if (e.button === 0) onCellMouseDown?.(ds, e); } : undefined}
+            onMouseEnter={isAdmin ? () => onCellMouseEnter?.(ds) : undefined}
           >
             <span className={`absence-day-num${isToday ? ' absence-day-num--today' : ''}${!isThisMonth ? ' absence-day-num--other' : ''}`}>
               {day.getUTCDate()}
@@ -562,25 +631,32 @@ function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, o
 
       {allBars > 0 && (
         <div className="absence-bars-layer" style={{ pointerEvents: 'none' }}>
-          {/* Closure bars first (holidays + office-closed) */}
+          {/* Closure bars first (holidays + office-closed); may span multiple days */}
           {weekClosures.map((closure, laneIdx) => {
-            const col = week.findIndex(d => toDateStr(d) === closure.date);
-            if (col < 0) return null;
+            const barStart = closure.startDate < weekStart ? weekStart : closure.startDate;
+            const barEnd   = closure.endDate   > weekEnd   ? weekEnd   : closure.endDate;
+            const startCol = week.findIndex(d => toDateStr(d) === barStart);
+            const endCol   = week.findIndex(d => toDateStr(d) === barEnd);
+            if (startCol < 0 || endCol < 0) return null;
+            const isSStart = closure.startDate >= weekStart;
+            const isSEnd   = closure.endDate   <= weekEnd;
+            const locSuffix = closure.locations ? ` – ${closure.locations.join(', ')}` : '';
+            const barLabel  = `${closure.label}${locSuffix}`;
             return (
               <div
-                key={`c-${closure.id ?? closure.date}-${closure.kind}`}
+                key={`c-${closure.startDate}-${closure.kind}-${laneIdx}`}
                 className="absence-bar closure-bar"
                 style={{
-                  left:       `calc(${col} / 7 * 100% + 2px)`,
-                  width:      `calc(1 / 7 * 100% - 4px)`,
-                  top:        `${30 + laneIdx * 22}px`,
-                  background: CLOSED_COLOR,
-                  borderRadius: 3,
+                  left:         `calc(${startCol} / 7 * 100% + 2px)`,
+                  width:        `calc(${endCol - startCol + 1} / 7 * 100% - 4px)`,
+                  top:          `${30 + laneIdx * 22}px`,
+                  background:   CLOSED_COLOR,
+                  borderRadius: `${isSStart ? 3 : 0}px ${isSEnd ? 3 : 0}px ${isSEnd ? 3 : 0}px ${isSStart ? 3 : 0}px`,
                   pointerEvents: 'none',
                 }}
-                title={closure.label}
+                title={barLabel}
               >
-                <span className="absence-bar-label">{closure.label}</span>
+                <span className="absence-bar-label">{barLabel}</span>
                 {closure.kind === 'office_closed' && <Building2 size={9} style={{ flexShrink: 0, marginLeft: 3, opacity: 0.9 }} />}
               </div>
             );
@@ -670,16 +746,24 @@ function UpcomingPanel({ absences, closures, personByKey, todayStr, onAbsenceCli
 
   const upcomingClosures = activeCategories.has('Closed')
     ? closures
-        .filter(c => c.date >= todayStr && c.date <= cutoff)
-        .map(c => ({
-          key: `c-${c.id ?? c.date}-${c.kind}`,
-          date: c.date,
-          color: CLOSED_COLOR,
-          title: c.label,
-          detail: formatDateDisplay(c.date),
-          note: null,
-          onClick: null,
-        }))
+        .filter(c => c.endDate >= todayStr && c.startDate <= cutoff)
+        .map(c => {
+          const locStr = c.locations ? c.locations.join(', ') + ' closed' : 'All locations closed';
+          const dateRange = c.startDate === c.endDate
+            ? formatDateDisplay(c.startDate)
+            : formatRange(c.startDate, c.endDate);
+          return {
+            key: `c-${c.startDate}-${c.endDate}-${c.kind}`,
+            date: c.startDate,
+            color: CLOSED_COLOR,
+            title: c.kind === 'holiday' ? c.label : locStr,
+            detail: c.kind === 'holiday'
+              ? dateRange
+              : `${dateRange}${c.label ? ` — ${c.label}` : ''}`,
+            note: null,
+            onClick: null,
+          };
+        })
     : [];
 
   // On-call entries: one per week that falls within the next 30 days
@@ -983,7 +1067,14 @@ function DayPanel({ dateStr, rect, absences, personByKey, holidayDetail, dayClos
           {dayClosures.map(c => (
             <div key={c.id} className="day-panel-closure-item">
               <Building2 size={11} style={{ color: CLOSED_COLOR, flexShrink: 0 }} />
-              <span className="day-panel-closure-label">{c.label}</span>
+              <span className="day-panel-closure-label">
+                {c.label}
+                {c.locations && c.locations.length > 0 && (
+                  <span style={{ opacity: 0.65, fontSize: 10, marginLeft: 4 }}>
+                    ({c.locations.join(', ')})
+                  </span>
+                )}
+              </span>
               {isAdmin && (
                 <button
                   className="btn btn-icon"
@@ -1038,7 +1129,7 @@ function DayPanel({ dateStr, rect, absences, personByKey, holidayDetail, dayClos
             style={{ fontSize: 11, minHeight: 26, gap: 4, color: CLOSED_COLOR, borderColor: CLOSED_COLOR, width: '100%' }}
             onClick={() => onAddClosure(dateStr)}
           >
-            <Building2 size={11} /> Add closure
+            <Building2 size={11} /> Clinic Closed
           </button>
         )}
       </div>
@@ -1197,6 +1288,30 @@ function AbsenceHistory({ absences, people, personByKey, onAbsenceClick }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// ─── Drag-range chooser ───────────────────────────────────────────────────────
+
+function RangeChooser({ start, end, x, y, onAddAbsence, onClinicClosed, onClose }) {
+  const width = 200;
+  const left = Math.min(Math.max(x - width / 2, 8), window.innerWidth - width - 8);
+  const top  = Math.min(y + 10, window.innerHeight - 120);
+  const label = start === end ? formatDateDisplay(start) : formatRange(start, end);
+  return (
+    <div
+      className="range-chooser"
+      style={{ top, left, width }}
+      onClick={e => e.stopPropagation()}
+    >
+      <div className="range-chooser-label">{label}</div>
+      <button className="btn btn-pill range-chooser-btn" onClick={onAddAbsence}>
+        Add Absence
+      </button>
+      <button className="btn btn-pill range-chooser-btn" style={{ color: CLOSED_COLOR, borderColor: CLOSED_COLOR }} onClick={onClinicClosed}>
+        <Building2 size={11} /> Clinic Closed
+      </button>
     </div>
   );
 }
@@ -1422,9 +1537,16 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
   const [showOncallPanel, setShowOncallPanel] = useState(false);
   const [viewYear,  setViewYear]  = useState(initMonday.getUTCFullYear());
   const [viewMonth, setViewMonth] = useState(initMonday.getUTCMonth());
-  const [modal,     setModal]     = useState(null); // absence modal
-  const [closureModal, setClosureModal] = useState(null); // { dateStr }
-  const [dayPanel,      setDayPanel]      = useState(null); // { dateStr, rect }
+  const [modal,        setModal]        = useState(null); // absence modal
+  const [closureModal, setClosureModal] = useState(null); // { initStart, initEnd }
+  const [rangeChooser, setRangeChooser] = useState(null); // { start, end, x, y }
+  const [dayPanel,     setDayPanel]     = useState(null); // { dateStr, rect }
+  const [dragRange,    setDragRange]    = useState(null); // { start, end } dateStr
+  const dragActiveRef   = useRef(false);
+  const dragStartRef    = useRef(null);
+  const dragRangeRef    = useRef(null);
+  const dragConfirmedRef = useRef(false);
+  const suppressClickRef = useRef(false);
   const [onCallPopover, setOnCallPopover] = useState(null); // { weekStr, rect }
 
   // Category filter chips — all on by default (including 'Closed' and 'OnCall')
@@ -1497,21 +1619,53 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
     [federalHolidays, calendarOverrides]
   );
 
-  // allClosures: display-only array for WeekRow bars
+  // officeClosedSpans: group consecutive same-label+locations DB rows into date spans.
+  // Lets WeekRow render one spanning bar instead of N single-day bars.
+  const officeClosedSpans = useMemo(() => {
+    const entries = (calendarOverrides ?? [])
+      .filter(o => o.kind === 'office_closed')
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    const spans = [];
+    for (const entry of entries) {
+      const locKey = JSON.stringify((entry.locations ?? null) === null ? null : [...(entry.locations ?? [])].sort());
+      const lbl = entry.label ?? '';
+      const last = spans[spans.length - 1];
+      if (last && last._locKey === locKey && last.label === lbl && dayAfter(last.endDate) === entry.date) {
+        last.endDate = entry.date;
+        last.ids.push(entry.id);
+      } else {
+        spans.push({ startDate: entry.date, endDate: entry.date, label: lbl, locations: entry.locations ?? null, ids: [entry.id], _locKey: locKey });
+      }
+    }
+    return spans;
+  }, [calendarOverrides]);
+
+  // allClosures: display-only array (startDate/endDate) for WeekRow bars + UpcomingPanel
   const allClosures = useMemo(() => {
     const result = [];
+    // Holidays: always single-day
     for (const [date, entry] of closureMap) {
-      const locationSuffix = entry.closedLocations
-        ? ` – ${entry.closedLocations.join(', ')}`
-        : '';
+      if (entry.kind !== 'holiday') continue;
       result.push({
-        kind: entry.kind,
-        date,
-        label: `${entry.name}${entry.moved ? ' (moved)' : ''}${locationSuffix}`,
+        kind: 'holiday',
+        startDate: date, endDate: date,
+        label: `${entry.name}${entry.moved ? ' (moved)' : ''}`,
+        locations: entry.closedLocations,
       });
     }
-    return result.sort((a, b) => a.date.localeCompare(b.date));
-  }, [closureMap]);
+    // Office-closed: grouped spans
+    for (const span of officeClosedSpans) {
+      result.push({
+        kind: 'office_closed',
+        startDate: span.startDate, endDate: span.endDate,
+        label: span.label,
+        locations: span.locations,
+        ids: span.ids,
+      });
+    }
+    return result.sort((a, b) => a.startDate.localeCompare(b.startDate));
+  }, [closureMap, officeClosedSpans]);
 
   // Per-date holiday detail for the DayPanel
   const holidayDetailByDate = useMemo(() => {
@@ -1603,12 +1757,13 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
     return dates;
   }, [currentWeek]);
 
-  // Escape layering: closure modal → absence modal → dayPanel → calendar
+  // Escape layering: closure modal → absence modal → range chooser → dayPanel → calendar
   useEffect(() => {
     const handler = (e) => {
       if (e.key === 'Escape') {
         if (closureModal)    { setClosureModal(null);     return; }
         if (modal)           { setModal(null);             return; }
+        if (rangeChooser)    { setRangeChooser(null);     return; }
         if (onCallPopover)   { setOnCallPopover(null);    return; }
         if (dayPanel)        { setDayPanel(null);          return; }
         if (showOncallPanel) { setShowOncallPanel(false); return; }
@@ -1617,7 +1772,45 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [closureModal, modal, onCallPopover, dayPanel, showOncallPanel, onClose]);
+  }, [closureModal, modal, rangeChooser, onCallPopover, dayPanel, showOncallPanel, onClose]);
+
+  // ─── Drag-range selection (manager only) ───────────────────────────────────
+  const handleCellMouseDown = useCallback((ds) => {
+    dragActiveRef.current = true;
+    dragConfirmedRef.current = false;
+    dragStartRef.current = ds;
+    dragRangeRef.current = { start: ds, end: ds };
+    setDragRange(null); // don't highlight single cell yet (wait for confirmed drag)
+  }, []);
+
+  const handleCellMouseEnter = useCallback((ds) => {
+    if (!dragActiveRef.current || ds === dragStartRef.current) return;
+    dragConfirmedRef.current = true;
+    const start = dragStartRef.current;
+    const [s, e] = ds < start ? [ds, start] : [start, ds];
+    const range = { start: s, end: e };
+    dragRangeRef.current = range;
+    setDragRange(range);
+  }, []);
+
+  // Global mouseup: end drag; show chooser if range confirmed
+  useEffect(() => {
+    const handleMouseUp = (ev) => {
+      if (!dragActiveRef.current) return;
+      dragActiveRef.current = false;
+      if (dragConfirmedRef.current && dragRangeRef.current) {
+        suppressClickRef.current = true;
+        setTimeout(() => { suppressClickRef.current = false; }, 100);
+        const { start, end } = dragRangeRef.current;
+        setRangeChooser({ start, end, x: ev.clientX, y: ev.clientY });
+      }
+      setDragRange(null);
+      dragRangeRef.current = null;
+      dragConfirmedRef.current = false;
+    };
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => document.removeEventListener('mouseup', handleMouseUp);
+  }, []);
 
   const grid = buildGrid(viewYear, viewMonth);
 
@@ -1712,8 +1905,11 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
     }
   }, [calendarOverrides, removeCalendarOverride, addCalendarOverride]);
 
-  const handleAddClosure = useCallback(async (payload) => {
-    await addCalendarOverride(payload);
+  const handleAddClosure = useCallback(async (payloads) => {
+    const arr = Array.isArray(payloads) ? payloads : [payloads];
+    for (const p of arr) {
+      await addCalendarOverride(p);
+    }
     setClosureModal(null);
   }, [addCalendarOverride]);
 
@@ -1844,6 +2040,10 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
                     isAdmin={isAdmin}
                     onOncallChipClick={handleOncallChipClick}
                     eligiblePool={eligiblePool}
+                    dragRange={dragRange}
+                    onCellMouseDown={isAdmin ? handleCellMouseDown : undefined}
+                    onCellMouseEnter={isAdmin ? handleCellMouseEnter : undefined}
+                    suppressClickRef={suppressClickRef}
                   />
                 ))}
               </div>
@@ -1928,7 +2128,7 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
           onSetHolidayScope={handleSetHolidayScope}
           onAddClosure={(ds) => {
             setDayPanel(null);
-            setClosureModal({ dateStr: ds });
+            setClosureModal({ initStart: ds, initEnd: ds });
           }}
           onDeleteClosure={handleDeleteClosure}
         />
@@ -1951,11 +2151,30 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
       )}
 
       {closureModal && (
-        <ClosureModal
-          dateStr={closureModal.dateStr}
+        <ClinicClosedModal
+          initStart={closureModal.initStart}
+          initEnd={closureModal.initEnd}
           managerInitials={managerInitials}
           onSave={handleAddClosure}
           onClose={() => setClosureModal(null)}
+        />
+      )}
+
+      {rangeChooser && (
+        <RangeChooser
+          start={rangeChooser.start}
+          end={rangeChooser.end}
+          x={rangeChooser.x}
+          y={rangeChooser.y}
+          onAddAbsence={() => {
+            setModal({ mode: 'add', initStart: rangeChooser.start, initEnd: rangeChooser.end });
+            setRangeChooser(null);
+          }}
+          onClinicClosed={() => {
+            setClosureModal({ initStart: rangeChooser.start, initEnd: rangeChooser.end });
+            setRangeChooser(null);
+          }}
+          onClose={() => setRangeChooser(null)}
         />
       )}
     </div>
