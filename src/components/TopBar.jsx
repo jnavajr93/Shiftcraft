@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Calendar, Sun, Moon, ChevronLeft, ChevronRight,
   History, Sparkles, Wand2, Loader2, X, CircleHelp, RotateCcw,
-  SendHorizonal, AlertCircle, Save, PhoneCall,
+  SendHorizonal, AlertCircle, Save, PhoneCall, Settings,
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -650,7 +650,15 @@ function HoverPreview({ anchorRef, absences, currentWeek, people, calendarOverri
   );
 }
 
-export default function TopBar({ activeTab, setActiveTab }) {
+const GEAR_SECTIONS = [
+  { id: 'staff',     label: 'Staff' },
+  { id: 'clinics',   label: 'Clinics' },
+  { id: 'locations', label: 'Locations' },
+  { id: 'oncall',    label: 'On Call Schedule' },
+  { id: 'data',      label: 'Data' },
+];
+
+export default function TopBar({ activeTab, setActiveTab, setupSection, setSetupSection }) {
   const {
     isAdmin, setIsAdmin, managerInitials, setManagerInitials, theme, setTheme,
     weekLabel, currentWeek, navigateWeek, jumpToWeek, weekIsEmpty, copyFromTwoWeeksAgo, clearWeek,
@@ -664,7 +672,9 @@ export default function TopBar({ activeTab, setActiveTab }) {
   const weekLabelRef = useRef(null);
   const undoTimerRef = useRef(null);
   const hoverTimerRef = useRef(null);
+  const gearTimerRef = useRef(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [showGearMenu, setShowGearMenu] = useState(false);
   const [showPinModal, setShowPinModal] = useState(false);
   const { showWelcomeCard } = useTour();
 
@@ -1065,33 +1075,68 @@ export default function TopBar({ activeTab, setActiveTab }) {
               >
                 <Sparkles size={20} strokeWidth={1.5} />
               </button>
-              <button
-                data-tour="setup-tab"
-                className={`btn btn-pill topbar-mobile-hidden ${activeTab === 'setup' ? 'active' : ''}`}
-                onClick={() => setActiveTab(t => t === 'setup' ? 'schedule' : 'setup')}
+              <div
+                className="topbar-mobile-hidden"
+                style={{ position: 'relative' }}
+                onMouseEnter={() => {
+                  clearTimeout(gearTimerRef.current);
+                  gearTimerRef.current = setTimeout(() => setShowGearMenu(true), 200);
+                }}
+                onMouseLeave={() => {
+                  clearTimeout(gearTimerRef.current);
+                  gearTimerRef.current = setTimeout(() => setShowGearMenu(false), 200);
+                }}
               >
-                Setup
-              </button>
+                <button
+                  data-tour="setup-tab"
+                  className={`btn btn-icon${activeTab === 'setup' ? ' active' : ''}`}
+                  onClick={() => setActiveTab('setup')}
+                  aria-label="Settings"
+                  title="Settings"
+                >
+                  <Settings size={20} strokeWidth={1.5} />
+                </button>
+                {showGearMenu && (
+                  <div
+                    className="gear-submenu"
+                    onMouseEnter={() => clearTimeout(gearTimerRef.current)}
+                    onMouseLeave={() => {
+                      clearTimeout(gearTimerRef.current);
+                      gearTimerRef.current = setTimeout(() => setShowGearMenu(false), 200);
+                    }}
+                  >
+                    {GEAR_SECTIONS.map(sec => (
+                      <button
+                        key={sec.id}
+                        className="gear-submenu-item"
+                        onClick={() => {
+                          setSetupSection(sec.id);
+                          setActiveTab('setup');
+                          setShowGearMenu(false);
+                        }}
+                      >
+                        {sec.label}
+                      </button>
+                    ))}
+                    <div className="gear-submenu-divider" />
+                    <button
+                      className="gear-submenu-item"
+                      onClick={() => { setTheme(t => t === 'dark' ? 'light' : 'dark'); setShowGearMenu(false); }}
+                    >
+                      {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+                    </button>
+                    <button
+                      className="gear-submenu-item"
+                      data-tour="help-button"
+                      onClick={() => { showWelcomeCard(); setShowGearMenu(false); }}
+                    >
+                      Tips
+                    </button>
+                  </div>
+                )}
+              </div>
             </>
           )}
-          <button
-            className="btn btn-icon topbar-mobile-hidden"
-            onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
-            aria-label="Toggle theme"
-          >
-            {theme === 'dark'
-              ? <Sun size={20} strokeWidth={1.5} />
-              : <Moon size={20} strokeWidth={1.5} />}
-          </button>
-          <button
-            data-tour="help-button"
-            className="btn btn-icon topbar-mobile-hidden"
-            onClick={showWelcomeCard}
-            aria-label="Help tour"
-            title="Take a tour"
-          >
-            <CircleHelp size={20} strokeWidth={1.5} />
-          </button>
           {/* Saved status — left of Post button; manager-only */}
           {isAdmin && saveStatus === 'error' && (
             <span className="topbar-mobile-hidden" style={{ fontSize: 11, color: '#dc2626', fontWeight: 500, whiteSpace: 'nowrap' }}>

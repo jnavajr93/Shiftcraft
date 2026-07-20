@@ -2138,6 +2138,46 @@ html, body, #root {
 }
 .typeahead-chip-clear:hover { background: var(--border-strong); filter: brightness(0.85); }
 
+/* ─── Gear submenu ─────────────────────────────────────────────────────────── */
+.gear-submenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 168px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.13);
+  padding: 4px;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+}
+.gear-submenu-item {
+  all: unset;
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 12px;
+  font-size: 13px;
+  color: var(--text-primary);
+  border-radius: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.1s;
+}
+.gear-submenu-item:hover {
+  background: var(--bg-hover);
+}
+.gear-submenu-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+[data-theme="dark"] .gear-submenu {
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+}
+
 /* ─── On-call ──────────────────────────────────────────────────────────────── */
 /* Topbar badge */
 .topbar-oncall-badge {

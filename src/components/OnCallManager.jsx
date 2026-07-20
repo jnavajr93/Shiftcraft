@@ -105,7 +105,7 @@ export default function OnCallManager() {
       <div className="oncall-manager-section">
         <div className="oncall-manager-label">Rotation order</div>
         <div className="oncall-manager-hint">
-          Drag to reorder. Each person takes {blockWeeks} consecutive week{blockWeeks !== 1 ? 's' : ''} before the next.
+          Drag To Reorder. Each person takes {blockWeeks} consecutive week{blockWeeks !== 1 ? 's' : ''} before the next.
         </div>
 
         {items.length > 0 && (
