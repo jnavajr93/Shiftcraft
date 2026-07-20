@@ -1045,6 +1045,7 @@ export default function TopBar({ activeTab, setActiveTab, setupSection, setSetup
         </div>
 
         <div className="topbar-right">
+          {/* Copy / Clear / Generate — utility actions */}
           {isAdmin && weekIsEmpty() && (
             <button className="btn btn-pill topbar-mobile-hidden" style={{ fontSize: 12, minHeight: 32 }} onClick={handleCopy}>
               Copy from 2 weeks ago
@@ -1060,19 +1061,94 @@ export default function TopBar({ activeTab, setActiveTab, setupSection, setSetup
             </button>
           )}
           {isAdmin && (
-            <>
-              {/* Generate schedule button */}
-              <button
-                data-tour="generate-button"
-                className={`btn btn-pill generate-btn topbar-mobile-hidden${genState === 'error' ? ' generate-error' : genState === 'done' ? ' generate-done' : ''}`}
-                style={{ fontSize: 12, minHeight: 32, gap: 5 }}
-                onClick={genState === 'idle' || genState === 'error' ? handleGenerateClick : undefined}
-                disabled={genState === 'loading'}
-                title={genState === 'error' ? genError : 'Generate Schedule With AI'}
-              >
-                {genButtonContent()}
-              </button>
+            <button
+              data-tour="generate-button"
+              className={`btn btn-pill generate-btn topbar-mobile-hidden${genState === 'error' ? ' generate-error' : genState === 'done' ? ' generate-done' : ''}`}
+              style={{ fontSize: 12, minHeight: 32, gap: 5 }}
+              onClick={genState === 'idle' || genState === 'error' ? handleGenerateClick : undefined}
+              disabled={genState === 'loading'}
+              title={genState === 'error' ? genError : 'Generate Schedule With AI'}
+            >
+              {genButtonContent()}
+            </button>
+          )}
 
+          {/* ── Save status + Post + Manager pill ── */}
+          {isAdmin && saveStatus === 'error' && (
+            <span className="topbar-mobile-hidden" style={{ fontSize: 11, color: '#dc2626', fontWeight: 500, whiteSpace: 'nowrap' }}>
+              ⚠ Unsaved changes
+            </span>
+          )}
+          {isAdmin && saveStatus === 'saving' && (
+            <span className="topbar-mobile-hidden" style={{ fontSize: 11, color: 'var(--text-muted, var(--text-secondary))', opacity: 0.7, whiteSpace: 'nowrap' }}>
+              Saving…
+            </span>
+          )}
+          {isAdmin && (saveStatus === 'saved' || saveStatus === 'idle') && savedAgoLabel && (
+            <span className="topbar-mobile-hidden" style={{ fontSize: 11, color: 'var(--text-muted, var(--text-secondary))', opacity: 0.7, whiteSpace: 'nowrap' }}>
+              {savedAgoLabel}
+            </span>
+          )}
+          {isAdmin && (
+            <button
+              data-tour="post-button"
+              className={`btn btn-pill topbar-mobile-hidden btn-post${!isDirty ? ' btn-post--clean' : ''}${postState === 'error' ? ' generate-error' : postState === 'done' ? ' generate-done' : ''}`}
+              style={{ fontSize: 12, minHeight: 32, gap: 5 }}
+              onClick={isDirty && (postState === 'idle' || postState === 'error') ? handlePostClick : undefined}
+              disabled={postState === 'loading' || (!isDirty && postState === 'idle')}
+              title={isDirty ? 'Publish schedule to staff' : postedSnapshot ? `Posted by ${postedSnapshot.posted_by ?? '—'}` : 'Nothing to post yet'}
+            >
+              {postState === 'loading' ? <><Loader2 size={13} className="spin" /> Posting…</> :
+               postState === 'done'    ? <>✓ Posted</> :
+               isDirty && postedSnapshot ? <><SendHorizonal size={13} /> Post changes</> :
+               isDirty ? <><SendHorizonal size={13} /> Post</> :
+               postedSnapshot ? <>✓ Posted {formatPostedTime(postedSnapshot.posted_at)}</> :
+               <><SendHorizonal size={13} /> Post</>}
+            </button>
+          )}
+          {/* Presence: other managers viewing this week */}
+          {isAdmin && presentManagers.length > 0 && (
+            <div className="topbar-mobile-hidden" style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              {presentManagers.map(initials => (
+                <span
+                  key={initials}
+                  title={`${initials} is also editing this week`}
+                  style={{
+                    padding: '1px 6px', borderRadius: 4, fontSize: 10, fontWeight: 600,
+                    background: 'var(--accent-subtle, rgba(59,130,246,0.12))',
+                    border: '0.5px solid var(--accent, #3b82f6)',
+                    color: 'var(--accent, #3b82f6)', letterSpacing: 0.5,
+                  }}
+                >
+                  {initials}
+                </span>
+              ))}
+            </div>
+          )}
+          {/* Manager pill */}
+          <button
+            data-tour="admin-button"
+            className={`btn btn-pill btn-admin ${isAdmin ? 'active' : ''}`}
+            onClick={() => {
+              if (isAdmin) {
+                if (isDirty) {
+                  setShowExitNudge(true);
+                } else {
+                  setIsAdmin(false);
+                  setManagerInitials(null);
+                  setActiveTab('schedule');
+                }
+              } else {
+                setShowPinModal(true);
+              }
+            }}
+          >
+            {isAdmin && managerInitials ? <><Save size={13} /> {managerInitials}</> : 'Manager'}
+          </button>
+
+          {/* ── Change log → AI Chat → Settings ── */}
+          {isAdmin && (
+            <>
               <button
                 data-tour="log-button"
                 className="btn btn-icon topbar-mobile-hidden"
@@ -1160,79 +1236,6 @@ export default function TopBar({ activeTab, setActiveTab, setupSection, setSetup
               </div>
             </>
           )}
-          {/* Saved status — left of Post button; manager-only */}
-          {isAdmin && saveStatus === 'error' && (
-            <span className="topbar-mobile-hidden" style={{ fontSize: 11, color: '#dc2626', fontWeight: 500, whiteSpace: 'nowrap' }}>
-              ⚠ Unsaved changes
-            </span>
-          )}
-          {isAdmin && saveStatus === 'saving' && (
-            <span className="topbar-mobile-hidden" style={{ fontSize: 11, color: 'var(--text-muted, var(--text-secondary))', opacity: 0.7, whiteSpace: 'nowrap' }}>
-              Saving…
-            </span>
-          )}
-          {isAdmin && (saveStatus === 'saved' || saveStatus === 'idle') && savedAgoLabel && (
-            <span className="topbar-mobile-hidden" style={{ fontSize: 11, color: 'var(--text-muted, var(--text-secondary))', opacity: 0.7, whiteSpace: 'nowrap' }}>
-              {savedAgoLabel}
-            </span>
-          )}
-          {/* Post button */}
-          {isAdmin && (
-            <button
-              data-tour="post-button"
-              className={`btn btn-pill topbar-mobile-hidden btn-post${!isDirty ? ' btn-post--clean' : ''}${postState === 'error' ? ' generate-error' : postState === 'done' ? ' generate-done' : ''}`}
-              style={{ fontSize: 12, minHeight: 32, gap: 5 }}
-              onClick={isDirty && (postState === 'idle' || postState === 'error') ? handlePostClick : undefined}
-              disabled={postState === 'loading' || (!isDirty && postState === 'idle')}
-              title={isDirty ? 'Publish schedule to staff' : postedSnapshot ? `Posted by ${postedSnapshot.posted_by ?? '—'}` : 'Nothing to post yet'}
-            >
-              {postState === 'loading' ? <><Loader2 size={13} className="spin" /> Posting…</> :
-               postState === 'done'    ? <>✓ Posted</> :
-               isDirty && postedSnapshot ? <><SendHorizonal size={13} /> Post changes</> :
-               isDirty ? <><SendHorizonal size={13} /> Post</> :
-               postedSnapshot ? <>✓ Posted {formatPostedTime(postedSnapshot.posted_at)}</> :
-               <><SendHorizonal size={13} /> Post</>}
-            </button>
-          )}
-          {/* Presence: other managers viewing this week — manager-only */}
-          {isAdmin && presentManagers.length > 0 && (
-            <div className="topbar-mobile-hidden" style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-              {presentManagers.map(initials => (
-                <span
-                  key={initials}
-                  title={`${initials} is also editing this week`}
-                  style={{
-                    padding: '1px 6px', borderRadius: 4, fontSize: 10, fontWeight: 600,
-                    background: 'var(--accent-subtle, rgba(59,130,246,0.12))',
-                    border: '0.5px solid var(--accent, #3b82f6)',
-                    color: 'var(--accent, #3b82f6)', letterSpacing: 0.5,
-                  }}
-                >
-                  {initials}
-                </span>
-              ))}
-            </div>
-          )}
-          {/* Manager pill — amber in active mode, floppy + initials signals save-and-exit */}
-          <button
-            data-tour="admin-button"
-            className={`btn btn-pill btn-admin ${isAdmin ? 'active' : ''}`}
-            onClick={() => {
-              if (isAdmin) {
-                if (isDirty) {
-                  setShowExitNudge(true);
-                } else {
-                  setIsAdmin(false);
-                  setManagerInitials(null);
-                  setActiveTab('schedule');
-                }
-              } else {
-                setShowPinModal(true);
-              }
-            }}
-          >
-            {isAdmin && managerInitials ? <><Save size={13} /> {managerInitials}</> : 'Manager'}
-          </button>
         </div>
       </div>
 
