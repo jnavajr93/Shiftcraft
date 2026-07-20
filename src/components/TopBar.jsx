@@ -654,7 +654,6 @@ const GEAR_SECTIONS = [
   { id: 'staff',     label: 'Staff' },
   { id: 'clinics',   label: 'Clinics' },
   { id: 'locations', label: 'Locations' },
-  { id: 'oncall',    label: 'On Call Schedule' },
   { id: 'data',      label: 'Data' },
 ];
 

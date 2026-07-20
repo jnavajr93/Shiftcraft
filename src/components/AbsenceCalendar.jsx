@@ -1382,7 +1382,8 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
 
   // Open focused on the month containing the currently viewed board week
   const initMonday = currentWeek ? mondayOfWeek(currentWeek) : new Date();
-  const [view,      setView]      = useState('calendar'); // 'calendar' | 'history' | 'oncall'
+  const [view,           setView]           = useState('calendar'); // 'calendar' | 'history'
+  const [showOncallPanel, setShowOncallPanel] = useState(false);
   const [viewYear,  setViewYear]  = useState(initMonday.getUTCFullYear());
   const [viewMonth, setViewMonth] = useState(initMonday.getUTCMonth());
   const [modal,     setModal]     = useState(null); // absence modal
@@ -1570,16 +1571,17 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
   useEffect(() => {
     const handler = (e) => {
       if (e.key === 'Escape') {
-        if (closureModal)  { setClosureModal(null);  return; }
-        if (modal)         { setModal(null);          return; }
-        if (onCallPopover) { setOnCallPopover(null);  return; }
-        if (dayPanel)      { setDayPanel(null);       return; }
+        if (closureModal)    { setClosureModal(null);     return; }
+        if (modal)           { setModal(null);             return; }
+        if (onCallPopover)   { setOnCallPopover(null);    return; }
+        if (dayPanel)        { setDayPanel(null);          return; }
+        if (showOncallPanel) { setShowOncallPanel(false); return; }
         onClose();
       }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [closureModal, modal, onCallPopover, dayPanel, onClose]);
+  }, [closureModal, modal, onCallPopover, dayPanel, showOncallPanel, onClose]);
 
   const grid = buildGrid(viewYear, viewMonth);
 
@@ -1711,8 +1713,11 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
   }, [oncall, saveOncall]);
 
   return (
-    <div className="absence-overlay">
-      <div className="absence-panel">
+    <div
+      className="absence-overlay"
+      onClick={showOncallPanel ? () => setShowOncallPanel(false) : undefined}
+    >
+      <div className="absence-panel" onClick={showOncallPanel ? e => e.stopPropagation() : undefined}>
 
         {/* ── Header ── */}
         <div className="absence-header">
@@ -1725,22 +1730,22 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
                 This month
               </button>
             </>
-          ) : view === 'oncall' ? (
-            <span className="absence-month-label" style={{ paddingLeft: 4 }}>On-call rotation</span>
           ) : (
             <span className="absence-month-label" style={{ paddingLeft: 4 }}>Absence History</span>
           )}
           <div style={{ flex: 1 }} />
-          {/* On call button */}
-          <button
-            className={`btn btn-pill topbar-mobile-hidden${view === 'oncall' ? ' active' : ''}`}
-            style={{ fontSize: 11, minHeight: 26, padding: '2px 10px', gap: 4 }}
-            onClick={() => setView(v => v === 'oncall' ? 'calendar' : 'oncall')}
-            title={view === 'oncall' ? 'Back to calendar' : 'Manage on-call rotation'}
-          >
-            <PhoneCall size={13} />
-            On call
-          </button>
+          {/* On call panel button — manager only */}
+          {isAdmin && (
+            <button
+              className={`btn btn-pill topbar-mobile-hidden${showOncallPanel ? ' active' : ''}`}
+              style={{ fontSize: 11, minHeight: 26, padding: '2px 10px', gap: 4 }}
+              onClick={() => setShowOncallPanel(s => !s)}
+              title={showOncallPanel ? 'Close on-call panel' : 'Manage on-call rotation'}
+            >
+              <PhoneCall size={13} />
+              On call
+            </button>
+          )}
           {/* History toggle */}
           <button
             className={`btn btn-pill topbar-mobile-hidden${view === 'history' ? ' active' : ''}`}
@@ -1764,11 +1769,7 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
         </div>
 
         {/* ── Body ── */}
-        {view === 'oncall' ? (
-          <div className="absence-oncall-body">
-            <OnCallManager />
-          </div>
-        ) : view === 'calendar' ? (
+        {view === 'calendar' ? (
           <div className="absence-body">
             <div className="absence-cal-section">
               <div className="absence-dow-row">
@@ -1821,6 +1822,21 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
           />
         )}
       </div>
+
+      {/* On-call side panel — slides in from the right, manager only */}
+      {isAdmin && showOncallPanel && (
+        <div className="oncall-side-panel" onClick={e => e.stopPropagation()}>
+          <div className="oncall-side-panel-header">
+            <span className="oncall-side-panel-title">On Call</span>
+            <button className="btn btn-icon" style={{ minHeight: 28 }} onClick={() => setShowOncallPanel(false)} title="Close">
+              <X size={16} />
+            </button>
+          </div>
+          <div className="oncall-side-panel-body">
+            <OnCallManager />
+          </div>
+        </div>
+      )}
 
       {/* On-call week popover — manager only */}
       {isAdmin && onCallPopover && !modal && !closureModal && (

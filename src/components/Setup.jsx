@@ -13,7 +13,6 @@ import {
   ACCOMMODATION_TYPES, EARLY_LEAVE_REASONS, accommodationLabel,
 } from '../data/seed.js';
 import ClinicConfig from './ClinicConfig.jsx';
-import OnCallManager from './OnCallManager.jsx';
 
 const EXPORT_VERSION = 'shiftcraft-v1';
 
@@ -1113,20 +1112,32 @@ function DataTab() {
   );
 }
 
+const SETUP_TABS = [
+  { id: 'staff',     label: 'Staff' },
+  { id: 'clinics',   label: 'Clinics' },
+  { id: 'locations', label: 'Locations' },
+  { id: 'data',      label: 'Data' },
+];
+
 // ─── Main Setup ───────────────────────────────
-export default function Setup() {
-  const [subTab, setSubTab] = useState('staff');
+export default function Setup({ initialSection }) {
+  const [subTab, setSubTab] = useState(initialSection || 'staff');
+
+  // Sync when parent navigates to a specific section (gear submenu deep-link)
+  useEffect(() => {
+    if (initialSection) setSubTab(initialSection);
+  }, [initialSection]);
 
   return (
     <div className="setup-page">
       <div className="setup-subtabs">
-        {['staff', 'clinics', 'locations', 'data', 'oncall'].map(t => (
+        {SETUP_TABS.map(({ id, label }) => (
           <button
-            key={t}
-            className={`setup-subtab${subTab === t ? ' active' : ''}`}
-            onClick={() => setSubTab(t)}
+            key={id}
+            className={`setup-subtab${subTab === id ? ' active' : ''}`}
+            onClick={() => setSubTab(id)}
           >
-            {t === 'oncall' ? 'On-call' : t.charAt(0).toUpperCase() + t.slice(1)}
+            {label}
           </button>
         ))}
       </div>
@@ -1134,12 +1145,6 @@ export default function Setup() {
       {subTab === 'clinics'   && <ClinicsTab />}
       {subTab === 'locations' && <LocationsTab />}
       {subTab === 'data'      && <DataTab />}
-      {subTab === 'oncall'    && (
-        <div className="setup-tab-content">
-          <div className="setup-section-header">On-call rotation</div>
-          <OnCallManager />
-        </div>
-      )}
     </div>
   );
 }

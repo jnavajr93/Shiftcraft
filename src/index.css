@@ -2263,9 +2263,32 @@ html, body, #root {
   border-radius: 6px; padding: 8px 10px;
 }
 
-/* On-call manager (in Setup and AbsenceCalendar) */
-.absence-oncall-body {
-  flex: 1; overflow-y: auto; padding: 20px 24px;
+/* On-call side panel (slides in from right over the calendar) */
+.oncall-side-panel {
+  position: fixed;
+  top: 0; right: 0; bottom: 0;
+  width: 320px;
+  background: var(--bg-elevated);
+  border-left: 1px solid var(--border);
+  box-shadow: -6px 0 28px rgba(0,0,0,0.13);
+  display: flex; flex-direction: column;
+  z-index: 310;
+  overflow: hidden;
+}
+[data-theme="dark"] .oncall-side-panel {
+  box-shadow: -6px 0 28px rgba(0,0,0,0.38);
+}
+.oncall-side-panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px 12px;
+  border-bottom: 0.5px solid var(--border);
+  flex-shrink: 0;
+}
+.oncall-side-panel-title {
+  font-size: 15px; font-weight: 700; letter-spacing: -0.3px;
+}
+.oncall-side-panel-body {
+  flex: 1; overflow-y: auto; padding: 16px 16px 24px;
 }
 .oncall-manager {
   display: flex; flex-direction: column; gap: 22px;
