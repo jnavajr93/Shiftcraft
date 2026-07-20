@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -22,6 +22,35 @@ import AdditionalTasks from './components/AdditionalTasks.jsx';
 import UnassignedStaff from './components/UnassignedStaff.jsx';
 import ConflictBanner from './components/ConflictBanner.jsx';
 import MobileStaffView from './components/MobileStaffView.jsx';
+
+function SavedToast() {
+  const { saveStatus } = useApp();
+  const [visible, setVisible] = useState(false);
+  const [fadingOut, setFadingOut] = useState(false);
+  const holdTimerRef = useRef(null);
+  const fadeTimerRef = useRef(null);
+
+  useEffect(() => {
+    if (saveStatus === 'saved') {
+      clearTimeout(holdTimerRef.current);
+      clearTimeout(fadeTimerRef.current);
+      setFadingOut(false);
+      setVisible(true);
+      holdTimerRef.current = setTimeout(() => {
+        setFadingOut(true);
+        fadeTimerRef.current = setTimeout(() => {
+          setVisible(false);
+          setFadingOut(false);
+        }, 300);
+      }, 2700);
+    }
+  }, [saveStatus]);
+
+  if (!visible) return null;
+  return (
+    <div className={`saved-toast${fadingOut ? ' saved-toast--out' : ''}`}>✓ Saved</div>
+  );
+}
 
 function AppContent() {
   const { data, isAdmin, boardClinics, isLoading, loadError, saveStatus, assignSlot, assignTask } = useApp();
@@ -207,9 +236,7 @@ function AppContent() {
         )}
       </div>
 
-      {saveStatus === 'saved' && (
-        <div className="saved-toast">✓ Saved</div>
-      )}
+      <SavedToast />
       {saveStatus === 'error' && (
         <div className="saved-toast" style={{
           background: '#dc2626',

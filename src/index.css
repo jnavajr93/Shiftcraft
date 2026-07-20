@@ -1424,81 +1424,90 @@ html, body, #root {
 .mobile-name-bar {
   display: flex;
   align-items: center;
-  padding: 8px 12px;
+  padding: 10px 12px;
   border-bottom: 0.5px solid var(--border);
   flex-shrink: 0;
   background: var(--bg-elevated);
-}
-.mobile-find-btn,
-.mobile-my-btn {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: 500;
-  padding: 10px 16px;
-  border-radius: var(--radius-pill);
-  border: 0.5px solid var(--border-strong);
-  background: var(--bg-surface);
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-family: var(--font);
-  transition: background 120ms;
-}
-.mobile-find-btn:hover,
-.mobile-my-btn:hover { background: var(--accent-subtle); color: var(--text-primary); }
-.mobile-my-btn { color: var(--text-primary); border-color: var(--accent); }
-
-/* Name search dropdown */
-.mobile-search-bar {
-  padding: 8px 12px;
-  border-bottom: 0.5px solid var(--border);
-  flex-shrink: 0;
-  background: var(--bg-elevated);
-  position: relative;
+  position: relative; /* anchor for suggestions dropdown */
   z-index: 10;
 }
-.mobile-search-input {
+
+/* Single-input search wrap — the bar IS the typing field */
+.mobile-name-search-wrap {
+  display: flex;
+  align-items: center;
   width: 100%;
-  padding: 8px 12px;
-  border-radius: var(--radius);
-  border: 0.5px solid var(--border-strong);
+  gap: 8px;
+  padding: 11px 16px;
+  border-radius: var(--radius-pill);
+  border: 1.5px solid var(--border-strong);
   background: var(--bg-surface);
+  position: relative;
+}
+.mobile-search-icon { color: var(--text-secondary); flex-shrink: 0; }
+.mobile-name-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  font-size: 15px;
+  font-weight: 500;
   color: var(--text-primary);
-  font-size: 14px;
-  font-family: var(--font);
   outline: none;
+  font-family: var(--font);
 }
-.mobile-search-input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(31,31,31,0.08);
-}
+.mobile-name-input::placeholder { color: var(--text-secondary); font-weight: 400; }
+
+/* Suggestions dropdown — absolutely positioned below the wrap */
 .mobile-name-suggestions {
-  margin-top: 6px;
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 20;
   background: var(--bg-elevated);
   border: 0.5px solid var(--border-strong);
   border-radius: var(--radius);
   overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
 }
 .mobile-name-suggestion {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 10px 14px;
+  padding: 12px 16px;
   background: none;
   border: none;
   border-bottom: 0.5px solid var(--border);
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: 15px;
   font-family: var(--font);
   cursor: pointer;
   text-align: left;
 }
 .mobile-name-suggestion:last-child { border-bottom: none; }
-.mobile-name-suggestion:hover { background: var(--bg-surface); }
+.mobile-name-suggestion:active { background: var(--bg-surface); }
+
+/* "Hailey's schedule" pill when name is set */
+.mobile-my-btn {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 15px;
+  font-weight: 500;
+  padding: 11px 16px;
+  border-radius: var(--radius-pill);
+  border: 1.5px solid var(--accent);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: var(--font);
+  transition: background 120ms;
+}
+.mobile-my-btn:active { background: var(--accent-subtle); }
 
 /* Day tab strip */
 .mobile-day-tabs {

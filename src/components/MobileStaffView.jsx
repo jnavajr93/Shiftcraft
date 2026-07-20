@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, Search, User, X } from 'lucide-react';
+import { Search, User, X } from 'lucide-react';
 import { useApp, isoWeek, mondayOfWeek } from '../context/AppContext.jsx';
 import {
   DAYS,
@@ -27,29 +27,26 @@ function todayDayIdx(currentWeek) {
 export default function MobileStaffView({ onPersonClick }) {
   const { data, boardClinics, currentWeek } = useApp();
 
-  // Default selected day: today if current week + weekday, else Mon
   const [dayIdx, setDayIdx] = useState(() => todayDayIdx(currentWeek) ?? 0);
-
-  useEffect(() => {
-    setDayIdx(todayDayIdx(currentWeek) ?? 0);
-  }, [currentWeek]);
-
+  useEffect(() => { setDayIdx(todayDayIdx(currentWeek) ?? 0); }, [currentWeek]);
   const todayIdx = todayDayIdx(currentWeek);
 
-  // My schedule
+  // My schedule — single nameSearch state; no separate showSearch phase
   const [myName, setMyName] = useState(() => localStorage.getItem(STORAGE_KEY) ?? '');
   const [nameSearch, setNameSearch] = useState('');
-  const [showSearch, setShowSearch] = useState(false);
   const [showMySchedule, setShowMySchedule] = useState(false);
-  const searchInputRef = useRef(null);
 
-  useEffect(() => {
-    if (showSearch && searchInputRef.current) searchInputRef.current.focus();
-  }, [showSearch]);
-
+  // Item 1: Dedupe by name — one suggestion per unique person; prefer tech record for color
   const nameSuggestions = nameSearch.trim()
-    ? (data.people ?? []).filter(p =>
-        p.name.toLowerCase().includes(nameSearch.toLowerCase())
+    ? Object.values(
+        (data.people ?? [])
+          .filter(p => p.name.toLowerCase().includes(nameSearch.toLowerCase()))
+          .reduce((acc, p) => {
+            const key = p.name.toLowerCase();
+            // Keep tech (non-admin) record so color is correct; overwrite admin if tech seen later
+            if (!acc[key] || (p.staffType ?? 'tech') !== 'admin') acc[key] = p;
+            return acc;
+          }, {})
       )
     : [];
 
@@ -57,7 +54,6 @@ export default function MobileStaffView({ onPersonClick }) {
     setMyName(name);
     localStorage.setItem(STORAGE_KEY, name);
     setNameSearch('');
-    setShowSearch(false);
     setShowMySchedule(true);
   };
 
@@ -67,7 +63,7 @@ export default function MobileStaffView({ onPersonClick }) {
     setShowMySchedule(false);
   };
 
-  // Find person IDs by name (case-insensitive)
+  // Collect ALL person IDs matching the name (tech + admin linked records both contribute)
   const myPersonIds = myName
     ? (data.people ?? [])
         .filter(p => p.name.toLowerCase() === myName.toLowerCase())
@@ -86,141 +82,131 @@ export default function MobileStaffView({ onPersonClick }) {
     if (dx > 0) setDayIdx(d => Math.max(d - 1, 0));
   };
 
-  // "My schedule" full-week view
-  if (showMySchedule && myPersonIds.length > 0) {
-    return (
-      <div className="mobile-staff-view">
-        <div className="mobile-my-schedule-header">
-          <button className="btn-icon" onClick={() => setShowMySchedule(false)} aria-label="Back">
-            <ChevronLeft size={18} />
-          </button>
-          <span className="mobile-my-schedule-title">{myName}'s week</span>
-          <button className="btn-icon" onClick={clearMyName} aria-label="Clear my name">
-            <X size={16} />
-          </button>
-        </div>
-        <div className="mobile-my-schedule-body">
-          <WeekRows
-            personIds={myPersonIds}
-            clinics={boardClinics ?? []}
-            additionalTasks={data.additionalTasks}
-            monday={mondayOfWeek(currentWeek)}
-          />
-        </div>
-      </div>
-    );
-  }
-
-  // Schedule not yet posted
-  if (boardClinics === null) {
-    return (
-      <div className="mobile-staff-view">
-        <MobileNameBar
-          myName={myName}
-          showSearch={showSearch}
-          nameSearch={nameSearch}
-          nameSuggestions={nameSuggestions}
-          searchInputRef={searchInputRef}
-          onToggleSearch={() => setShowSearch(s => !s)}
-          onNameChange={setNameSearch}
-          onSelectName={selectName}
-          onShowMySchedule={() => setShowMySchedule(true)}
-          onClearMyName={clearMyName}
-        />
-        <div className="mobile-not-posted">
-          <span style={{ fontSize: 20, opacity: 0.4 }}>📋</span>
-          Schedule not yet posted for this week.
-        </div>
-      </div>
-    );
-  }
-
-  const day = DAYS[dayIdx];
-  const dayClinics = boardClinics.filter(c => c.day === day && c.open);
+  const day = boardClinics ? DAYS[dayIdx] : null;
+  const dayClinics = boardClinics ? boardClinics.filter(c => c.day === day && c.open) : [];
+  // Item 3: bottom-sheet is the only path — no full-page view exists
+  const sheetOpen = showMySchedule && myPersonIds.length > 0;
 
   return (
     <div className="mobile-staff-view">
+      {/* Item 5: single-field search bar — no two-step tap-then-type */}
       <MobileNameBar
         myName={myName}
-        showSearch={showSearch}
         nameSearch={nameSearch}
         nameSuggestions={nameSuggestions}
-        searchInputRef={searchInputRef}
-        onToggleSearch={() => setShowSearch(s => !s)}
         onNameChange={setNameSearch}
         onSelectName={selectName}
         onShowMySchedule={() => setShowMySchedule(true)}
         onClearMyName={clearMyName}
       />
 
-      {/* Day tabs */}
-      <div className="mobile-day-tabs">
-        {DAYS.map((d, i) => (
-          <button
-            key={d}
-            className={[
-              'mobile-day-tab',
-              i === dayIdx ? 'active' : '',
-              i === todayIdx ? 'today' : '',
-            ].filter(Boolean).join(' ')}
-            onClick={() => setDayIdx(i)}
-          >
-            {d}
-          </button>
-        ))}
-      </div>
+      {boardClinics === null ? (
+        <div className="mobile-not-posted">
+          <span style={{ fontSize: 20, opacity: 0.4 }}>📋</span>
+          Schedule not yet posted for this week.
+        </div>
+      ) : (
+        <>
+          {/* Day tabs */}
+          <div className="mobile-day-tabs">
+            {DAYS.map((d, i) => (
+              <button
+                key={d}
+                className={[
+                  'mobile-day-tab',
+                  i === dayIdx ? 'active' : '',
+                  i === todayIdx ? 'today' : '',
+                ].filter(Boolean).join(' ')}
+                onClick={() => setDayIdx(i)}
+              >
+                {d}
+              </button>
+            ))}
+          </div>
 
-      {/* Day content */}
-      <div
-        className="mobile-day-content"
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-      >
-        {dayClinics.length === 0 ? (
-          <div className="mobile-empty-day">No open clinics on {day}</div>
-        ) : (
-          dayClinics.map(clinic => (
-            <MobileClinicCard
-              key={clinic.id}
-              clinic={clinic}
-              people={data.people}
-              onPersonClick={onPersonClick}
-            />
-          ))
-        )}
-      </div>
+          {/* Day content */}
+          <div
+            className="mobile-day-content"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+          >
+            {dayClinics.length === 0 ? (
+              <div className="mobile-empty-day">No open clinics on {day}</div>
+            ) : (
+              dayClinics.map(clinic => (
+                <MobileClinicCard
+                  key={clinic.id}
+                  clinic={clinic}
+                  people={data.people}
+                  onPersonClick={onPersonClick}
+                />
+              ))
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Item 3: bottom-sheet — the sole presentation path for "my week" */}
+      {sheetOpen && (
+        <div className="bottom-sheet-wrapper">
+          <div className="bottom-sheet-backdrop" onClick={() => setShowMySchedule(false)} />
+          {/* Item 4: min-height ensures full week visible without initial scroll */}
+          <div className="bottom-sheet" style={{ minHeight: '72vh' }}>
+            <div className="sheet-handle" />
+            <div className="mobile-my-schedule-header">
+              <span className="mobile-my-schedule-title">{myName}'s week</span>
+              <button className="btn-icon" onClick={clearMyName} aria-label="Forget me" title="Forget me">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="mobile-my-schedule-body">
+              <WeekRows
+                personIds={myPersonIds}
+                clinics={boardClinics ?? []}
+                additionalTasks={data.additionalTasks}
+                monday={mondayOfWeek(currentWeek)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function MobileNameBar({
-  myName, showSearch, nameSearch, nameSuggestions, searchInputRef,
-  onToggleSearch, onNameChange, onSelectName, onShowMySchedule, onClearMyName,
-}) {
+// Item 5: unified name bar — the bar IS the input when no name is set; no secondary box appears
+function MobileNameBar({ myName, nameSearch, nameSuggestions, onNameChange, onSelectName, onShowMySchedule, onClearMyName }) {
   return (
-    <>
-      <div className="mobile-name-bar">
-        {myName ? (
+    <div className="mobile-name-bar">
+      {myName ? (
+        <>
           <button className="mobile-my-btn" onClick={onShowMySchedule}>
             <User size={13} />
             {myName}'s schedule
           </button>
-        ) : (
-          <button className="mobile-find-btn" onClick={onToggleSearch}>
-            <Search size={13} />
-            Find my schedule
+          <button
+            className="btn-icon"
+            style={{ marginLeft: 6, flexShrink: 0 }}
+            onClick={onClearMyName}
+            aria-label="Clear my name"
+          >
+            <X size={16} />
           </button>
-        )}
-      </div>
-      {showSearch && (
-        <div className="mobile-search-bar">
+        </>
+      ) : (
+        <div className="mobile-name-search-wrap">
+          <Search size={15} className="mobile-search-icon" />
+          {/* Item 2: suppress iOS Contact AutoFill */}
           <input
-            ref={searchInputRef}
-            className="mobile-search-input"
-            type="search"
-            placeholder="Type your name…"
+            className="mobile-name-input"
+            type="text"
+            placeholder="Find my schedule…"
             value={nameSearch}
             onChange={e => onNameChange(e.target.value)}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="none"
+            spellCheck={false}
           />
           {nameSuggestions.length > 0 && (
             <div className="mobile-name-suggestions">
@@ -234,7 +220,7 @@ function MobileNameBar({
           )}
         </div>
       )}
-    </>
+    </div>
   );
 }
 
