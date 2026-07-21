@@ -135,15 +135,6 @@ function Legend({ activeCategories, onToggle, researchTableReady }) {
         <span className="absence-legend-dot" style={{ background: CLOSED_COLOR }} />
         <span>Closed / Holiday</span>
       </button>
-      {/* Tech On Call chip */}
-      <button
-        className={`absence-legend-item${activeCategories.has('OnCall') ? '' : ' absence-legend-item--off'}`}
-        onClick={() => onToggle('OnCall')}
-        title={activeCategories.has('OnCall') ? 'Hide On-Call Chips' : 'Show On-Call Chips'}
-      >
-        <span className="absence-legend-dot" style={{ background: ONCALL_COLOR }} />
-        <span>Tech On Call</span>
-      </button>
       {/* Research chip */}
       {researchTableReady !== false && (
         <button
@@ -741,7 +732,7 @@ function ResearchModal({ mode, initDate, assignment, people, managerInitials, on
 
 // ─── Week row with spanning bars ──────────────────────────────────────────────
 
-function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, onDayClick, onDayDoubleClick, onAbsenceClick, activeCategories, currentWeekDates, dayPanelDate, oncallSettings, oncallOverrides, people, isAdmin, onOncallChipClick, eligiblePool, dragRange, onCellMouseDown, onCellMouseEnter, suppressClickRef, researchAssignments, onResearchClick }) {
+function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, onDayClick, onDayDoubleClick, onAbsenceClick, activeCategories, currentWeekDates, dayPanelDate, oncallSettings, oncallOverrides, people, isAdmin, onOncallChipClick, eligiblePool, dragRange, onCellMouseDown, onCellMouseEnter, suppressClickRef, researchAssignments, onResearchClick, showOncallPanel }) {
   const weekStart = toDateStr(week[0]);
   const weekEnd   = toDateStr(week[6]);
   const clickTimerRef = useRef(null);
@@ -749,14 +740,23 @@ function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, o
   // On-call: use Monday (index 1 in Sun–Sat row) to determine ISO week
   const rowMonday = week[1];
   const rowWeekStr = rowMonday ? isoWeekUTC(rowMonday) : null;
-  const onCallResult = (activeCategories.has('OnCall') && oncallSettings && rowWeekStr)
+  // On-call: only compute when the On Call panel is open
+  const onCallResult = (showOncallPanel && oncallSettings && rowWeekStr)
     ? getOnCallForWeek(rowWeekStr, oncallSettings, oncallOverrides ?? [])
     : null;
-  const onCallNameKey = onCallResult?.person?.trim()?.toLowerCase();
+  // Block-start detection: show a tag only when the on-call person changes from the previous week.
+  // This fires at every 4-week block boundary AND whenever an override changes who holds a week.
+  const prevWeekStr = rowWeekStr ? addWeeks(rowWeekStr, -1) : null;
+  const prevOnCallResult = (showOncallPanel && oncallSettings && prevWeekStr)
+    ? getOnCallForWeek(prevWeekStr, oncallSettings, oncallOverrides ?? [])
+    : null;
+  const isBlockStart = !!(showOncallPanel && onCallResult &&
+    onCallResult.person !== prevOnCallResult?.person);
+  const onCallNameKey = isBlockStart ? onCallResult?.person?.trim()?.toLowerCase() : null;
   const personColor = onCallNameKey
     ? (people ?? []).find(p => p.name.trim().toLowerCase() === onCallNameKey)?.color ?? ONCALL_COLOR
     : ONCALL_COLOR;
-  const hasAbsenceConflict = onCallNameKey
+  const hasAbsenceConflict = isBlockStart && onCallNameKey
     ? absences.some(a => a.person_name === onCallNameKey && a.start_date <= weekEnd && a.end_date >= weekStart)
     : false;
 
@@ -927,29 +927,19 @@ function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, o
           })}
         </div>
       )}
-      {/* On-call chip or empty affordance — bottom-left */}
-      {activeCategories.has('OnCall') && rowWeekStr && (
-        onCallResult ? (
-          <div
-            className={`absence-oncall-chip${onCallResult.isOverride ? ' absence-oncall-chip--override' : ''}`}
-            title={`On call: ${onCallResult.person}${onCallResult.isOverride ? ' (override)' : ''}${hasAbsenceConflict ? ' · Has absence this week' : ''}`}
-            onClick={isAdmin ? (e) => { e.stopPropagation(); onOncallChipClick(rowWeekStr, e.currentTarget.getBoundingClientRect()); } : undefined}
-            style={isAdmin ? { cursor: 'pointer' } : undefined}
-          >
-            <span className="absence-oncall-chip-dot" style={{ background: personColor }} />
-            <span className="absence-oncall-chip-name">{onCallResult.person}</span>
-            {onCallResult.isOverride && <UserCheck size={8} style={{ flexShrink: 0, opacity: 0.8 }} />}
-            {hasAbsenceConflict && <AlertCircle size={8} style={{ flexShrink: 0, color: '#ef4444' }} />}
-          </div>
-        ) : isAdmin ? (
-          <div
-            className="absence-oncall-affordance"
-            title="Set on-call for this week"
-            onClick={(e) => { e.stopPropagation(); onOncallChipClick(rowWeekStr, e.currentTarget.getBoundingClientRect()); }}
-          >
-            <Plus size={9} /> On Call
-          </div>
-        ) : null
+      {/* On-call block-start tag — shown only when On Call panel is open, once per block */}
+      {isBlockStart && rowWeekStr && onCallResult && (
+        <div
+          className={`absence-oncall-chip${onCallResult.isOverride ? ' absence-oncall-chip--override' : ''}`}
+          title={`On call: ${onCallResult.person}${onCallResult.isOverride ? ' (override)' : ''}${hasAbsenceConflict ? ' · Has absence this week' : ''}`}
+          onClick={isAdmin ? (e) => { e.stopPropagation(); onOncallChipClick(rowWeekStr, e.currentTarget.getBoundingClientRect()); } : undefined}
+          style={isAdmin ? { cursor: 'pointer' } : undefined}
+        >
+          <span className="absence-oncall-chip-dot" style={{ background: personColor }} />
+          <span className="absence-oncall-chip-name">{onCallResult.person}</span>
+          {onCallResult.isOverride && <UserCheck size={8} style={{ flexShrink: 0, opacity: 0.8 }} />}
+          {hasAbsenceConflict && <AlertCircle size={8} style={{ flexShrink: 0, color: '#ef4444' }} />}
+        </div>
       )}
     </div>
   );
@@ -957,7 +947,7 @@ function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, o
 
 // ─── Upcoming panel ───────────────────────────────────────────────────────────
 
-function UpcomingPanel({ absences, closures, personByKey, todayStr, onAbsenceClick, activeCategories, oncallSettings, oncallOverrides, people, researchAssignments, onResearchClick }) {
+function UpcomingPanel({ absences, closures, personByKey, todayStr, onAbsenceClick, activeCategories, oncallSettings, oncallOverrides, people, researchAssignments, onResearchClick, showOncallPanel }) {
   const cutoff = (() => { const d = parseUTC(todayStr); d.setUTCDate(d.getUTCDate() + 30); return toDateStr(d); })();
 
   const upcomingAbsences = absences
@@ -996,7 +986,7 @@ function UpcomingPanel({ absences, closures, personByKey, todayStr, onAbsenceCli
 
   // On-call entries: one per week that falls within the next 30 days
   const upcomingOncall = [];
-  if (activeCategories.has('OnCall') && oncallSettings?.rotation?.length > 0 && oncallSettings?.anchorWeek) {
+  if (showOncallPanel && oncallSettings?.rotation?.length > 0 && oncallSettings?.anchorWeek) {
     const todayDate = parseUTC(todayStr);
     const cutoffDate = parseUTC(cutoff);
     // Start from Monday of today's week
@@ -1811,7 +1801,7 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
 
   // Category filter chips — all on by default (including 'Closed', 'OnCall', 'Research')
   const [activeCategories, setActiveCategories] = useState(
-    () => new Set([...SELECTABLE_TYPES.map(t => t.key), 'Closed', 'OnCall', 'Research']),
+    () => new Set([...SELECTABLE_TYPES.map(t => t.key), 'Closed', 'Research']),
   );
   const toggleCategory = useCallback((key) => {
     setActiveCategories(prev => {
@@ -2330,6 +2320,7 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
                     suppressClickRef={suppressClickRef}
                     researchAssignments={researchAssignments}
                     onResearchClick={isAdmin ? handleResearchClick : undefined}
+                    showOncallPanel={showOncallPanel}
                   />
                 ))}
               </div>
@@ -2346,6 +2337,7 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
               people={people}
               researchAssignments={researchAssignments}
               onResearchClick={isAdmin ? handleResearchClick : undefined}
+              showOncallPanel={showOncallPanel}
             />
           </div>
         ) : (
