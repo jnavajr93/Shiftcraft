@@ -379,13 +379,14 @@ function PersonTypeahead({ value, onChange, roster, placeholder }) {
 
 // ─── Absence modal ────────────────────────────────────────────────────────────
 
-function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, doctors, managerInitials, onSave, onDelete, onClose }) {
+function AbsenceModal({ mode, initStart, initEnd, initType, absence, people, absences, doctors, managerInitials, onSave, onDelete, onClose }) {
   const isEdit = mode === 'edit';
   const [personKey, setPersonKey] = useState(absence?.person_name ?? '');
   // If editing an absence with a retired/legacy type, remap to its canonical replacement.
   // 'Partial' → 'Approved'; unknown types fall back to '' so user must pick a current type.
+  // initType allows callers (e.g. DayPanel Doctor Off shortcut) to pre-select a type.
   const [type,      setType]      = useState(() => {
-    const raw = absence?.type ?? 'Approved';
+    const raw = absence?.type ?? initType ?? 'Approved';
     const t   = LEGACY_REMAP[raw] ?? raw;
     return SELECTABLE_TYPES.some(s => s.key === t) ? t : '';
   });
@@ -1068,7 +1069,7 @@ function UpcomingPanel({ absences, closures, personByKey, todayStr, onAbsenceCli
 
 // ─── Day panel (anchored near clicked cell) ───────────────────────────────────
 
-function DayPanel({ dateStr, rect, absences, personByKey, holidayDetail, dayClosures, isAdmin, managerInitials, onClose, onJumpAndClose, onAddAbsence, onAbsenceClick, onToggleHolidayOpen, onMoveHoliday, onResetMove, onSetHolidayScope, onAddClosure, onDeleteClosure, onAddResearch, researchTableReady }) {
+function DayPanel({ dateStr, rect, absences, personByKey, holidayDetail, dayClosures, isAdmin, managerInitials, onClose, onJumpAndClose, onAddAbsence, onAddDoctorOff, onAbsenceClick, onToggleHolidayOpen, onMoveHoliday, onResetMove, onSetHolidayScope, onAddClosure, onDeleteClosure, onAddResearch, researchTableReady }) {
   const dayAbsences = absences.filter(a => a.start_date <= dateStr && a.end_date >= dateStr);
   const d = parseUTC(dateStr);
   const dateLabel = `${DOW[d.getUTCDay()]}, ${MONTHS[d.getUTCMonth()].slice(0, 3)} ${d.getUTCDate()}`;
@@ -1352,6 +1353,7 @@ function DayPanel({ dateStr, rect, absences, personByKey, holidayDetail, dayClos
 
       <div className="day-panel-actions">
         {/* Fully stacked — each button 100% width, nothing clips regardless of panel width */}
+        {/* Ordered by frequency of use: Add Absence · Doctor Off · Research · Clinic Closed */}
         <button
           className="btn btn-pill btn-primary"
           style={{ fontSize: 11, minHeight: 26, gap: 4, width: '100%' }}
@@ -1359,6 +1361,15 @@ function DayPanel({ dateStr, rect, absences, personByKey, holidayDetail, dayClos
         >
           <Plus size={11} /> Add Absence
         </button>
+        {isAdmin && (
+          <button
+            className="btn btn-pill"
+            style={{ fontSize: 11, minHeight: 26, gap: 4, color: colorOf('DoctorOff'), borderColor: colorOf('DoctorOff'), width: '100%' }}
+            onClick={() => onAddDoctorOff(dateStr)}
+          >
+            <Plus size={11} /> Doctor Off
+          </button>
+        )}
         {isAdmin && researchTableReady !== false && (
           <button
             className="btn btn-pill"
@@ -1371,7 +1382,7 @@ function DayPanel({ dateStr, rect, absences, personByKey, holidayDetail, dayClos
         {isAdmin && (
           <button
             className="btn btn-pill"
-            style={{ fontSize: 11, minHeight: 26, gap: 4, color: CLOSED_COLOR, borderColor: CLOSED_COLOR, width: '100%' }}
+            style={{ fontSize: 11, minHeight: 26, gap: 4, color: CLOSED_COLOR, borderColor: CLOSED_COLOR, width: '100%', opacity: 0.7 }}
             onClick={() => onAddClosure(dateStr)}
           >
             <Building2 size={11} /> Clinic Closed
@@ -2167,6 +2178,11 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
     await removeCalendarOverride(id);
   }, [removeCalendarOverride]);
 
+  const handleAddDoctorOff = useCallback((ds) => {
+    setDayPanel(null);
+    setModal({ mode: 'add', initStart: ds, initEnd: ds, initType: 'DoctorOff' });
+  }, []);
+
   const handleAddResearch = useCallback((dateStr) => {
     setDayPanel(null);
     setResearchModal({ mode: 'add', initDate: dateStr });
@@ -2401,6 +2417,7 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
             setDayPanel(null);
             setModal({ mode: 'add', initStart: ds, initEnd: ds });
           }}
+          onAddDoctorOff={isAdmin ? handleAddDoctorOff : undefined}
           onAbsenceClick={handleAbsenceClick}
           onToggleHolidayOpen={handleToggleHolidayOpen}
           onMoveHoliday={handleMoveHoliday}
@@ -2421,6 +2438,7 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
           mode={modal.mode}
           initStart={modal.initStart}
           initEnd={modal.initEnd}
+          initType={modal.initType ?? undefined}
           absence={modal.absence}
           people={people}
           absences={absences}
