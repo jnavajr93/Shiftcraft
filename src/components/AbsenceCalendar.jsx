@@ -9,13 +9,15 @@ import OnCallManager from './OnCallManager.jsx';
 // ─── Category definitions ─────────────────────────────────────────────────────
 
 export const ABSENCE_TYPES = [
-  { key: 'Callout',  label: 'Last-Minute Callout', short: 'Callout',  color: '#ef4444' },
-  { key: 'Approved', label: 'Approved Time Off',   short: 'Approved', color: '#22c55e' },
-  { key: 'Sick',     label: 'Sick',                short: 'Sick',     color: '#3b82f6' },
+  { key: 'Callout',   label: 'Last-Minute Callout', short: 'Callout',  color: '#ef4444' },
+  { key: 'Approved',  label: 'Approved Time Off',   short: 'Approved', color: '#22c55e' },
+  { key: 'Sick',      label: 'Sick',                short: 'Sick',     color: '#3b82f6' },
   // Request/pending is retired — hidden from form/legend but kept for rendering old DB rows
-  { key: 'Request',  label: 'Request / Pending',   short: 'Request',  color: '#f59e0b', hidden: true },
-  { key: 'Partial',  label: 'Partial Day',         short: 'Partial',  color: '#8b5cf6' },
-  { key: 'DoctorOff', label: 'Doctor Off', short: 'Dr. Off', color: '#0d9488' },
+  { key: 'Request',   label: 'Request / Pending',   short: 'Request',  color: '#6b7280', hidden: true },
+  // Partial Day is merged into Approved Time Off — hidden from form/legend; old DB rows
+  // are remapped to 'Approved' at display time via LEGACY_REMAP below.
+  { key: 'Partial',   label: 'Approved Time Off',   short: 'Approved', color: '#22c55e', hidden: true },
+  { key: 'DoctorOff', label: 'Doctor Off',          short: 'Dr. Off',  color: '#0d9488' },
 ];
 
 // Types available for selection in the add/edit form and shown in the legend
@@ -23,15 +25,26 @@ const SELECTABLE_TYPES = ABSENCE_TYPES.filter(t => !t.hidden);
 
 const DOCTORS = ['Dr. R', 'Dr. A', 'Dr. S', 'Dr. B'];
 
-const TYPE_MAP  = new Map(ABSENCE_TYPES.map(t => [t.key, t]));
-const colorOf   = (key) => TYPE_MAP.get(key)?.color ?? '#6b7280';
-const labelOf   = (key) => TYPE_MAP.get(key)?.label ?? key;
-const shortOf   = (key) => TYPE_MAP.get(key)?.short ?? key;
+const TYPE_MAP = new Map(ABSENCE_TYPES.map(t => [t.key, t]));
+
+// Maps retired type keys → their active canonical replacement (display + filter only;
+// the DB value is not migrated — existing 'Partial' rows render as 'Approved Time Off').
+const LEGACY_REMAP = { Partial: 'Approved' };
+
+const colorOf = (key) => TYPE_MAP.get(LEGACY_REMAP[key] ?? key)?.color ?? '#6b7280';
+const labelOf = (key) => TYPE_MAP.get(LEGACY_REMAP[key] ?? key)?.label ?? key;
+const shortOf = (key) => TYPE_MAP.get(LEGACY_REMAP[key] ?? key)?.short ?? key;
+
+// Canonical type key for filtering — remaps retired keys to their active replacement
+const canonicalType = (key) => LEGACY_REMAP[key] ?? key;
 
 // Holidays / office-closed are shown in neutral slate
 const CLOSED_COLOR = '#64748b';
 
-// On Call shown in amber (distinct from Doctor Off teal)
+// ONCALL_COLOR is the SINGLE SOURCE of amber shared by:
+//   • the Tech On Call legend dot and on-call chips in this file
+//   • the staff-card .pill-oncall-active in index.css (color/border: #f59e0b)
+// Do not hardcode a second amber — keep index.css in sync with this value.
 const ONCALL_COLOR = '#f59e0b';
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
@@ -363,15 +376,18 @@ function PersonTypeahead({ value, onChange, roster, placeholder }) {
 function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, doctors, managerInitials, onSave, onDelete, onClose }) {
   const isEdit = mode === 'edit';
   const [personKey, setPersonKey] = useState(absence?.person_name ?? '');
-  // If editing an absence with a retired type (e.g. 'Request'), reset to '' so user must pick a current type
+  // If editing an absence with a retired/legacy type, remap to its canonical replacement.
+  // 'Partial' → 'Approved'; unknown types fall back to '' so user must pick a current type.
   const [type,      setType]      = useState(() => {
-    const t = absence?.type ?? 'Approved';
+    const raw = absence?.type ?? 'Approved';
+    const t   = LEGACY_REMAP[raw] ?? raw;
     return SELECTABLE_TYPES.some(s => s.key === t) ? t : '';
   });
   const [startD,    setStartD]    = useState(absence?.start_date ?? initStart ?? '');
   const [endD,      setEndD]      = useState(absence?.end_date   ?? initEnd   ?? '');
-  const [pStart,    setPStart]    = useState(absence?.partial_start ?? '08:00');
-  const [pEnd,      setPEnd]      = useState(absence?.partial_end   ?? '12:00');
+  // Partial time fields are optional for Approved Time Off; blank = full day off.
+  const [pStart,    setPStart]    = useState(absence?.partial_start ?? '');
+  const [pEnd,      setPEnd]      = useState(absence?.partial_end   ?? '');
   const [note,      setNote]      = useState(absence?.note ?? '');
   const [saving,    setSaving]    = useState(false);
   const [deleting,  setDeleting]  = useState(false);
@@ -402,8 +418,9 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, doc
       start_date:    startD,
       end_date:      endD,
       type,
-      partial_start: type === 'Partial' ? pStart : null,
-      partial_end:   type === 'Partial' ? pEnd   : null,
+      // Store partial times only when Approved and times are actually filled in
+      partial_start: type === 'Approved' && pStart ? pStart : null,
+      partial_end:   type === 'Approved' && pEnd   ? pEnd   : null,
       note:          note.trim() || null,
       entered_by:    managerInitials,
     };
@@ -490,16 +507,22 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, doc
             </div>
           </div>
 
-          {/* Partial times */}
-          {type === 'Partial' && (
-            <div style={{ display: 'flex', gap: 12 }}>
-              <div style={{ flex: 1 }}>
-                <label className="setup-label">Partial Start</label>
-                <input type="time" className="setup-input" value={pStart} onChange={e => setPStart(e.target.value)} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <label className="setup-label">Partial End</label>
-                <input type="time" className="setup-input" value={pEnd} onChange={e => setPEnd(e.target.value)} />
+          {/* Partial-time adjustment — optional fields for Approved Time Off */}
+          {type === 'Approved' && (
+            <div>
+              <label className="setup-label">
+                Time Adjustment{' '}
+                <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional — blank = full day off)</span>
+              </label>
+              <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
+                <div style={{ flex: 1 }}>
+                  <label className="setup-label" style={{ fontSize: 11 }}>Start</label>
+                  <input type="time" className="setup-input" value={pStart} onChange={e => setPStart(e.target.value)} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label className="setup-label" style={{ fontSize: 11 }}>End</label>
+                  <input type="time" className="setup-input" value={pEnd} onChange={e => setPEnd(e.target.value)} />
+                </div>
               </div>
             </div>
           )}
@@ -580,7 +603,7 @@ function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, o
   const isCurrentWeek = week.some(d => currentWeekDates.has(toDateStr(d)));
 
   const weekAbsences = absences
-    .filter(a => a.end_date >= weekStart && a.start_date <= weekEnd && activeCategories.has(a.type))
+    .filter(a => a.end_date >= weekStart && a.start_date <= weekEnd && activeCategories.has(canonicalType(a.type)))
     .sort((a, b) => a.start_date.localeCompare(b.start_date) || a.person_name.localeCompare(b.person_name));
 
   // Closure bars — filter spans that overlap this week (startDate/endDate)
@@ -700,7 +723,7 @@ function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, o
                 title={label}
               >
                 <span className="absence-bar-label">{label}</span>
-                {absence.type === 'Partial' && <Clock size={9} style={{ flexShrink: 0, marginLeft: 3, opacity: 0.9 }} />}
+                {absence.partial_start && <Clock size={9} style={{ flexShrink: 0, marginLeft: 3, opacity: 0.9 }} />}
               </div>
             );
           })}
@@ -740,14 +763,14 @@ function UpcomingPanel({ absences, closures, personByKey, todayStr, onAbsenceCli
   const cutoff = (() => { const d = parseUTC(todayStr); d.setUTCDate(d.getUTCDate() + 30); return toDateStr(d); })();
 
   const upcomingAbsences = absences
-    .filter(a => a.end_date >= todayStr && a.start_date <= cutoff && activeCategories.has(a.type))
+    .filter(a => a.end_date >= todayStr && a.start_date <= cutoff && activeCategories.has(canonicalType(a.type)))
     .map(a => ({
       key: `a-${a.id}`,
       date: a.start_date,
       color: colorOf(a.type),
       title: personByKey.get(a.person_name)?.name ?? a.person_name,
       detail: `${labelOf(a.type)} · ${formatRange(a.start_date, a.end_date)}`,
-      note: a.type === 'Partial' && a.partial_start ? `${a.partial_start}–${a.partial_end}` : (a.note ?? null),
+      note: a.partial_start ? `${a.partial_start}–${a.partial_end}` : (a.note ?? null),
       onClick: () => onAbsenceClick(a),
     }));
 
@@ -1146,7 +1169,8 @@ function DayPanel({ dateStr, rect, absences, personByKey, holidayDetail, dayClos
 function AbsenceHistory({ absences, people, personByKey, onAbsenceClick }) {
   const [selectedKey, setSelectedKey] = useState('');
   const [selectedYear, setSelectedYear] = useState('all');
-  const [activeTypes, setActiveTypes] = useState(new Set(ABSENCE_TYPES.map(t => t.key)));
+  // History type filter initialised from SELECTABLE_TYPES only (excludes retired hidden types)
+  const [activeTypes, setActiveTypes] = useState(new Set(SELECTABLE_TYPES.map(t => t.key)));
 
   // All years present in absences data
   const allYears = [...new Set(absences.map(a => a.start_date.slice(0, 4)))].sort().reverse();
@@ -1154,11 +1178,13 @@ function AbsenceHistory({ absences, people, personByKey, onAbsenceClick }) {
   const personAbsences = absences.filter(a => {
     if (selectedKey && a.person_name !== selectedKey) return false;
     if (selectedYear !== 'all' && !a.start_date.startsWith(selectedYear)) return false;
-    if (!activeTypes.has(a.type)) return false;
+    // Use canonical type so old 'Partial' rows pass through when 'Approved' is active
+    if (!activeTypes.has(canonicalType(a.type))) return false;
     return true;
   }).sort((a, b) => b.start_date.localeCompare(a.start_date));
 
-  // Summary counts by category for selected person + year (ignoring type filter for summary)
+  // Summary counts by category for selected person + year (ignoring type filter for summary).
+  // Old 'Partial' rows are counted under 'Approved' via LEGACY_REMAP.
   const summaryBase = absences.filter(a => {
     if (selectedKey && a.person_name !== selectedKey) return false;
     if (selectedYear !== 'all' && !a.start_date.startsWith(selectedYear)) return false;
@@ -1166,7 +1192,7 @@ function AbsenceHistory({ absences, people, personByKey, onAbsenceClick }) {
   });
   const counts = Object.fromEntries(ABSENCE_TYPES.map(t => [
     t.key,
-    summaryBase.filter(a => a.type === t.key).length,
+    summaryBase.filter(a => canonicalType(a.type) === t.key).length,
   ]));
   const totalDays = summaryBase.reduce((sum, a) => {
     const start = parseUTC(a.start_date), end = parseUTC(a.end_date);
@@ -1278,7 +1304,7 @@ function AbsenceHistory({ absences, people, personByKey, onAbsenceClick }) {
               )}
               <div className="absence-history-row-type" style={{ color }}>
                 {labelOf(a.type)}
-                {a.type === 'Partial' && a.partial_start && (
+                {a.partial_start && (
                   <span style={{ opacity: 0.7, fontSize: 10, marginLeft: 5 }}>
                     {a.partial_start}–{a.partial_end}
                   </span>

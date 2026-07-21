@@ -346,9 +346,12 @@ export function findAbsenceViolations(clinics, people, absences, weekMonday) {
 
       for (const absence of matching) {
         let blocked = false;
-        if (absence.type !== 'partial') {
+        // After the Partial→Approved merge, detect partial-day absences by the presence
+        // of partial_start/partial_end, not by the type string.  Full-day absences
+        // (no times set) always block the slot; partial-time absences block only on overlap.
+        if (!absence.partial_start || !absence.partial_end) {
           blocked = true;
-        } else if (absence.partial_start != null && absence.partial_end != null) {
+        } else {
           const slotRange = slotEffectiveRange(slotType, c);
           if (slotRange.start == null || slotRange.end == null) {
             blocked = true; // unknown range — be conservative
@@ -357,7 +360,7 @@ export function findAbsenceViolations(clinics, people, absences, weekMonday) {
           }
         }
         if (blocked) {
-          const typeLabel = absence.type === 'partial' ? 'partial absence' : absence.type;
+          const typeLabel = absence.partial_start ? 'partial absence' : (absence.type?.toLowerCase() ?? 'absence');
           violations.push({
             label: `${person.name} — ${c.day} @ ${c.location}: on ${typeLabel} (${dateStr})`,
             clinicId: c.id,

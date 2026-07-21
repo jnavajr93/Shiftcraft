@@ -884,7 +884,9 @@ html, body, #root {
 .grade-pill.C.active { background: var(--grade-c-bg); color: var(--grade-text); border-color: var(--grade-c-bg); }
 .grade-pill.T.active { background: #7c3aed; color: #fff; border-color: #7c3aed; }
 
-/* On Call pill active state — amber, matching grade B treatment */
+/* On Call pill active state — amber glow.
+   IMPORTANT: color and border-color (#f59e0b) MUST match ONCALL_COLOR in AbsenceCalendar.jsx.
+   ONCALL_COLOR is the single source of truth for On Call amber; keep this in sync. */
 .pill-oncall-active {
   background: transparent;
   color: #f59e0b;
