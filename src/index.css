@@ -108,7 +108,17 @@ html, body, #root {
 .topbar-week-label:hover { background: var(--bg-surface); }
 .topbar-week-label--staff { cursor: default; pointer-events: none; }
 .topbar-week-label--staff:hover { background: none; }
-.topbar-right { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.topbar-right {
+  display: flex; align-items: center; gap: 20px; white-space: nowrap;
+}
+/* Cluster base — items sit tight together */
+.topbar-cluster { display: flex; align-items: center; }
+/* Actions: Generate + Clear/Copy — slightly more breathing room */
+.topbar-cluster--actions { gap: 6px; }
+/* Utility icons: History, Chat, Settings — very tight, read as one group */
+.topbar-cluster--tools { gap: 2px; }
+/* Context: status labels, Post pill, Manager pill */
+.topbar-cluster--context { gap: 8px; }
 
 /* ─── Buttons ─────────────────────────── */
 .btn {
@@ -1116,17 +1126,22 @@ html, body, #root {
 .generate-done { color: #16a34a !important; border-color: #16a34a !important; }
 .generate-error { color: var(--red) !important; border-color: var(--red) !important; }
 
-/* ─── Clear Week Button — solid red ─────────────────────────────────────────── */
+/* ─── Clear Week Button — ghost/outline, fills red on hover ─────────────────── */
 .btn-clear-week {
-  background: var(--red) !important;
-  color: #fff !important;
-  border-color: transparent !important;
+  background: transparent !important;
+  color: var(--red) !important;
+  border-color: var(--red) !important;
+  opacity: 0.75;
 }
 .btn-clear-week:hover:not(:disabled) {
-  background: #b91c1c !important;
+  background: var(--red) !important;
+  color: #fff !important;
+  border-color: var(--red) !important;
+  opacity: 1;
 }
 .btn-clear-week:active:not(:disabled) {
   background: #991b1b !important;
+  opacity: 1;
 }
 
 /* ─── Save Toast ────────────────────── */
