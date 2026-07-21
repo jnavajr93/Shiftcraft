@@ -15,7 +15,7 @@ export const ABSENCE_TYPES = [
   // Request/pending is retired — hidden from form/legend but kept for rendering old DB rows
   { key: 'Request',  label: 'Request / Pending',   short: 'Request',  color: '#f59e0b', hidden: true },
   { key: 'Partial',  label: 'Partial Day',         short: 'Partial',  color: '#8b5cf6' },
-  { key: 'DoctorOff', label: 'Doctor Off', short: 'Dr. Off', color: '#f59e0b' },
+  { key: 'DoctorOff', label: 'Doctor Off', short: 'Dr. Off', color: '#0d9488' },
 ];
 
 // Types available for selection in the add/edit form and shown in the legend
@@ -31,8 +31,8 @@ const shortOf   = (key) => TYPE_MAP.get(key)?.short ?? key;
 // Holidays / office-closed are shown in neutral slate
 const CLOSED_COLOR = '#64748b';
 
-// Tech on-call shown in teal (distinct from all absence type colors)
-const ONCALL_COLOR = '#0d9488';
+// On Call shown in amber (distinct from Doctor Off teal)
+const ONCALL_COLOR = '#f59e0b';
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
