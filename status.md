@@ -1,51 +1,17 @@
-# Shiftcraft Session Status — 2026-07-16
+# Shiftcraft Session Status — 2026-07-20
 
-## Completed this session
+## Completed This Session
+- Calendar UX: cell click → jump to week; + button (admin) opens add/closure panel; removed "Go To This Week" from DayPanel
+- Site-wide Title Case across all 14 components
+- On Call pill: glow effect (amber text/border, transparent bg, box-shadow)
+- + button enlarged to 22×22px / 20px font
+- TopBar week nav: true centering via `grid-template-columns: auto 1fr auto`
+- Posted pill: solid green + white text; timestamp shortened to `M/D H:MM AM/PM`
+- Topbar three-cluster redesign: [Generate + Clear Week ghost] / [History · Chat · Settings] / [Posted + Manager pill]
+- Clear Week: ghost/outline style (transparent at rest, solid red on hover)
+- Doctor Off / On Call color swap: Doctor Off → teal `#0d9488`, On Call → amber `#f59e0b`
 
-All 5 features from the previous session (phantom FD slots, invalid OBS slots, Dr. B minimal staffing,
-Dr. B no-substitutes, Dr. R split-day) were already done. This session implemented:
+**Last commit:** cb91696
 
-### Feature: Schedule learning from history
-
-**What it does:**
-- Every generated and manual slot assignment is recorded to `shiftcraft_placement_history` in Supabase
-- Rolling 52-week window; entries older than 52 weeks are pruned on next write
-- Manual edits/adds count 3× vs generated (higher signal)
-- Pattern scores are computed as a soft tiebreaker when the solver has multiple eligible candidates
-- AI chat system prompt now includes top 15 active patterns as context
-- New **Patterns panel** (TrendingUp icon in topbar, admin-only) shows learned preferences in plain language
-  with a per-pattern dismiss/ignore toggle stored in `shiftcraft_dismissed_patterns`
-
-**Files added:**
-- `src/data/patterns.js` — `computeHistoryScores`, `computePatterns`, `buildPatternSummary`, `patternKey`
-- `src/components/PatternsPanel.jsx` — patterns panel UI with dismiss/restore
-
-**Files modified:**
-- `src/services/dataService.js` — 4 new CRUD functions for history + dismissed patterns
-- `src/context/AppContext.jsx` — `placementHistory`, `dismissedPatterns`, `historyScores` state;
-  `appendHistory`, `dismissPattern`, `undismissPattern` callbacks; history recording in
-  `assignSlot` and `applyBulkAssignments`
-- `src/engine/solver.js` — optional `scoreFn` param to `solve()` and `fillShift()`
-- `src/engine/adapter.js` — pass `historyScores → scoreFn` to solver via `options.historyScores`
-- `src/components/ChatPanel.jsx` — `buildPatternSummary` injected into system prompt
-- `src/components/TopBar.jsx` — Patterns panel button (TrendingUp); passes `historyScores` to
-  `generateSchedule(data, { historyScores })`
-
-**Commit:** cf57cfd  
-**Branch:** main (pushed to GitHub)
-
-## Architecture notes
-
-Pattern key format: `personName:day:location:slotType` — all lowercase, location underscored
-(matches `toLocationId()` in adapter.js). E.g. `john:mon:chandler:scribe`.
-
-History recording:
-- `assignSlot` → source = 'manual-edit' (replacing existing person) or 'manual-add' (empty slot)
-- `applyBulkAssignments` → source = 'generated'
-
-The solver tiebreaker only kicks in when 2+ candidates pass all hard rules. It never overrides
-availability, OBS precedence, day-off, Dr. B no-substitute, or any other hard constraint.
-
-## Nothing pending
-
-All requested features have been implemented.
+## Nothing Pending
+All tasks complete.
