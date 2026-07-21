@@ -1073,39 +1073,7 @@ export default function TopBar({ activeTab, setActiveTab, setupSection, setSetup
             </button>
           )}
 
-          {/* ── Save status + Post + Manager pill ── */}
-          {isAdmin && saveStatus === 'error' && (
-            <span className="topbar-mobile-hidden" style={{ fontSize: 11, color: '#dc2626', fontWeight: 500, whiteSpace: 'nowrap' }}>
-              ⚠ Unsaved changes
-            </span>
-          )}
-          {isAdmin && saveStatus === 'saving' && (
-            <span className="topbar-mobile-hidden" style={{ fontSize: 11, color: 'var(--text-muted, var(--text-secondary))', opacity: 0.7, whiteSpace: 'nowrap' }}>
-              Saving…
-            </span>
-          )}
-          {isAdmin && (saveStatus === 'saved' || saveStatus === 'idle') && savedAgoLabel && (
-            <span className="topbar-mobile-hidden" style={{ fontSize: 11, color: 'var(--text-muted, var(--text-secondary))', opacity: 0.7, whiteSpace: 'nowrap' }}>
-              {savedAgoLabel}
-            </span>
-          )}
-          {isAdmin && (
-            <button
-              data-tour="post-button"
-              className={`btn btn-pill topbar-mobile-hidden btn-post${!isDirty ? ' btn-post--clean' : ''}${postState === 'error' ? ' generate-error' : postState === 'done' ? ' generate-done' : ''}`}
-              style={{ fontSize: 12, minHeight: 32, gap: 5 }}
-              onClick={isDirty && (postState === 'idle' || postState === 'error') ? handlePostClick : undefined}
-              disabled={postState === 'loading' || (!isDirty && postState === 'idle')}
-              title={isDirty ? 'Publish schedule to staff' : postedSnapshot ? `Posted by ${postedSnapshot.posted_by ?? '—'}` : 'Nothing to post yet'}
-            >
-              {postState === 'loading' ? <><Loader2 size={13} className="spin" /> Posting…</> :
-               postState === 'done'    ? <>✓ Posted</> :
-               isDirty && postedSnapshot ? <><SendHorizonal size={13} /> Post changes</> :
-               isDirty ? <><SendHorizonal size={13} /> Post</> :
-               postedSnapshot ? <>✓ Posted {formatPostedTime(postedSnapshot.posted_at)}</> :
-               <><SendHorizonal size={13} /> Post</>}
-            </button>
-          )}
+          {/* ── Manager pill → Save status → Post ── */}
           {/* Presence: other managers viewing this week */}
           {isAdmin && presentManagers.length > 0 && (
             <div className="topbar-mobile-hidden" style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
@@ -1145,6 +1113,38 @@ export default function TopBar({ activeTab, setActiveTab, setupSection, setSetup
           >
             {isAdmin && managerInitials ? <><Save size={13} /> {managerInitials}</> : 'Manager'}
           </button>
+          {isAdmin && saveStatus === 'error' && (
+            <span className="topbar-mobile-hidden" style={{ fontSize: 11, color: '#dc2626', fontWeight: 500, whiteSpace: 'nowrap' }}>
+              ⚠ Unsaved changes
+            </span>
+          )}
+          {isAdmin && saveStatus === 'saving' && (
+            <span className="topbar-mobile-hidden" style={{ fontSize: 11, color: 'var(--text-muted, var(--text-secondary))', opacity: 0.7, whiteSpace: 'nowrap' }}>
+              Saving…
+            </span>
+          )}
+          {isAdmin && (saveStatus === 'saved' || saveStatus === 'idle') && savedAgoLabel && (
+            <span className="topbar-mobile-hidden" style={{ fontSize: 11, color: 'var(--text-muted, var(--text-secondary))', opacity: 0.7, whiteSpace: 'nowrap' }}>
+              {savedAgoLabel}
+            </span>
+          )}
+          {isAdmin && (
+            <button
+              data-tour="post-button"
+              className={`btn btn-pill topbar-mobile-hidden btn-post${!isDirty ? ' btn-post--clean' : ''}${postState === 'error' ? ' generate-error' : postState === 'done' ? ' generate-done' : ''}`}
+              style={{ fontSize: 12, minHeight: 32, gap: 5 }}
+              onClick={isDirty && (postState === 'idle' || postState === 'error') ? handlePostClick : undefined}
+              disabled={postState === 'loading' || (!isDirty && postState === 'idle')}
+              title={isDirty ? 'Publish schedule to staff' : postedSnapshot ? `Posted by ${postedSnapshot.posted_by ?? '—'}` : 'Nothing to post yet'}
+            >
+              {postState === 'loading' ? <><Loader2 size={13} className="spin" /> Posting…</> :
+               postState === 'done'    ? <>✓ Posted</> :
+               isDirty && postedSnapshot ? <><SendHorizonal size={13} /> Post changes</> :
+               isDirty ? <><SendHorizonal size={13} /> Post</> :
+               postedSnapshot ? <>✓ Posted {formatPostedTime(postedSnapshot.posted_at)}</> :
+               <><SendHorizonal size={13} /> Post</>}
+            </button>
+          )}
 
           {/* ── Change log → AI Chat → Settings ── */}
           {isAdmin && (
