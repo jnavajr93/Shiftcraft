@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, X, Clock, Plus, Trash2, AlertCircle, History, Building2, PhoneCall, UserCheck } from 'lucide-react';
 import { useApp, mondayOfWeek, isoWeek } from '../context/AppContext.jsx';
+import { minutesToTime, minutesToTimeInput, timeInputToMinutes } from '../data/seed.js';
 import { getFederalHolidays } from '../utils/federalHolidays.js';
 import { CLOSURE_LOCATIONS, buildClosureMap } from '../utils/holidayClosures.js';
 import { getOnCallPerson, getOnCallForWeek, getBlockPosition, addWeeks } from '../utils/oncall.js';
@@ -46,6 +47,9 @@ const CLOSED_COLOR = '#64748b';
 //   • the staff-card .pill-oncall-active in index.css (color/border: #f59e0b)
 // Do not hardcode a second amber — keep index.css in sync with this value.
 const ONCALL_COLOR = '#f59e0b';
+
+// Research assignments shown in purple (freed by Partial Day merge)
+const RESEARCH_COLOR = '#8b5cf6';
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
@@ -105,7 +109,7 @@ function buildGrid(year, month) {
 
 // ─── Legend (filter chips) ────────────────────────────────────────────────────
 
-function Legend({ activeCategories, onToggle }) {
+function Legend({ activeCategories, onToggle, researchTableReady }) {
   return (
     <div className="absence-legend">
       {SELECTABLE_TYPES.map(t => {
@@ -140,6 +144,17 @@ function Legend({ activeCategories, onToggle }) {
         <span className="absence-legend-dot" style={{ background: ONCALL_COLOR }} />
         <span>Tech On Call</span>
       </button>
+      {/* Research chip */}
+      {researchTableReady !== false && (
+        <button
+          className={`absence-legend-item${activeCategories.has('Research') ? '' : ' absence-legend-item--off'}`}
+          onClick={() => onToggle('Research')}
+          title={activeCategories.has('Research') ? 'Hide Research Assignments' : 'Show Research Assignments'}
+        >
+          <span className="absence-legend-dot" style={{ background: RESEARCH_COLOR }} />
+          <span>Research</span>
+        </button>
+      )}
     </div>
   );
 }
@@ -578,9 +593,155 @@ function AbsenceModal({ mode, initStart, initEnd, absence, people, absences, doc
   );
 }
 
+// ─── Research Modal ────────────────────────────────────────────────────────────
+
+function ResearchModal({ mode, initDate, assignment, people, managerInitials, onSave, onDelete, onClose }) {
+  const isEdit = mode === 'edit';
+  const [personKey, setPersonKey]   = useState(assignment?.person_name ?? '');
+  const [startD,    setStartD]      = useState(assignment?.date ?? initDate ?? '');
+  const [endD,      setEndD]        = useState(assignment?.date ?? initDate ?? '');
+  const [startTime, setStartTime]   = useState(
+    assignment?.start_min != null ? minutesToTimeInput(assignment.start_min) : ''
+  );
+  const [endTime,   setEndTime]     = useState(
+    assignment?.end_min != null ? minutesToTimeInput(assignment.end_min) : ''
+  );
+  const [note,      setNote]        = useState(assignment?.note ?? '');
+  const [saving,    setSaving]      = useState(false);
+  const [deleting,  setDeleting]    = useState(false);
+
+  const canSave = personKey && startD && endD && startD <= endD;
+
+  const handleSave = async () => {
+    if (!canSave) return;
+    setSaving(true);
+    const start_min = startTime ? timeInputToMinutes(startTime) : null;
+    const end_min   = endTime   ? timeInputToMinutes(endTime)   : null;
+    const noteVal   = note.trim() || null;
+    if (isEdit) {
+      await onSave(assignment.id, {
+        person_name: personKey,
+        date:        startD,
+        start_min,
+        end_min,
+        note:        noteVal,
+      });
+    } else {
+      // Insert one row per calendar day in the range
+      let d = parseUTC(startD);
+      const endDate = parseUTC(endD);
+      while (d <= endDate) {
+        await onSave({
+          person_name: personKey,
+          date:        toDateStr(d),
+          start_min,
+          end_min,
+          note:        noteVal,
+          entered_by:  managerInitials ?? null,
+        });
+        d = new Date(d);
+        d.setUTCDate(d.getUTCDate() + 1);
+      }
+    }
+    setSaving(false);
+    onClose();
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    await onDelete(assignment.id);
+    setDeleting(false);
+    onClose();
+  };
+
+  return (
+    <div className="overlay-backdrop" style={{ zIndex: 310 }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="overlay-modal" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+        <div className="overlay-header">
+          <span style={{ fontWeight: 600, fontSize: 15 }}>{isEdit ? 'Edit Research' : 'Add Research'}</span>
+          <button className="overlay-close" onClick={onClose}><X size={16} /></button>
+        </div>
+        <div className="overlay-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+          {/* Person */}
+          <div>
+            <label className="setup-label">Person</label>
+            <PersonTypeahead
+              value={personKey}
+              onChange={setPersonKey}
+              roster={[...people]
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map(p => ({ key: p.name.trim().toLowerCase(), label: p.name, color: p.color ?? null }))}
+              placeholder="Search Staff…"
+            />
+          </div>
+
+          {/* Dates */}
+          <div style={{ display: 'flex', gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <label className="setup-label">{isEdit ? 'Date' : 'Start Date'}</label>
+              <input type="date" className="setup-input" value={startD}
+                onChange={e => { setStartD(e.target.value); if (!isEdit && e.target.value > endD) setEndD(e.target.value); }} />
+            </div>
+            {!isEdit && (
+              <div style={{ flex: 1 }}>
+                <label className="setup-label">End Date</label>
+                <input type="date" className="setup-input" value={endD} min={startD}
+                  onChange={e => setEndD(e.target.value)} />
+              </div>
+            )}
+          </div>
+
+          {/* Time window (optional) */}
+          <div>
+            <label className="setup-label">
+              Time Window{' '}
+              <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional — blank = all day)</span>
+            </label>
+            <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
+              <div style={{ flex: 1 }}>
+                <label className="setup-label" style={{ fontSize: 11 }}>Start</label>
+                <input type="time" className="setup-input" value={startTime} onChange={e => setStartTime(e.target.value)} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label className="setup-label" style={{ fontSize: 11 }}>End</label>
+                <input type="time" className="setup-input" value={endTime} onChange={e => setEndTime(e.target.value)} />
+              </div>
+            </div>
+          </div>
+
+          {/* Note */}
+          <div>
+            <label className="setup-label">Note <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span></label>
+            <input className="setup-input" value={note} onChange={e => setNote(e.target.value)} placeholder="E.g. IRB Study, Chart Review…" />
+          </div>
+
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', padding: '12px 24px', borderTop: '0.5px solid var(--border)', flexShrink: 0 }}>
+          <div>
+            {isEdit && (
+              <button className="btn btn-pill" style={{ fontSize: 12, color: '#dc2626', borderColor: '#dc2626' }}
+                onClick={handleDelete} disabled={deleting}>
+                {deleting ? 'Deleting…' : <><Trash2 size={13} /> Delete</>}
+              </button>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-pill" onClick={onClose}>Cancel</button>
+            <button className="btn btn-primary btn-pill" onClick={handleSave} disabled={!canSave || saving}>
+              {saving ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Research'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Week row with spanning bars ──────────────────────────────────────────────
 
-function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, onDayClick, onDayDoubleClick, onAbsenceClick, activeCategories, currentWeekDates, dayPanelDate, oncallSettings, oncallOverrides, people, isAdmin, onOncallChipClick, eligiblePool, dragRange, onCellMouseDown, onCellMouseEnter, suppressClickRef }) {
+function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, onDayClick, onDayDoubleClick, onAbsenceClick, activeCategories, currentWeekDates, dayPanelDate, oncallSettings, oncallOverrides, people, isAdmin, onOncallChipClick, eligiblePool, dragRange, onCellMouseDown, onCellMouseEnter, suppressClickRef, researchAssignments, onResearchClick }) {
   const weekStart = toDateStr(week[0]);
   const weekEnd   = toDateStr(week[6]);
   const clickTimerRef = useRef(null);
@@ -611,6 +772,11 @@ function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, o
     ? closures.filter(c => c.endDate >= weekStart && c.startDate <= weekEnd)
     : [];
 
+  // Research bars for this week
+  const weekResearch = (activeCategories.has('Research') && researchAssignments?.length)
+    ? researchAssignments.filter(ra => ra.date >= weekStart && ra.date <= weekEnd)
+    : [];
+
   // Single click on cell → jump to that week directly
   const handleCellInteraction = (ds, e) => {
     if (suppressClickRef?.current) { suppressClickRef.current = false; return; }
@@ -625,7 +791,7 @@ function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, o
     onDayClick(ds, rect);
   };
 
-  const allBars = weekClosures.length + weekAbsences.length;
+  const allBars = weekClosures.length + weekAbsences.length + weekResearch.length;
 
   return (
     <div className={`absence-week-row${isCurrentWeek ? ' absence-week-row--current-week' : ''}`}>
@@ -727,6 +893,38 @@ function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, o
               </div>
             );
           })}
+
+          {/* Research bars */}
+          {weekResearch.map((ra, idx) => {
+            const laneIdx = weekClosures.length + weekAbsences.length + idx;
+            const startCol = week.findIndex(d => toDateStr(d) === ra.date);
+            if (startCol < 0) return null;
+            const person = personByKey.get((ra.person_name ?? '').trim().toLowerCase());
+            const displayName = person?.name ?? ra.person_name;
+            const timeStr = ra.start_min != null
+              ? ` · ${minutesToTime(ra.start_min)}–${minutesToTime(ra.end_min ?? ra.start_min)}`
+              : '';
+            const label = `${displayName} · Research${timeStr}`;
+            return (
+              <div
+                key={`research-${ra.id}`}
+                className="absence-bar"
+                style={{
+                  left:        `calc(${startCol} / 7 * 100% + 2px)`,
+                  width:       `calc(1 / 7 * 100% - 4px)`,
+                  top:         `${30 + laneIdx * 22}px`,
+                  background:  RESEARCH_COLOR,
+                  borderRadius: 3,
+                  pointerEvents: 'auto',
+                  cursor: onResearchClick ? 'pointer' : 'default',
+                }}
+                onClick={e => { e.stopPropagation(); onResearchClick?.(ra); }}
+                title={label}
+              >
+                <span className="absence-bar-label">{label}</span>
+              </div>
+            );
+          })}
         </div>
       )}
       {/* On-call chip or empty affordance — bottom-left */}
@@ -759,7 +957,7 @@ function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, o
 
 // ─── Upcoming panel ───────────────────────────────────────────────────────────
 
-function UpcomingPanel({ absences, closures, personByKey, todayStr, onAbsenceClick, activeCategories, oncallSettings, oncallOverrides, people }) {
+function UpcomingPanel({ absences, closures, personByKey, todayStr, onAbsenceClick, activeCategories, oncallSettings, oncallOverrides, people, researchAssignments, onResearchClick }) {
   const cutoff = (() => { const d = parseUTC(todayStr); d.setUTCDate(d.getUTCDate() + 30); return toDateStr(d); })();
 
   const upcomingAbsences = absences
@@ -827,7 +1025,28 @@ function UpcomingPanel({ absences, closures, personByKey, todayStr, onAbsenceCli
     }
   }
 
-  const upcoming = [...upcomingAbsences, ...upcomingClosures, ...upcomingOncall]
+  // Research upcoming entries
+  const upcomingResearch = (activeCategories.has('Research') && researchAssignments?.length)
+    ? researchAssignments
+        .filter(ra => ra.date >= todayStr && ra.date <= cutoff)
+        .map(ra => {
+          const person = personByKey.get((ra.person_name ?? '').trim().toLowerCase());
+          const timeNote = ra.start_min != null
+            ? `${minutesToTime(ra.start_min)} – ${minutesToTime(ra.end_min ?? ra.start_min)}`
+            : null;
+          return {
+            key: `research-${ra.id}`,
+            date: ra.date,
+            color: RESEARCH_COLOR,
+            title: person?.name ?? ra.person_name,
+            detail: `Research · ${formatDateDisplay(ra.date)}`,
+            note: timeNote ?? ra.note ?? null,
+            onClick: onResearchClick ? () => onResearchClick(ra) : null,
+          };
+        })
+    : [];
+
+  const upcoming = [...upcomingAbsences, ...upcomingClosures, ...upcomingOncall, ...upcomingResearch]
     .sort((a, b) => a.date.localeCompare(b.date));
 
   return (
@@ -859,7 +1078,7 @@ function UpcomingPanel({ absences, closures, personByKey, todayStr, onAbsenceCli
 
 // ─── Day panel (anchored near clicked cell) ───────────────────────────────────
 
-function DayPanel({ dateStr, rect, absences, personByKey, holidayDetail, dayClosures, isAdmin, managerInitials, onClose, onJumpAndClose, onAddAbsence, onAbsenceClick, onToggleHolidayOpen, onMoveHoliday, onResetMove, onSetHolidayScope, onAddClosure, onDeleteClosure }) {
+function DayPanel({ dateStr, rect, absences, personByKey, holidayDetail, dayClosures, isAdmin, managerInitials, onClose, onJumpAndClose, onAddAbsence, onAbsenceClick, onToggleHolidayOpen, onMoveHoliday, onResetMove, onSetHolidayScope, onAddClosure, onDeleteClosure, onAddResearch, researchTableReady }) {
   const dayAbsences = absences.filter(a => a.start_date <= dateStr && a.end_date >= dateStr);
   const d = parseUTC(dateStr);
   const dateLabel = `${DOW[d.getUTCDay()]}, ${MONTHS[d.getUTCMonth()].slice(0, 3)} ${d.getUTCDate()}`;
@@ -1150,6 +1369,15 @@ function DayPanel({ dateStr, rect, absences, personByKey, holidayDetail, dayClos
         >
           <Plus size={11} /> Add Absence
         </button>
+        {isAdmin && researchTableReady !== false && (
+          <button
+            className="btn btn-pill"
+            style={{ fontSize: 11, minHeight: 26, gap: 4, color: RESEARCH_COLOR, borderColor: RESEARCH_COLOR, width: '100%' }}
+            onClick={() => onAddResearch(dateStr)}
+          >
+            <Plus size={11} /> Research
+          </button>
+        )}
         {isAdmin && (
           <button
             className="btn btn-pill"
@@ -1531,6 +1759,7 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
     data, absences, addAbsence, editAbsence, removeAbsence, managerInitials, addLog,
     calendarOverrides, addCalendarOverride, removeCalendarOverride, isAdmin,
     oncall, oncallOverrides, saveOncallOverride, deleteOncallOverride, saveOncall,
+    researchAssignments, researchTableReady, addResearchAssignment, editResearchAssignment, removeResearchAssignment,
   } = useApp();
   const people      = data.people ?? [];
   const doctors     = (data.providers ?? []).map(p => p.name);
@@ -1567,10 +1796,11 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
   const [showOncallPanel, setShowOncallPanel] = useState(false);
   const [viewYear,  setViewYear]  = useState(initMonday.getUTCFullYear());
   const [viewMonth, setViewMonth] = useState(initMonday.getUTCMonth());
-  const [modal,        setModal]        = useState(null); // absence modal
-  const [closureModal, setClosureModal] = useState(null); // { initStart, initEnd }
-  const [rangeChooser, setRangeChooser] = useState(null); // { start, end, x, y }
-  const [dayPanel,     setDayPanel]     = useState(null); // { dateStr, rect }
+  const [modal,          setModal]          = useState(null); // absence modal
+  const [closureModal,   setClosureModal]   = useState(null); // { initStart, initEnd }
+  const [rangeChooser,   setRangeChooser]   = useState(null); // { start, end, x, y }
+  const [dayPanel,       setDayPanel]       = useState(null); // { dateStr, rect }
+  const [researchModal,  setResearchModal]  = useState(null); // null | { mode, initDate, assignment }
   const [dragRange,    setDragRange]    = useState(null); // { start, end } dateStr
   const dragActiveRef   = useRef(false);
   const dragStartRef    = useRef(null);
@@ -1579,9 +1809,9 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
   const suppressClickRef = useRef(false);
   const [onCallPopover, setOnCallPopover] = useState(null); // { weekStr, rect }
 
-  // Category filter chips — all on by default (including 'Closed' and 'OnCall')
+  // Category filter chips — all on by default (including 'Closed', 'OnCall', 'Research')
   const [activeCategories, setActiveCategories] = useState(
-    () => new Set([...SELECTABLE_TYPES.map(t => t.key), 'Closed', 'OnCall']),
+    () => new Set([...SELECTABLE_TYPES.map(t => t.key), 'Closed', 'OnCall', 'Research']),
   );
   const toggleCategory = useCallback((key) => {
     setActiveCategories(prev => {
@@ -1947,6 +2177,30 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
     await removeCalendarOverride(id);
   }, [removeCalendarOverride]);
 
+  const handleAddResearch = useCallback((dateStr) => {
+    setDayPanel(null);
+    setResearchModal({ mode: 'add', initDate: dateStr });
+  }, []);
+
+  const handleResearchClick = useCallback((ra) => {
+    if (!isAdmin) return;
+    setResearchModal({ mode: 'edit', assignment: ra });
+  }, [isAdmin]);
+
+  const handleResearchSave = useCallback(async (idOrPayload, payloadOrUndefined) => {
+    if (payloadOrUndefined !== undefined) {
+      // edit: (id, payload)
+      await editResearchAssignment(idOrPayload, payloadOrUndefined);
+    } else {
+      // add: (payload)
+      await addResearchAssignment(idOrPayload);
+    }
+  }, [addResearchAssignment, editResearchAssignment]);
+
+  const handleResearchDelete = useCallback(async (id) => {
+    await removeResearchAssignment(id);
+  }, [removeResearchAssignment]);
+
   // ─── On-call chip handlers (manager only) ──────
   const handleOncallChipClick = useCallback((weekStr, rect) => {
     setDayPanel(null);
@@ -2047,7 +2301,7 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
               <div className="absence-dow-row">
                 {DOW.map(d => <div key={d} className="absence-dow-cell">{d}</div>)}
               </div>
-              <Legend activeCategories={activeCategories} onToggle={toggleCategory} />
+              <Legend activeCategories={activeCategories} onToggle={toggleCategory} researchTableReady={researchTableReady} />
               <div className="absence-grid">
                 {grid.map((week, wi) => (
                   <WeekRow
@@ -2074,6 +2328,8 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
                     onCellMouseDown={isAdmin ? handleCellMouseDown : undefined}
                     onCellMouseEnter={isAdmin ? handleCellMouseEnter : undefined}
                     suppressClickRef={suppressClickRef}
+                    researchAssignments={researchAssignments}
+                    onResearchClick={isAdmin ? handleResearchClick : undefined}
                   />
                 ))}
               </div>
@@ -2088,6 +2344,8 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
               oncallSettings={effectiveOncallSettings}
               oncallOverrides={oncallOverrides}
               people={people}
+              researchAssignments={researchAssignments}
+              onResearchClick={isAdmin ? handleResearchClick : undefined}
             />
           </div>
         ) : (
@@ -2132,7 +2390,7 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
       )}
 
       {/* Day panel — anchored near clicked cell, above modal layer */}
-      {dayPanel && !modal && !closureModal && (
+      {dayPanel && !modal && !closureModal && !researchModal && (
         <DayPanel
           dateStr={dayPanel.dateStr}
           rect={dayPanel.rect}
@@ -2161,6 +2419,8 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
             setClosureModal({ initStart: ds, initEnd: ds });
           }}
           onDeleteClosure={handleDeleteClosure}
+          onAddResearch={handleAddResearch}
+          researchTableReady={researchTableReady}
         />
       )}
 
@@ -2187,6 +2447,19 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
           managerInitials={managerInitials}
           onSave={handleAddClosure}
           onClose={() => setClosureModal(null)}
+        />
+      )}
+
+      {researchModal && (
+        <ResearchModal
+          mode={researchModal.mode}
+          initDate={researchModal.initDate ?? null}
+          assignment={researchModal.assignment ?? null}
+          people={people}
+          managerInitials={managerInitials}
+          onSave={handleResearchSave}
+          onDelete={handleResearchDelete}
+          onClose={() => setResearchModal(null)}
         />
       )}
 

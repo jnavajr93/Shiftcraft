@@ -376,3 +376,49 @@ export async function deleteOncallOverride(weekKey) {
   if (error) console.error('[Shiftcraft] Delete oncall override error:', error);
   return { error: error ?? null };
 }
+
+// ─── Research assignments ─────────────────────
+export async function fetchAllResearchAssignments() {
+  const { data, error } = await supabase
+    .from('research_assignments')
+    .select('id, person_name, date, start_min, end_min, note, entered_by, created_at')
+    .order('date', { ascending: true });
+  if (error) {
+    if (error.code === '42P01') return { status: 'table_missing', data: [] };
+    return { status: 'error', error, data: [] };
+  }
+  return { status: 'ok', data: data ?? [] };
+}
+
+export async function saveResearchAssignment(payload) {
+  const { data, error } = await supabase
+    .from('research_assignments')
+    .insert(payload)
+    .select('id, person_name, date, start_min, end_min, note, entered_by, created_at')
+    .single();
+  if (error) return { error };
+  return { error: null, data };
+}
+
+export async function updateResearchAssignment(id, payload) {
+  const { data, error } = await supabase
+    .from('research_assignments')
+    .update(payload)
+    .eq('id', id)
+    .select('id, person_name, date, start_min, end_min, note, entered_by, created_at')
+    .single();
+  if (error) return { error };
+  return { error: null, data };
+}
+
+export async function deleteResearchAssignment(id) {
+  const { error } = await supabase.from('research_assignments').delete().eq('id', id);
+  return { error };
+}
+
+export function subscribeResearchAssignments(callback) {
+  return supabase
+    .channel('research-assignments-realtime')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'research_assignments' }, callback)
+    .subscribe();
+}

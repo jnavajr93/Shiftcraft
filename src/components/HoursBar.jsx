@@ -20,7 +20,7 @@ function runHoursTest() {
 runHoursTest();
 
 export default function HoursBar() {
-  const { data, doctorOffClinicIds } = useApp();
+  const { data, doctorOffClinicIds, effectiveAdditionalTasks } = useApp();
   const [collapsed, setCollapsed] = useState(false);
 
   const boardClinics = getBoardClinics(data.clinics)
@@ -32,11 +32,11 @@ export default function HoursBar() {
   const assigned = [];
   for (const p of data.people) {
     if (displayed.has(p.id)) continue;
-    let hours = calcPersonWeeklyHours(p.id, boardClinics, data.additionalTasks);
+    let hours = calcPersonWeeklyHours(p.id, boardClinics, effectiveAdditionalTasks);
     if (p.linkedPersonId) {
       const linked = data.people.find(q => q.id === p.linkedPersonId);
       if (linked) {
-        hours += calcPersonWeeklyHours(linked.id, boardClinics, data.additionalTasks);
+        hours += calcPersonWeeklyHours(linked.id, boardClinics, effectiveAdditionalTasks);
         displayed.add(linked.id);
       }
     }

@@ -263,14 +263,19 @@ function TaskSlotRow({ task, onPersonClick, onEdit }) {
       {/* Slot row — popover is a SIBLING, not a descendant, to avoid React event bubbling interference */}
       <div
         ref={combinedRef}
-        className={`task-slot${isOver && isAdmin ? ' drop-target' : ''}`}
-        onClick={() => { if (isAdmin) setShowPopover(s => !s); }}
-        style={{ cursor: isAdmin ? 'pointer' : 'default' }}
+        className={`task-slot${isOver && isAdmin && !task._isResearch ? ' drop-target' : ''}`}
+        onClick={() => { if (isAdmin && !task._isResearch) setShowPopover(s => !s); }}
+        style={{ cursor: (isAdmin && !task._isResearch) ? 'pointer' : 'default' }}
       >
         {/* Row 1: label + actions */}
         <div className="task-slot-row1">
-          <div className="task-label">{task.label}</div>
-          {isAdmin && (
+          <div className="task-label">
+            {task._isResearch && (
+              <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#8b5cf6', marginRight: 5, verticalAlign: 'middle', flexShrink: 0 }} />
+            )}
+            {task.label}
+          </div>
+          {isAdmin && !task._isResearch && (
             <div className="task-actions">
               <button
                 className="task-edit-btn"
@@ -300,15 +305,15 @@ function TaskSlotRow({ task, onPersonClick, onEdit }) {
               <span className="person-chip-name">{person.name}</span>
             </div>
           ) : (
-            <div className={`slot-empty${isOver && isAdmin ? ' droppable' : ''}`}>
-              {isAdmin ? 'Assign…' : '—'}
+            <div className={`slot-empty${isOver && isAdmin && !task._isResearch ? ' droppable' : ''}`}>
+              {isAdmin && !task._isResearch ? 'Assign…' : '—'}
             </div>
           )}
         </div>
       </div>
 
       {/* Popover lives OUTSIDE .task-slot so its clicks don't bubble to the toggle handler */}
-      {showPopover && isAdmin && (
+      {showPopover && isAdmin && !task._isResearch && (
         <TaskSlotPopover
           task={task}
           currentPersonId={task.assignedPersonId}
@@ -319,7 +324,7 @@ function TaskSlotRow({ task, onPersonClick, onEdit }) {
         />
       )}
 
-      {(isAdmin || timeDisplay || task.locationTag) && (
+      {(isAdmin || timeDisplay || task.locationTag) && !task._isResearch && (
         editingTime ? (
           <TaskTimeEditor
             task={task}
@@ -341,6 +346,11 @@ function TaskSlotRow({ task, onPersonClick, onEdit }) {
             {isAdmin && <Pencil size={9} style={{ opacity: 0.5 }} />}
           </div>
         )
+      )}
+      {task._isResearch && timeDisplay && (
+        <div className="variable-time-row" style={{ paddingLeft: 12, paddingRight: 12 }}>
+          <span>{timeDisplay}</span>
+        </div>
       )}
     </div>
   );
@@ -482,7 +492,7 @@ function AddTaskForm({ day, initialTask = null, onSubmit, onCancel }) {
 
 // ─── Additional Tasks Panel ───────────────────────────────────────────────────
 export default function AdditionalTasks({ onPersonClick }) {
-  const { data, isAdmin, removeTask, addTask, updateTask } = useApp();
+  const { data, isAdmin, removeTask, addTask, updateTask, effectiveAdditionalTasks } = useApp();
   const [addingDay, setAddingDay] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
 
@@ -502,7 +512,7 @@ export default function AdditionalTasks({ onPersonClick }) {
         <div className="tasks-section-header" style={{ marginBottom: 8 }}>Additional Tasks</div>
         <div className="tasks-grid">
           {DAYS.map(day => {
-            const dayTasks = (data.additionalTasks ?? []).filter(t => t.day === day);
+            const dayTasks = (effectiveAdditionalTasks ?? []).filter(t => t.day === day);
             return (
               <div key={day} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {dayTasks.length > 0 && (
@@ -521,7 +531,7 @@ export default function AdditionalTasks({ onPersonClick }) {
                           key={task.id}
                           task={task}
                           onPersonClick={onPersonClick}
-                          onEdit={() => { setAddingDay(null); setEditingTask(task); }}
+                          onEdit={() => { if (!task._isResearch) { setAddingDay(null); setEditingTask(task); } }}
                         />
                       )
                     ))}

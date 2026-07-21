@@ -90,7 +90,7 @@ export function WeekRows({ personIds, clinics, additionalTasks, monday }) {
 }
 
 function OverlayInner({ person, onClose }) {
-  const { data, isAdmin, managerInitials, deletePerson, addLog, currentWeek } = useApp();
+  const { data, isAdmin, managerInitials, deletePerson, addLog, currentWeek, effectiveAdditionalTasks } = useApp();
   const [confirming, setConfirming] = useState(false);
   const boardClinics = getBoardClinics(data.clinics);
 
@@ -101,7 +101,7 @@ function OverlayInner({ person, onClose }) {
     : null;
   const personIds = linkedPerson ? [person.id, linkedPerson.id] : [person.id];
   const hours = personIds.reduce(
-    (sum, id) => sum + calcPersonWeeklyHours(id, boardClinics, data.additionalTasks),
+    (sum, id) => sum + calcPersonWeeklyHours(id, boardClinics, effectiveAdditionalTasks),
     0
   );
 
@@ -126,7 +126,7 @@ function OverlayInner({ person, onClose }) {
         <button className="overlay-close" onClick={onClose}><X size={16} /></button>
       </div>
       <div className="overlay-body">
-        <WeekRows personIds={personIds} clinics={boardClinics} additionalTasks={data.additionalTasks} monday={currentWeek ? mondayOfWeek(currentWeek) : null} />
+        <WeekRows personIds={personIds} clinics={boardClinics} additionalTasks={effectiveAdditionalTasks} monday={currentWeek ? mondayOfWeek(currentWeek) : null} />
         {isAdmin && (
           <ArcChart
             hours={hours}

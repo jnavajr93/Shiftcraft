@@ -25,7 +25,7 @@ function todayDayIdx(currentWeek) {
 }
 
 export default function MobileStaffView({ onPersonClick }) {
-  const { data, boardClinics, currentWeek } = useApp();
+  const { data, boardClinics, currentWeek, effectiveAdditionalTasks } = useApp();
 
   const [dayIdx, setDayIdx] = useState(() => todayDayIdx(currentWeek) ?? 0);
   useEffect(() => { setDayIdx(todayDayIdx(currentWeek) ?? 0); }, [currentWeek]);
@@ -162,7 +162,7 @@ export default function MobileStaffView({ onPersonClick }) {
               <WeekRows
                 personIds={myPersonIds}
                 clinics={boardClinics ?? []}
-                additionalTasks={data.additionalTasks}
+                additionalTasks={effectiveAdditionalTasks}
                 monday={mondayOfWeek(currentWeek)}
               />
             </div>

@@ -29,6 +29,11 @@ import {
   fetchOncallOverrides as fetchOncallOverridesDB,
   saveOncallOverride as saveOncallOverrideDB,
   deleteOncallOverride as deleteOncallOverrideDB,
+  fetchAllResearchAssignments as fetchAllResearchAssignmentsDB,
+  saveResearchAssignment as saveResearchAssignmentDB,
+  updateResearchAssignment as updateResearchAssignmentDB,
+  deleteResearchAssignment as deleteResearchAssignmentDB,
+  subscribeResearchAssignments,
   weekKey,
   SCHEDULE_KEY,
   CHANGELOG_KEY,
@@ -649,6 +654,11 @@ export function AppProvider({ children }) {
   const [oncall, setOncall] = useState(null);
   const [oncallOverrides, setOncallOverrides] = useState([]);
 
+  // ─── Research assignments state ──────────────
+  const [researchAssignments, setResearchAssignments] = useState([]);
+  // null = table missing in Supabase; true = loaded OK
+  const [researchTableReady, setResearchTableReady] = useState(null);
+
   // ─── Verified save helper ─────────────────────
   // Versioned conditional save via upsert_schedule_data RPC.
   // On conflict (another manager saved between our load and this save):
@@ -1176,6 +1186,54 @@ export function AppProvider({ children }) {
     const { error } = await deleteCalendarOverrideDB(id);
     if (error) { console.error('[Shiftcraft] removeCalendarOverride error:', error); return { error }; }
     setCalendarOverrides(prev => prev.filter(o => o.id !== id));
+    return { error: null };
+  }, []);
+
+  // ─── Research assignments load + realtime ────
+  useEffect(() => {
+    fetchAllResearchAssignmentsDB().then(result => {
+      if (result.status === 'table_missing') {
+        console.warn('[Shiftcraft] research_assignments table not found in Supabase — research feature disabled');
+        setResearchTableReady(false);
+        return;
+      }
+      setResearchTableReady(true);
+      if (result.data) setResearchAssignments(result.data);
+    });
+    const channel = subscribeResearchAssignments((payload) => {
+      setResearchAssignments(prev => {
+        if (payload.eventType === 'INSERT')
+          return [...prev, payload.new].sort((a, b) => a.date.localeCompare(b.date));
+        if (payload.eventType === 'UPDATE')
+          return prev.map(r => r.id === payload.new.id ? payload.new : r)
+            .sort((a, b) => a.date.localeCompare(b.date));
+        if (payload.eventType === 'DELETE')
+          return prev.filter(r => r.id !== payload.old.id);
+        return prev;
+      });
+    });
+    return () => supabase.removeChannel(channel);
+  }, []);
+
+  const addResearchAssignment = useCallback(async (payload) => {
+    const { error, data } = await saveResearchAssignmentDB(payload);
+    if (error) { console.error('[Shiftcraft] addResearchAssignment error:', error); return { error }; }
+    setResearchAssignments(prev => [...prev, data].sort((a, b) => a.date.localeCompare(b.date)));
+    return { error: null, data };
+  }, []);
+
+  const editResearchAssignment = useCallback(async (id, payload) => {
+    const { error, data } = await updateResearchAssignmentDB(id, payload);
+    if (error) { console.error('[Shiftcraft] editResearchAssignment error:', error); return { error }; }
+    setResearchAssignments(prev => prev.map(r => r.id === id ? data : r)
+      .sort((a, b) => a.date.localeCompare(b.date)));
+    return { error: null, data };
+  }, []);
+
+  const removeResearchAssignment = useCallback(async (id) => {
+    const { error } = await deleteResearchAssignmentDB(id);
+    if (error) { console.error('[Shiftcraft] removeResearchAssignment error:', error); return { error }; }
+    setResearchAssignments(prev => prev.filter(r => r.id !== id));
     return { error: null };
   }, []);
 
@@ -1937,6 +1995,55 @@ export function AppProvider({ children }) {
   // ─── Derived: history scores for solver tiebreaking ──
   const historyScores = useMemo(() => computeHistoryScores(placementHistory), [placementHistory]);
 
+  // ─── Materialize research assignments for current week ──
+  // Research records for dates that fall in the current week become Additional Task
+  // objects so they appear on the board, in WeekRows, and count toward hours.
+  // They are NOT added to data.additionalTasks (which feeds the slot map) — they
+  // live in effectiveAdditionalTasks alongside manual tasks.
+  const materializedResearch = useMemo(() => {
+    if (!researchAssignments.length || !globalData) return [];
+    const monday = mondayOfWeek(currentWeek);
+    const DAYS_LIST = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+    const result = [];
+    for (const ra of researchAssignments) {
+      let dayName = null;
+      for (let i = 0; i < 5; i++) {
+        const d = new Date(monday);
+        d.setUTCDate(monday.getUTCDate() + i);
+        if (d.toISOString().slice(0, 10) === ra.date) {
+          dayName = DAYS_LIST[i];
+          break;
+        }
+      }
+      if (!dayName) continue;
+      const person = (globalData.people ?? []).find(p =>
+        p.name.trim().toLowerCase() === (ra.person_name ?? '').trim().toLowerCase()
+      );
+      result.push({
+        id: `research:${ra.id}`,
+        label: 'Research',
+        day: dayName,
+        locationTag: null,
+        assignedPersonId: person?.id ?? null,
+        isLocationSpecific: false,
+        start: ra.start_min ?? null,
+        end: ra.end_min ?? null,
+        _isResearch: true,
+        _researchId: ra.id,
+        _note: ra.note ?? null,
+      });
+    }
+    return result;
+  }, [researchAssignments, globalData, currentWeek]);
+
+  // effectiveAdditionalTasks = manual tasks + materialized research for current week.
+  // Use this everywhere display/hours matter. Do NOT use it in slot eligibility checks
+  // (SlotPopover, UnassignedStaff) — research does not block clinic slots.
+  const effectiveAdditionalTasks = useMemo(
+    () => [...(globalData?.additionalTasks ?? []), ...materializedResearch],
+    [globalData, materializedResearch],
+  );
+
   // ─── Week label ─────────────────────────────
   const weekMonday = mondayOfWeek(currentWeek);
   const weekLabel = weekMonday.toLocaleDateString('en-US', {
@@ -2070,6 +2177,9 @@ export function AppProvider({ children }) {
       doctorOffClinicIds,
       holidayClosedClinicIds,
       holidayWorkedMap,
+      researchAssignments, researchTableReady,
+      addResearchAssignment, editResearchAssignment, removeResearchAssignment,
+      effectiveAdditionalTasks,
     }}>
       {children}
     </AppContext.Provider>

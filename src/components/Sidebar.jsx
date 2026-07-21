@@ -111,12 +111,12 @@ function StaffHoverCard({ person, hours, clinics, people, monday, style, onMouse
 // ─── Person Card ──────────────────────────────────────────────────────────────
 
 function PersonCard({ person, onPersonClick, clinics, monday }) {
-  const { data, isAdmin } = useApp();
+  const { data, isAdmin, effectiveAdditionalTasks } = useApp();
   const linkedPerson = person.linkedPersonId
     ? (data.people.find(p => p.id === person.linkedPersonId) ?? null)
     : null;
-  const hours = calcPersonWeeklyHours(person.id, clinics, data.additionalTasks)
-    + (linkedPerson ? calcPersonWeeklyHours(linkedPerson.id, clinics, data.additionalTasks) : 0);
+  const hours = calcPersonWeeklyHours(person.id, clinics, effectiveAdditionalTasks)
+    + (linkedPerson ? calcPersonWeeklyHours(linkedPerson.id, clinics, effectiveAdditionalTasks) : 0);
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: person.id });
 
   const [cardPos, setCardPos] = useState(null);
