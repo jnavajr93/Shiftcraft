@@ -637,6 +637,13 @@ export function AppProvider({ children }) {
   const managerInitialsRef = useRef(null);
   // Guard: skip the changelog save useEffect when the update came from Realtime.
   const changelogFromRemoteRef = useRef(false);
+  // Guard: skip the global-definitions auto-save when the update came from a Realtime
+  // SCHEDULE_KEY broadcast (our own echo or another manager's save).
+  // Without this guard every save triggers a realtime echo → setGlobalData → another
+  // auto-save → another echo → infinite loop.  A stale echo arriving after a local
+  // On Call toggle could overwrite the toggle with the pre-toggle DB value, which is
+  // exactly the reported bug.  Same pattern as changelogFromRemoteRef.
+  const scheduleFromRemoteRef = useRef(false);
   // Presence: other managers currently viewing this week.
   const [presentManagers, setPresentManagers] = useState([]);
   // Conflict toast: shown when a save is rejected due to a version mismatch.
@@ -947,6 +954,10 @@ export function AppProvider({ children }) {
   useEffect(() => {
     if (isLoading || !globalData) return;
     if (isFirstRender.current) { isFirstRender.current = false; return; }
+    // Skip saving when this render was triggered by a Realtime SCHEDULE_KEY broadcast
+    // (our own echo or another manager's save).  Saving would echo back and trigger an
+    // infinite loop; the DB already has the correct value, so there's nothing to write.
+    if (scheduleFromRemoteRef.current) { scheduleFromRemoteRef.current = false; return; }
     saveScheduleDB(toDefinitionData(globalData));
   }, [globalData, isLoading]);
 
@@ -1005,6 +1016,9 @@ export function AppProvider({ children }) {
             return { ...g, ...applied };
           });
         } else if (key === SCHEDULE_KEY) {
+          // Flag the following setGlobalData as coming from Realtime so the
+          // auto-save useEffect skips the echo write back to Supabase.
+          scheduleFromRemoteRef.current = true;
           setGlobalData(g => {
             if (!g) return g;
             const currentMap = extractSlotMap(g.clinics, g.additionalTasks);
