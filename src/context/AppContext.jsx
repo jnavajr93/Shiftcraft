@@ -284,7 +284,12 @@ function runMigrations(data) {
   }
 
   if (!localStorage.getItem('shiftcraft.migration.cleartasks')) {
-    d = { ...d, additionalTasks: [] };
+    // BUG FIX: original code did `additionalTasks: []` — a blanket wipe that destroyed
+    // all manually-added tasks on every new device, because the next auto-save then
+    // pushed the empty list to Supabase for everyone.
+    // The intent was only to remove the pre-seeded stub tasks (triage-mon, etc.) that
+    // were baked into the old seed data and are now removed. Filter those IDs only.
+    d = { ...d, additionalTasks: (d.additionalTasks ?? []).filter(t => !SEEDED_TASK_IDS.has(t.id)) };
     try { localStorage.setItem('shiftcraft.migration.cleartasks', '1'); } catch { /* ignore */ }
     dirty = true;
   }
@@ -546,10 +551,10 @@ function runMigrations(data) {
     try { localStorage.setItem('shiftcraft.migration.tasktypes_research', '1'); } catch { /* ignore */ }
   }
 
-  // Note: no localStorage save here — caller saves to Supabase
-  void dirty;
-
-  return d;
+  // Return { data, dirty } so init() can save to Supabase immediately when migrations ran.
+  // Waiting for the next user action is unsafe: that save would push the migrated state
+  // (possibly with cleared or reshaped fields) as a side-effect of an unrelated edit.
+  return { data: d, dirty };
 }
 
 // ─── Snapshot helpers (module-level, usable in init()) ────────────────────
@@ -752,7 +757,17 @@ export function AppProvider({ children }) {
         saveScheduleDB(toDefinitionData(data));
       }
 
-      data = runMigrations(data);
+      {
+        const { data: migrated, dirty: migrationDirty } = runMigrations(data);
+        data = migrated;
+        // Save immediately when migrations touched data — do NOT wait for the next user action.
+        // Waiting is unsafe: a subsequent auto-save would push the migrated state (potentially
+        // with cleared fields) as a side-effect of an unrelated edit.
+        if (migrationDirty) {
+          console.log('[Shiftcraft init] Migrations ran — saving updated definitions to Supabase');
+          saveScheduleDB(toDefinitionData(data));
+        }
+      }
 
       // ── Duplicate clinic cleanup ──────────────────────────────────────────
       // Remove stale (location, day) duplicates that getBoardClinics() hides.
