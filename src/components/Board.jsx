@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Info } from 'lucide-react';
+import { Search, AlertTriangle } from 'lucide-react';
 import { useApp, mondayOfWeek, isoWeek } from '../context/AppContext.jsx';
 import { DAYS } from '../data/seed.js';
 import ClinicCard from './ClinicCard.jsx';
@@ -86,7 +86,7 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic, 
       {/* Standing staff notice — staff view only */}
       {!isAdmin && (
         <div className="staff-notice">
-          <Info size={13} style={{ flexShrink: 0, marginTop: 1 }} />
+          <AlertTriangle size={13} />
           <span>The schedule, opening times, and traveling to offices are subject to change with short notice. Please check your schedule regularly.</span>
         </div>
       )}

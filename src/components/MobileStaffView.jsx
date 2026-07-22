@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, User, X, Info } from 'lucide-react';
+import { Search, User, X, AlertTriangle } from 'lucide-react';
 import { useApp, isoWeek, mondayOfWeek } from '../context/AppContext.jsx';
 import {
   DAYS,
@@ -126,7 +126,7 @@ export default function MobileStaffView({ onPersonClick }) {
 
           {/* Standing staff notice */}
           <div className="staff-notice staff-notice--mobile">
-            <Info size={12} style={{ flexShrink: 0, marginTop: 1 }} />
+            <AlertTriangle size={12} />
             <span>The schedule, opening times, and traveling to offices are subject to change with short notice. Please check your schedule regularly.</span>
           </div>
 
