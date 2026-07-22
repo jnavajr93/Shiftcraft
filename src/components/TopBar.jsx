@@ -1332,7 +1332,7 @@ export default function TopBar({ activeTab, setActiveTab, setupSection, setSetup
         <AbsenceCalendar
           onClose={() => setShowAbsences(false)}
           currentWeek={currentWeek}
-          onJumpToWeek={jumpToWeek}
+          onJumpToWeek={(weekStr) => { setActiveTab('schedule'); jumpToWeek(weekStr); }}
         />
       )}
       {isAdmin && showPreview && !showAbsences && (

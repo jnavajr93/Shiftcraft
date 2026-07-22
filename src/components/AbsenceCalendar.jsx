@@ -18,7 +18,7 @@ export const ABSENCE_TYPES = [
   // Partial Day is merged into Approved Time Off — hidden from form/legend; old DB rows
   // are remapped to 'Approved' at display time via LEGACY_REMAP below.
   { key: 'Partial',   label: 'Approved Time Off',   short: 'Approved', color: '#22c55e', hidden: true },
-  { key: 'DoctorOff', label: 'Doctor Off',          short: 'Dr. Off',  color: '#0d9488' },
+  { key: 'DoctorOff', label: 'Doctor Off',          short: 'Dr. Off',  color: '#22b8cf' },
 ];
 
 // Types available for selection in the add/edit form and shown in the legend
