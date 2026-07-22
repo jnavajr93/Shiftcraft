@@ -2,7 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { Pencil, AlertTriangle, Users, Power } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { getSlotLabel, getSlotTimeLabel, getSlotPersonId, getSlotTimeObj, formatVariableSlotTime, formatOpenerTimeDisplay, formatOpeningFDTimeDisplay, formatClosingFDOverlayDisplay, formatScribeTimeDisplay, formatClosingOverlayDisplay, minutesToTime, SLOT_TYPES, OBS_SLOT_TYPES, SLOT_DISPLAY_LABELS, calcSlotHours, calcPersonWeeklyHours } from '../data/seed.js';
+import { getSlotLabel, getSlotTimeLabel, getSlotPersonId, getSlotTimeObj, formatVariableSlotTime, formatOpenerTimeDisplay, formatOpeningFDTimeDisplay, formatClosingFDOverlayDisplay, formatScribeTimeDisplay, formatClosingOverlayDisplay, minutesToTime, SLOT_TYPES, OBS_SLOT_TYPES, SLOT_DISPLAY_LABELS, calcSlotHours, calcPersonWeeklyHours, slotEffectiveRange } from '../data/seed.js';
 import { TimeRangePicker } from './TimeRangePicker.jsx';
 
 function fmtHours(h) {
@@ -365,6 +365,7 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
 
 const OBS_LABELS = {
   preop: 'Pre-Op/PACU',
+  preop2: 'Pre-Op/PACU 2',
   sterile: 'Sterile Processing',
   circulator: 'Circulator',
   scrub: 'Scrub Tech',
@@ -412,6 +413,15 @@ function ObsSlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSear
   const interactive = isAdmin && clinicOpen;
   const label = OBS_LABELS[slotType] ?? slotType;
   const obsTimeDisplay = formatVariableSlotTime(slotVal);
+  // Show provider-buffered range (e.g. 7:00 AM – 5:00 PM for Dr. R) when no custom time is set.
+  // Falls back to "Open – Close" for blank-provider OBS clinics (no buffer applied).
+  const defaultObsTimeDisplay = (() => {
+    const range = slotEffectiveRange(slotType, clinic);
+    if (range.start === (clinic.startTime ?? 0) && range.end === (clinic.endTime ?? 0)) {
+      return 'Open – Close';
+    }
+    return `${minutesToTime(range.start)} – ${minutesToTime(range.end)}`;
+  })();
   const slotHrs = (() => {
     if (!person || !isAdmin) return null;
     const h = calcSlotHours(clinic, slotType);
@@ -473,7 +483,7 @@ function ObsSlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSear
             className={`variable-time-row${interactive ? ' editable' : ''}`}
             onClick={interactive ? (e) => { e.stopPropagation(); setEditingTime(true); } : undefined}
           >
-            <span className="slot-time-label">{obsTimeDisplay ?? 'Open – Close'}</span>
+            <span className="slot-time-label">{obsTimeDisplay ?? defaultObsTimeDisplay}</span>
             <HoursPill slotHrs={slotHrs} />
             {interactive && <Pencil size={9} style={{ opacity: 0.5 }} />}
           </div>

@@ -42,10 +42,11 @@ function getRequiredSlots(clinic, providers) {
     return true;
   });
 
-  // OBS clinics: only the four canonical OBS slot types are ever required.
+  // OBS clinics: only the four canonical required OBS slot types are auto-filled.
+  // preop2 is optional — never auto-filled; filled manually when a second person is needed.
   // Filter here as belt-and-suspenders — applySlotMap also strips stale keys on load,
   // but an in-memory OBS clinic with a stale key would still produce a bad constraint.
-  if (isObs) return allSlotKeys.filter(k => OBS_SLOT_TYPES.includes(k));
+  if (isObs) return allSlotKeys.filter(k => OBS_SLOT_TYPES.includes(k) && k !== 'preop2');
 
   // Dr. B (Skibell): only Scribe and Opener are ever auto-generated.
   // Closing/Middle/Training are intentionally left empty by the solver and filled

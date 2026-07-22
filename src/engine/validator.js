@@ -185,7 +185,7 @@ export function findObsViolations(assignments, clinics, people) {
 }
 
 // OBS slot keys — must match OBS_SLOT_TYPES in seed.js
-const OBS_SLOT_KEYS = new Set(['preop', 'sterile', 'circulator', 'scrub']);
+const OBS_SLOT_KEYS = new Set(['preop', 'preop2', 'sterile', 'circulator', 'scrub']);
 
 /**
  * Post-generation slot-type integrity check.
@@ -376,7 +376,7 @@ export function findAbsenceViolations(clinics, people, absences, weekMonday) {
 }
 
 const OBS_SLOT_LABELS = {
-  preop: 'Pre-Op/PACU', sterile: 'Sterile Processing',
+  preop: 'Pre-Op/PACU', preop2: 'Pre-Op/PACU 2', sterile: 'Sterile Processing',
   circulator: 'Circulator', scrub: 'Scrub Tech',
 };
 
@@ -395,6 +395,15 @@ export function findStaffingGaps(clinics) {
     const isDrB = c.provider === 'Dr. B';
 
     if (isObs) {
+      // Warn if OBS provider is not Dr. R or Dr. A — buffers won't be applied
+      const obsProvider = c.provider ?? '';
+      if (obsProvider && !obsProvider.includes('Dr. R') && !obsProvider.includes('Dr. A')) {
+        violations.push({
+          label: `OBS ${c.day}: unexpected provider "${obsProvider}" — time buffers not applied (expected Dr. R or Dr. A)`,
+          clinicId: c.id,
+        });
+      }
+      // preop2 is optional — empty is not a gap. Only check the four required OBS slots.
       for (const slotType of ['preop', 'sterile', 'circulator', 'scrub']) {
         if (!getSlotPersonId(c.slots?.[slotType])) {
           violations.push({

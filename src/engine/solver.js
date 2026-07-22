@@ -119,7 +119,12 @@ function exceedsHourCap(personId, additionalHrs, weekHours, cfg) {
  *   openingFrontDesk        : [start - 30, 3:30 PM ]   (no post buffer; end at 930)
  *   closingFrontDesk        : [10:30 AM,   end + 90]   (start at 630)
  *   frontDesk               : [start - 30, end + 90]   (both buffers)
+ *   OBS (Dr. R)             : [start - 60, end + 120]  (60 min early, 2 h after)
+ *   OBS (Dr. A)             : [start - 60, end + 60]   (60 min early, 1 h after)
+ *   OBS (other/blank)       : [start,      end     ]   (zero buffer — surfaces as warning)
  *   all other roles         : [start,      end     ]
+ *
+ * shift.name carries the provider name for OBS shifts (set by adapter.js).
  */
 function effectiveRange(roleId, shift) {
   const s = shift.start ?? 0;
@@ -137,6 +142,16 @@ function effectiveRange(roleId, shift) {
       return { start: 630, end: e + 90 };
     case 'frontDesk':
       return { start: s - 30, end: e + 90 };
+    case 'preop':
+    case 'preop2':
+    case 'sterile':
+    case 'circulator':
+    case 'scrub': {
+      const provider = shift.name ?? '';
+      if (provider.includes('Dr. R')) return { start: s - 60, end: e + 120 };
+      if (provider.includes('Dr. A')) return { start: s - 60, end: e + 60 };
+      return { start: s, end: e };
+    }
     default:
       return { start: s, end: e };
   }

@@ -12,7 +12,7 @@ export const SLOT_DISPLAY_LABELS = {
   middle: 'Middle',
   training: 'Training',
 };
-export const OBS_SLOT_TYPES = ['preop', 'sterile', 'circulator', 'scrub'];
+export const OBS_SLOT_TYPES = ['preop', 'preop2', 'sterile', 'circulator', 'scrub'];
 export const EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'PRN'];
 export const SKILLS = ['Workup', 'Treatments', 'FAs', 'Autoclave & Closing'];
 export const ADMIN_SKILLS = ['Triage', 'Front Desk', 'Surgery Scheduling'];
@@ -219,6 +219,7 @@ function rawSlotHours(clinic, slotType) {
       return (endMin - sv.start) / 60;
     }
     case 'preop':
+    case 'preop2':
     case 'sterile':
     case 'circulator':
     case 'scrub': {
@@ -360,6 +361,20 @@ export function slotEffectiveRange(slot, clinic) {
     // single FD: both buffers
     case 'frontDesk':
       return { start: cs ?? (clinicStart - 30), end: ce ?? (clinicEnd + 90) };
+    // OBS slots: provider-specific buffers.
+    // Dr. R: 60 min early arrival, 120 min post-case stay.
+    // Dr. A: 60 min early arrival, 60 min post-case stay.
+    // Other/blank: zero buffer (surfaces as validation warning).
+    case 'preop':
+    case 'preop2':
+    case 'sterile':
+    case 'circulator':
+    case 'scrub': {
+      const provider = clinic.provider ?? '';
+      if (provider.includes('Dr. R')) return { start: cs ?? (clinicStart - 60), end: ce ?? (clinicEnd + 120) };
+      if (provider.includes('Dr. A')) return { start: cs ?? (clinicStart - 60), end: ce ?? (clinicEnd + 60) };
+      return { start: cs ?? clinicStart, end: ce ?? clinicEnd };
+    }
     default:
       return { start: cs ?? clinicStart, end: ce ?? clinicEnd };
   }
@@ -556,8 +571,8 @@ export function getSeedData() {
     { id: 'fri-estrella-drb',   day: 'Fri', week: 'A', location: 'Estrella',   provider: 'Dr. B', open: true, startTime: 480, endTime:  990, patientCount: 20, slots: { scribe: 'yadi',   opener: null,      closing: null,      middle: { personId: null, start: null, end: null },     training: { personId: null, start: null, end: null } } },
     { id: 'fri-phoenix-drr',    day: 'Fri', week: 'A', location: 'Phoenix',    provider: 'Dr. R', open: true, startTime: 480, endTime: 1020, patientCount: 38, slots: { scribe: 'john',   opener: 'martha',  closing: 'jaron',   middle: { personId: null, start: null, end: null },     training: { personId: null, start: null, end: null } } },
     // OBS (Surgery Center)
-    { id: 'thu-obs', day: 'Thu', week: 'A', location: 'OBS', provider: '', open: true, startTime: 480, endTime: 1020, patientCount: null, slots: { preop: { personId: null }, sterile: { personId: null }, circulator: { personId: null }, scrub: { personId: null } } },
-    { id: 'fri-obs', day: 'Fri', week: 'A', location: 'OBS', provider: '', open: true, startTime: 480, endTime: 1020, patientCount: null, slots: { preop: { personId: null }, sterile: { personId: null }, circulator: { personId: null }, scrub: { personId: null } } },
+    { id: 'thu-obs', day: 'Thu', week: 'A', location: 'OBS', provider: '', open: true, startTime: 480, endTime: 1020, patientCount: null, slots: { preop: { personId: null }, preop2: { personId: null }, sterile: { personId: null }, circulator: { personId: null }, scrub: { personId: null } } },
+    { id: 'fri-obs', day: 'Fri', week: 'A', location: 'OBS', provider: '', open: true, startTime: 480, endTime: 1020, patientCount: null, slots: { preop: { personId: null }, preop2: { personId: null }, sterile: { personId: null }, circulator: { personId: null }, scrub: { personId: null } } },
   ];
 
   const additionalTasks = [];
