@@ -152,15 +152,13 @@ export default function MobileStaffView({ onPersonClick }) {
         </>
       )}
 
-      {/* Item 3: bottom-sheet — the sole presentation path for "my week" */}
+      {/* My schedule — centered modal (not bottom sheet; bottom sheet clips Friday) */}
       {sheetOpen && (
-        <div className="bottom-sheet-wrapper">
-          <div className="bottom-sheet-backdrop" onClick={() => setShowMySchedule(false)} />
-          <div className="bottom-sheet">
-            <div className="sheet-handle" />
+        <div className="my-schedule-backdrop" onClick={() => setShowMySchedule(false)}>
+          <div className="my-schedule-modal" onClick={e => e.stopPropagation()}>
             <div className="mobile-my-schedule-header">
               <span className="mobile-my-schedule-title">{myName}'s Week</span>
-              <button className="btn-icon" onClick={clearMyName} aria-label="Forget Me" title="Forget Me">
+              <button className="btn-icon" onClick={() => setShowMySchedule(false)} aria-label="Close">
                 <X size={16} />
               </button>
             </div>

@@ -626,7 +626,7 @@ html, body, #root {
   to   { opacity: 1; transform: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .overlay-modal, .bottom-sheet { animation: none; }
+  .overlay-modal, .bottom-sheet, .my-schedule-modal { animation: none; }
   .config-panel { transition: none; }
 }
 
@@ -647,6 +647,28 @@ html, body, #root {
 .sheet-handle {
   width: 36px; height: 4px; border-radius: 2px;
   background: var(--border-strong); margin: 8px auto 4px;
+}
+
+/* ─── My Schedule Modal (replaces bottom sheet on mobile) ──────────────────── */
+.my-schedule-backdrop {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+  background: var(--bg-overlay); backdrop-filter: blur(4px);
+}
+.my-schedule-modal {
+  background: var(--bg-elevated);
+  border: 0.5px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  width: 100%; max-width: 480px;
+  max-height: 85vh;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  animation: modal-in 200ms ease;
+}
+@keyframes modal-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: none; }
 }
 
 /* ─── Overlay Content ─────────────────────────── */
