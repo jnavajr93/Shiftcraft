@@ -356,6 +356,15 @@ html, body, #root {
   display: flex; align-items: center;
   background: var(--bg-base);
 }
+/* Standing staff notice — desktop (inside Board) and mobile (MobileStaffView) */
+.staff-notice {
+  display: flex; align-items: flex-start; gap: 7px; flex-shrink: 0;
+  padding: 6px 16px;
+  background: var(--bg-base);
+  border-bottom: 0.5px solid var(--border);
+  font-size: 11px; color: var(--text-muted); line-height: 1.5;
+}
+.staff-notice--mobile { padding: 5px 12px; }
 .search-wrap { position: relative; display: inline-flex; align-items: center; width: 100%; max-width: 300px; }
 .search-icon { position: absolute; left: 10px; color: var(--text-muted); pointer-events: none; display: flex; }
 .search-input {
