@@ -1609,6 +1609,7 @@ html, body, #root {
   border: 0.5px solid var(--border-strong);
   border-radius: var(--radius-lg);
   overflow: hidden;
+  flex-shrink: 0; /* prevent flex from squeezing cards — each renders full height, parent scrolls */
 }
 .mobile-clinic-location {
   padding: 8px 14px;
