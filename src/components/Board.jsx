@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, AlertTriangle } from 'lucide-react';
 import { useApp, mondayOfWeek, isoWeek } from '../context/AppContext.jsx';
 import { DAYS } from '../data/seed.js';
@@ -9,6 +9,57 @@ const LOCATION_ORDER = ['Phoenix', 'Chandler', 'Estrella', 'Scottsdale', 'OBS'];
 export default function Board({ search, setSearch, onPersonClick, onEditClinic, footer }) {
   const { data, isAdmin, boardClinics, currentWeek, doctorOffClinicIds, holidayWorkedMap } = useApp();
   const monday = mondayOfWeek(currentWeek);
+
+  // ── Staff search dropdown ──────────────────────────────────────────────────
+  // Dedupe by name: one row per person, prefer tech record for color dot.
+  // Only shown in staff view (isAdmin uses the board highlight flow).
+  const searchSuggestions = (!isAdmin && search.trim())
+    ? Object.values(
+        (data.people ?? [])
+          .filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
+          .reduce((acc, p) => {
+            const key = p.name.toLowerCase();
+            if (!acc[key] || (p.staffType ?? 'tech') !== 'admin') acc[key] = p;
+            return acc;
+          }, {})
+      )
+    : [];
+
+  const [activeIdx, setActiveIdx] = useState(-1);
+  // Reset keyboard selection when the query changes
+  useEffect(() => { setActiveIdx(-1); }, [search]);
+
+  const searchWrapRef = useRef(null);
+  // Close dropdown when clicking outside the search wrap
+  useEffect(() => {
+    if (searchSuggestions.length === 0) return;
+    const handler = (e) => {
+      if (searchWrapRef.current && !searchWrapRef.current.contains(e.target)) {
+        setSearch('');
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [searchSuggestions.length, setSearch]);
+
+  const handleSearchKeyDown = useCallback((e) => {
+    if (searchSuggestions.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIdx(i => Math.min(i + 1, searchSuggestions.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIdx(i => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter') {
+      if (activeIdx >= 0 && activeIdx < searchSuggestions.length) {
+        e.preventDefault();
+        onPersonClick(searchSuggestions[activeIdx].id);
+        setSearch('');
+      }
+    } else if (e.key === 'Escape') {
+      setSearch('');
+    }
+  }, [searchSuggestions, activeIdx, onPersonClick, setSearch]);
 
   // Midnight rollover — tick increments at midnight so todayDay re-evaluates
   const [tick, setTick] = useState(0);
@@ -70,7 +121,7 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic, 
     <div className="board-wrapper">
       {/* Search bar: OUTSIDE board-scroll — never scrolls away. */}
       <div className="board-search">
-        <div className="search-wrap">
+        <div className="search-wrap" ref={searchWrapRef}>
           <span className="search-icon"><Search size={15} /></span>
           <input
             data-tour="search-bar"
@@ -79,7 +130,29 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic, 
             placeholder="Search Staff…"
             value={search}
             onChange={e => setSearch(e.target.value)}
+            onKeyDown={handleSearchKeyDown}
+            autoComplete="off"
           />
+          {searchSuggestions.length > 0 && (
+            <div className="search-suggestions">
+              {searchSuggestions.map((p, i) => (
+                <button
+                  key={p.id}
+                  className={`search-suggestion${i === activeIdx ? ' search-suggestion--active' : ''}`}
+                  onMouseDown={e => {
+                    // mousedown fires before blur; prevent input blur closing dropdown
+                    e.preventDefault();
+                    onPersonClick(p.id);
+                    setSearch('');
+                  }}
+                  onMouseEnter={() => setActiveIdx(i)}
+                >
+                  <div className="dot" style={{ background: p.color }} />
+                  {p.name}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

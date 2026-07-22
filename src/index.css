@@ -378,6 +378,21 @@ html, body, #root {
 }
 .search-input:focus { border-color: var(--accent); }
 .search-input::placeholder { color: var(--text-muted); }
+.search-suggestions {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 50;
+  background: var(--bg-elevated); border: 0.5px solid var(--border-strong);
+  border-radius: var(--radius); overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+}
+.search-suggestion {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 10px 14px;
+  background: none; border: none; border-bottom: 0.5px solid var(--border);
+  color: var(--text-primary); font-size: 14px; font-family: var(--font);
+  cursor: pointer; text-align: left;
+}
+.search-suggestion:last-child { border-bottom: none; }
+.search-suggestion--active { background: var(--accent-subtle); }
 
 /* Day-header strip: sits between search bar and the scrollable clinic grid.
    overflow:hidden clips content without showing a scrollbar; JS mirrors
