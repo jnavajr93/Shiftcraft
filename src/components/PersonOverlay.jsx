@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
-import { X, AlertTriangle } from 'lucide-react';
+import { X, AlertTriangle, PhoneCall } from 'lucide-react';
 import { useApp, mondayOfWeek } from '../context/AppContext.jsx';
 import { DAYS, calcPersonWeeklyHours, getBoardClinics, getSlotLabel, getSlotPersonId, getRenderedSlotEntries, formatVariableSlotTime, formatOpenerTimeDisplay, formatOpeningFDTimeDisplay, formatClosingOverlayDisplay, formatClosingFDOverlayDisplay, formatScribeTimeDisplay, formatTaskTime, OBS_SLOT_TYPES, slotEffectiveRange } from '../data/seed.js';
 import ArcChart from './ArcChart.jsx';
+import { getPersonNextBlock, formatBlockRange } from '../utils/oncall.js';
+
+const ONCALL_COLOR = '#f59e0b';
 
 function useIsMobile() {
   return window.matchMedia('(max-width: 640px)').matches;
@@ -89,8 +92,8 @@ export function WeekRows({ personIds, clinics, additionalTasks, monday }) {
   );
 }
 
-function OverlayInner({ person, onClose }) {
-  const { data, isAdmin, managerInitials, deletePerson, addLog, currentWeek, effectiveAdditionalTasks } = useApp();
+function OverlayInner({ person, onClose, onOpenOnCallRotation }) {
+  const { data, isAdmin, managerInitials, deletePerson, addLog, currentWeek, effectiveAdditionalTasks, oncall, oncallOverrides } = useApp();
   const [confirming, setConfirming] = useState(false);
   const boardClinics = getBoardClinics(data.clinics);
 
@@ -104,6 +107,11 @@ function OverlayInner({ person, onClose }) {
     (sum, id) => sum + calcPersonWeeklyHours(id, boardClinics, effectiveAdditionalTasks),
     0
   );
+
+  // On-call block for staff view — compute once, used in body
+  const nextBlock = (!isAdmin && oncall?.rotation?.length && oncall?.anchorWeek)
+    ? getPersonNextBlock(person.name, oncall, currentWeek)
+    : null;
 
   const handleRemove = () => {
     addLog({ action: `${person.name} removed from roster by admin`, personName: person.name, day: '', detail: '', initials: managerInitials ?? undefined });
@@ -129,6 +137,17 @@ function OverlayInner({ person, onClose }) {
       </div>
       <div className="overlay-body">
         <WeekRows personIds={personIds} clinics={boardClinics} additionalTasks={effectiveAdditionalTasks} monday={currentWeek ? mondayOfWeek(currentWeek) : null} />
+        {nextBlock && (
+          <button className="overlay-oncall-row" onClick={onOpenOnCallRotation}>
+            <PhoneCall size={13} style={{ color: ONCALL_COLOR, flexShrink: 0 }} />
+            <span className="overlay-oncall-row-label" style={{ color: ONCALL_COLOR }}>
+              {nextBlock.isCurrent ? 'On Call Now:' : 'On Call:'}
+            </span>
+            <span className="overlay-oncall-row-range">
+              {formatBlockRange(nextBlock.startWeek, nextBlock.endWeek)}
+            </span>
+          </button>
+        )}
         {isAdmin && (
           <ArcChart
             hours={hours}
@@ -174,7 +193,7 @@ function OverlayInner({ person, onClose }) {
   );
 }
 
-export default function PersonOverlay({ person, onClose }) {
+export default function PersonOverlay({ person, onClose, onOpenOnCallRotation }) {
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -189,7 +208,7 @@ export default function PersonOverlay({ person, onClose }) {
         <div className="bottom-sheet-backdrop" onClick={onClose} />
         <div className="bottom-sheet">
           <div className="sheet-handle" />
-          <OverlayInner person={person} onClose={onClose} />
+          <OverlayInner person={person} onClose={onClose} onOpenOnCallRotation={onOpenOnCallRotation} />
         </div>
       </div>
     );
@@ -198,7 +217,7 @@ export default function PersonOverlay({ person, onClose }) {
   return (
     <div className="overlay-backdrop" onClick={onClose}>
       <div className="overlay-modal" onClick={e => e.stopPropagation()}>
-        <OverlayInner person={person} onClose={onClose} />
+        <OverlayInner person={person} onClose={onClose} onOpenOnCallRotation={onOpenOnCallRotation} />
       </div>
     </div>
   );

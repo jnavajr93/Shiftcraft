@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, User, X, AlertTriangle } from 'lucide-react'; // AlertTriangle used for board notice + overlay footer
+import { Search, User, X, AlertTriangle, PhoneCall } from 'lucide-react';
 import { useApp, isoWeek, mondayOfWeek } from '../context/AppContext.jsx';
 import {
   DAYS,
@@ -15,6 +15,9 @@ import {
   OBS_SLOT_TYPES,
 } from '../data/seed.js';
 import { WeekRows } from './PersonOverlay.jsx';
+import { getOnCallForWeek, getPersonNextBlock, formatBlockRange } from '../utils/oncall.js';
+
+const ONCALL_COLOR = '#f59e0b';
 
 const STORAGE_KEY = 'shiftcraft_my_name';
 
@@ -24,8 +27,8 @@ function todayDayIdx(currentWeek) {
   return dow - 1;
 }
 
-export default function MobileStaffView({ onPersonClick }) {
-  const { data, boardClinics, currentWeek, effectiveAdditionalTasks } = useApp();
+export default function MobileStaffView({ onPersonClick, onOpenOnCallRotation }) {
+  const { data, boardClinics, currentWeek, effectiveAdditionalTasks, oncall, oncallOverrides } = useApp();
 
   const [dayIdx, setDayIdx] = useState(() => todayDayIdx(currentWeek) ?? 0);
   useEffect(() => { setDayIdx(todayDayIdx(currentWeek) ?? 0); }, [currentWeek]);
@@ -75,6 +78,14 @@ export default function MobileStaffView({ onPersonClick }) {
     ? ((data.people ?? []).find(p => p.name.toLowerCase() === myName.toLowerCase() && (p.staffType ?? 'tech') !== 'admin')
         ?? (data.people ?? []).find(p => p.name.toLowerCase() === myName.toLowerCase()))?.color ?? 'var(--text-muted)'
     : 'var(--text-muted)';
+
+  // On-call pill — current week
+  const onCallForWeek = (oncall?.rotation?.length && oncall?.anchorWeek)
+    ? getOnCallForWeek(currentWeek, oncall, oncallOverrides ?? [])
+    : null;
+  const onCallPersonColor = onCallForWeek
+    ? ((data.people ?? []).find(p => p.name.trim().toLowerCase() === onCallForWeek.person.trim().toLowerCase())?.color ?? ONCALL_COLOR)
+    : null;
 
   // Touch swipe to change day
   const touchStartX = useRef(null);
@@ -130,10 +141,19 @@ export default function MobileStaffView({ onPersonClick }) {
             ))}
           </div>
 
-          {/* Standing staff notice */}
-          <div className="staff-notice staff-notice--mobile">
-            <AlertTriangle size={12} />
-            <span>The schedule is subject to change with short notice. It is your responsibility to review your schedule daily.</span>
+          {/* Standing staff notice + on-call pill */}
+          <div className="staff-notice-bar staff-notice-bar--mobile">
+            <div className="staff-notice-text">
+              <AlertTriangle size={12} />
+              <span>The schedule is subject to change with short notice. It is your responsibility to review your schedule daily.</span>
+            </div>
+            {onCallForWeek && (
+              <button className="staff-oncall-pill" onClick={onOpenOnCallRotation} title="View on-call rotation">
+                <PhoneCall size={11} />
+                <span className="staff-oncall-pill-dot" style={{ background: onCallPersonColor }} />
+                <span>On Call: {onCallForWeek.person}</span>
+              </button>
+            )}
           </div>
 
           {/* Day content */}
@@ -159,35 +179,51 @@ export default function MobileStaffView({ onPersonClick }) {
       )}
 
       {/* My schedule — bottom sheet (same presentation as PersonOverlay on mobile) */}
-      {sheetOpen && (
-        <div className="bottom-sheet-wrapper">
-          <div className="bottom-sheet-backdrop" onClick={() => setShowMySchedule(false)} />
-          <div className="bottom-sheet">
-            <div className="sheet-handle" />
-            <div className="overlay-header">
-              <div className="dot-lg" style={{ background: myPersonColor }} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 20, fontWeight: 500 }}>{myName}'s Week</div>
+      {sheetOpen && (() => {
+        const myNextBlock = (oncall?.rotation?.length && oncall?.anchorWeek)
+          ? getPersonNextBlock(myName, oncall, currentWeek)
+          : null;
+        return (
+          <div className="bottom-sheet-wrapper">
+            <div className="bottom-sheet-backdrop" onClick={() => setShowMySchedule(false)} />
+            <div className="bottom-sheet">
+              <div className="sheet-handle" />
+              <div className="overlay-header">
+                <div className="dot-lg" style={{ background: myPersonColor }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 20, fontWeight: 500 }}>{myName}'s Week</div>
+                </div>
+                <button className="overlay-close" onClick={() => setShowMySchedule(false)} aria-label="Close">
+                  <X size={16} />
+                </button>
               </div>
-              <button className="overlay-close" onClick={() => setShowMySchedule(false)} aria-label="Close">
-                <X size={16} />
-              </button>
-            </div>
-            <div className="mobile-my-schedule-body">
-              <WeekRows
-                personIds={myPersonIds}
-                clinics={boardClinics ?? []}
-                additionalTasks={effectiveAdditionalTasks}
-                monday={mondayOfWeek(currentWeek)}
-              />
-            </div>
-            <div className="overlay-schedule-notice">
-              <AlertTriangle size={12} />
-              <span>The schedule is subject to change with short notice.<br />It is your responsibility to review your schedule daily.</span>
+              <div className="mobile-my-schedule-body">
+                <WeekRows
+                  personIds={myPersonIds}
+                  clinics={boardClinics ?? []}
+                  additionalTasks={effectiveAdditionalTasks}
+                  monday={mondayOfWeek(currentWeek)}
+                />
+                {myNextBlock && (
+                  <button className="overlay-oncall-row" onClick={onOpenOnCallRotation}>
+                    <PhoneCall size={13} style={{ color: ONCALL_COLOR, flexShrink: 0 }} />
+                    <span className="overlay-oncall-row-label" style={{ color: ONCALL_COLOR }}>
+                      {myNextBlock.isCurrent ? 'On Call Now:' : 'On Call:'}
+                    </span>
+                    <span className="overlay-oncall-row-range">
+                      {formatBlockRange(myNextBlock.startWeek, myNextBlock.endWeek)}
+                    </span>
+                  </button>
+                )}
+              </div>
+              <div className="overlay-schedule-notice">
+                <AlertTriangle size={12} />
+                <span>The schedule is subject to change with short notice.<br />It is your responsibility to review your schedule daily.</span>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

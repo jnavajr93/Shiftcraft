@@ -95,3 +95,67 @@ export function getBlockPosition(weekStr, settings) {
 export function addWeeks(weekStr, n) {
   return msToIsoWeek(isoWeekMondayMs(weekStr) + n * 7 * 86400000);
 }
+
+const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+/**
+ * Format a block's date range as a human-readable string.
+ * startWeek is the first week (Monday); endWeek's Friday is the block's last working day,
+ * but we display through Sunday for a clean range.
+ * Examples: "Aug 3–28"  "Jul 28 – Aug 25"  "Dec 29 – Jan 25, 2027"
+ */
+export function formatBlockRange(startWeek, endWeek) {
+  const sMs = isoWeekMondayMs(startWeek);
+  const eMs = isoWeekMondayMs(endWeek) + 6 * 86400000; // Sunday of last week
+  const s = new Date(sMs), e = new Date(eMs);
+  const sm = s.getUTCMonth(), em = e.getUTCMonth();
+  const sy = s.getUTCFullYear(), ey = e.getUTCFullYear();
+  const sd = s.getUTCDate(), ed = e.getUTCDate();
+  const sFmt = `${MONTHS_SHORT[sm]} ${sd}`;
+  const eFmt = `${MONTHS_SHORT[em]} ${ed}`;
+  if (sy === ey && sm === em) return `${sFmt}–${ed}`;
+  if (sy === ey) return `${sFmt} – ${eFmt}`;
+  return `${sFmt} – ${eFmt}, ${ey}`;
+}
+
+/**
+ * Return the next (or current) computed on-call block for a person.
+ * Block boundaries are always from the rotation math — overrides do not shift them.
+ * Returns { startWeek, endWeek, isCurrent } or null when:
+ *   – personName is not in the rotation
+ *   – rotation or anchorWeek is not configured
+ *
+ * isCurrent – true when fromWeek falls inside this block (person is on call now).
+ * startWeek / endWeek – ISO week strings, inclusive first/last week of the block.
+ */
+export function getPersonNextBlock(personName, settings, fromWeek) {
+  const { rotation = [], blockWeeks = 4, anchorWeek } = settings ?? {};
+  if (!rotation.length || !anchorWeek || !fromWeek || !personName) return null;
+
+  const nameKey = personName.trim().toLowerCase();
+  const personIdx = rotation.findIndex(n => n.trim().toLowerCase() === nameKey);
+  if (personIdx < 0) return null;
+
+  const len = rotation.length;
+  const fromOffset = weekToIndex(fromWeek) - weekToIndex(anchorWeek);
+  const currentBlockNum = Math.floor(fromOffset / blockWeeks);
+  const currentOwnerIdx = ((currentBlockNum % len) + len) % len;
+
+  let blockNum;
+  if (currentOwnerIdx === personIdx) {
+    blockNum = currentBlockNum;
+  } else {
+    const ahead = ((personIdx - currentOwnerIdx) % len + len) % len;
+    blockNum = currentBlockNum + ahead;
+  }
+
+  const startOffset = blockNum * blockWeeks;
+  const endOffset   = startOffset + blockWeeks - 1;
+  const anchorMs    = isoWeekMondayMs(anchorWeek);
+
+  const startWeek = msToIsoWeek(anchorMs + startOffset * 7 * 86400000);
+  const endWeek   = msToIsoWeek(anchorMs + endOffset   * 7 * 86400000);
+  const isCurrent = currentOwnerIdx === personIdx;
+
+  return { startWeek, endWeek, isCurrent };
+}

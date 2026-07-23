@@ -1789,7 +1789,7 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
     };
   }, [oncall, eligibleNames]);
 
-  const todayStr = toDateStr(new Date());
+  const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
 
   // Open focused on the month containing the currently viewed board week
   const initMonday = currentWeek ? mondayOfWeek(currentWeek) : new Date();

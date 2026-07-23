@@ -34,7 +34,7 @@ import ChatPanel from './ChatPanel.jsx';
 import AbsenceCalendar, { ABSENCE_TYPES } from './AbsenceCalendar.jsx';
 import { getFederalHolidays } from '../utils/federalHolidays.js';
 import { buildClosureMap } from '../utils/holidayClosures.js';
-import { getOnCallPerson } from '../utils/oncall.js';
+import { getOnCallPerson, getOnCallForWeek } from '../utils/oncall.js';
 import { generateSchedule } from '../engine/adapter.js';
 import { validateAndRepairAssignments, findObsViolations, findInvalidSlotAssignments, getPostViolations } from '../engine/validator.js';
 import { fetchAbsencesForWeek } from '../services/dataService.js';
@@ -541,112 +541,119 @@ OUTPUT: respond ONLY with valid JSON, no explanation, no markdown, no code fence
 
 Only include slots that should be filled. Omit middle/training unless needed. If a slot cannot be filled, omit it entirely.`;
 
-// ─── Hover preview (read-only mini month + next 7 days) ──────────────────────
+// ─── Hover preview (read-only status card for the viewed week) ───────────────
 
-const HP_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-
-const CLOSED_COLOR_HP = '#64748b';
-
-function HoverPreview({ anchorRef, absences, currentWeek, people, calendarOverrides, onMouseEnter, onMouseLeave, onDayClick }) {
+function HoverPreview({ anchorRef, absences, currentWeek, people, calendarOverrides, oncall, oncallOverrides, onMouseEnter, onMouseLeave }) {
   if (!anchorRef?.current) return null;
   const rect = anchorRef.current.getBoundingClientRect();
 
-  const colorOf = (key) => ABSENCE_TYPES.find(t => t.key === key)?.color ?? '#6b7280';
-  const personByKey = new Map((people ?? []).map(p => [p.name.trim().toLowerCase(), p]));
-
-  const monday = mondayOfWeek(currentWeek);
-  const year   = monday.getUTCFullYear();
-  const month  = monday.getUTCMonth();
-
-  // 6-row × 7-col grid, Sun→Sat
-  const firstDow = new Date(Date.UTC(year, month, 1)).getUTCDay();
-  const cells = Array.from({ length: 42 }, (_, i) =>
-    new Date(Date.UTC(year, month, 1 - firstDow + i)),
-  );
-  const showSix = cells.slice(35).some(d => d.getUTCMonth() === month);
-  const grid = showSix ? cells : cells.slice(0, 35);
-
-  const toDs = (d) => d.toISOString().slice(0, 10);
-  const todayDs = toDs(new Date());
-  const next7d = new Date();
-  next7d.setDate(next7d.getDate() + 7);
-  const endDs = toDs(next7d);
-
-  // Build closure set for this month (observed holidays + office-closed)
-  const holidays = getFederalHolidays(year);
-  const openOverrides = new Set((calendarOverrides ?? []).filter(o => o.kind === 'holiday_open').map(o => o.date));
-  const closedDates = new Set([
-    ...holidays.filter(h => !openOverrides.has(h.date)).map(h => h.date),
-    ...(calendarOverrides ?? []).filter(o => o.kind === 'office_closed').map(o => o.date),
-  ]);
-
-  const next7 = (absences ?? [])
-    .filter(a => a.end_date >= todayDs && a.start_date <= endDs)
-    .sort((a, b) => a.start_date.localeCompare(b.start_date))
-    .slice(0, 5);
-
-  const width = 264;
+  const width = 240;
   let left = Math.round(rect.left + rect.width / 2 - width / 2);
   if (left + width > window.innerWidth - 12) left = window.innerWidth - width - 12;
   if (left < 8) left = 8;
   const top = Math.round(rect.bottom + 8);
 
-  const toIsoWeek = (d) => {
-    const thu = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-    thu.setUTCDate(thu.getUTCDate() + 4 - (thu.getUTCDay() || 7));
-    const yearStart = new Date(Date.UTC(thu.getUTCFullYear(), 0, 4));
-    yearStart.setUTCDate(yearStart.getUTCDate() + 4 - (yearStart.getUTCDay() || 7));
-    const week = Math.ceil(((thu - yearStart) / 86400000 + 1) / 7);
-    return `${thu.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+  const monday = mondayOfWeek(currentWeek);
+  const toDs = (d) => d.toISOString().slice(0, 10);
+  const weekStart = toDs(monday);
+  const weekEnd = toDs(new Date(Date.UTC(monday.getUTCFullYear(), monday.getUTCMonth(), monday.getUTCDate() + 4)));
+  // Closures window: viewed week through Friday of W+2
+  const closureEndDs = toDs(new Date(Date.UTC(monday.getUTCFullYear(), monday.getUTCMonth(), monday.getUTCDate() + 18)));
+
+  // On-call
+  const onCallResult = getOnCallForWeek(currentWeek, oncall, oncallOverrides);
+
+  // Out This Week — non-DoctorOff absences overlapping Mon–Fri of viewed week
+  const colorOf = (key) => ABSENCE_TYPES.find(t => t.key === key)?.color ?? '#6b7280';
+  const personByName = new Map((people ?? []).map(p => [p.name.trim().toLowerCase(), p]));
+
+  const outThisWeek = (absences ?? [])
+    .filter(a => a.type !== 'DoctorOff' && a.end_date >= weekStart && a.start_date <= weekEnd)
+    .sort((a, b) => a.start_date.localeCompare(b.start_date));
+
+  // Closures — observed holidays + office-closed in 3-week window
+  const year = monday.getUTCFullYear();
+  const allHolidays = [...getFederalHolidays(year), ...getFederalHolidays(year + 1)];
+  const closureMap = buildClosureMap(allHolidays, calendarOverrides ?? []);
+
+  const holidayClosures = [];
+  for (const [date, entry] of closureMap) {
+    if (date >= weekStart && date <= closureEndDs) {
+      holidayClosures.push({ date, name: entry.name });
+    }
+  }
+
+  const doctorOffItems = (absences ?? [])
+    .filter(a => a.type === 'DoctorOff' && a.end_date >= weekStart && a.start_date <= closureEndDs)
+    .map(a => {
+      const person = personByName.get(a.person_name?.trim().toLowerCase());
+      const name = person?.name ?? a.person_name ?? 'Doctor';
+      return { date: a.start_date, name: `${name} Off` };
+    });
+
+  const allClosures = [...holidayClosures, ...doctorOffItems]
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const isEmpty = !onCallResult && outThisWeek.length === 0 && allClosures.length === 0;
+
+  const MAX = 5;
+  const renderItems = (items, renderFn) => {
+    const shown = items.slice(0, MAX);
+    const extra = items.length - MAX;
+    return (
+      <>
+        {shown.map((item, i) => renderFn(item, i))}
+        {extra > 0 && <div className="hover-preview-overflow">+{extra} more</div>}
+      </>
+    );
   };
 
   return (
     <div className="hover-preview" style={{ top, left, width }} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
-      <div className="hover-preview-month">{HP_MONTHS[month]} {year}</div>
-      <div className="hover-preview-grid">
-        {['S','M','T','W','T','F','S'].map((h, i) => (
-          <div key={i} className="hover-preview-hdr">{h}</div>
-        ))}
-        {grid.map((d, i) => {
-          const ds = toDs(d);
-          const isOther = d.getUTCMonth() !== month;
-          const dots = isOther ? [] : (absences ?? []).filter(a => a.start_date <= ds && a.end_date >= ds);
-          const isClosed = !isOther && closedDates.has(ds);
-          return (
-            <div
-              key={i}
-              className={`hover-preview-day${isOther ? ' hover-preview-day--other' : ''}`}
-              onClick={isOther ? undefined : () => onDayClick?.(toIsoWeek(d))}
-            >
-              <span>{d.getUTCDate()}</span>
-              {(dots.length > 0 || isClosed) && (
-                <div className="hover-preview-dots">
-                  {isClosed && <span className="hover-preview-dot" style={{ background: CLOSED_COLOR_HP }} />}
-                  {dots.slice(0, isClosed ? 2 : 3).map((a, j) => (
-                    <span key={j} className="hover-preview-dot" style={{ background: colorOf(a.type) }} />
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-      {next7.length > 0 && (
+      {isEmpty ? (
+        <div className="hover-preview-empty">Nothing Scheduled This Week.</div>
+      ) : (
         <>
-          <div className="hover-preview-divider" />
-          <div className="hover-preview-next-title">Next 7 days</div>
-          {next7.map(a => {
-            const person = personByKey.get(a.person_name);
-            const name = person?.name ?? a.person_name;
-            const dateShort = a.start_date.slice(5).replace('-', '/');
-            return (
-              <div key={a.id} className="hover-preview-next-item">
-                <span className="hover-preview-dot" style={{ background: colorOf(a.type), flexShrink: 0 }} />
-                <span className="hover-preview-next-name">{name}</span>
-                <span className="hover-preview-next-date">{dateShort}</span>
+          {onCallResult && (
+            <>
+              <div className="hover-preview-section-title">On Call</div>
+              <div className="hover-preview-next-item">
+                <PhoneCall size={10} style={{ flexShrink: 0, color: 'var(--text-muted)', marginTop: 1 }} />
+                <span className="hover-preview-next-name">{onCallResult.person}</span>
+                {onCallResult.isOverride && <span className="hover-preview-next-date">override</span>}
               </div>
-            );
-          })}
+            </>
+          )}
+          {outThisWeek.length > 0 && (
+            <>
+              {onCallResult && <div className="hover-preview-divider" />}
+              <div className="hover-preview-section-title">Out This Week</div>
+              {renderItems(outThisWeek, (a, i) => {
+                const person = personByName.get(a.person_name?.trim().toLowerCase());
+                const name = person?.name ?? a.person_name;
+                return (
+                  <div key={a.id ?? i} className="hover-preview-next-item">
+                    <span className="hover-preview-dot" style={{ background: colorOf(a.type), flexShrink: 0 }} />
+                    <span className="hover-preview-next-name">{name}</span>
+                    <span className="hover-preview-next-date">{a.type}</span>
+                  </div>
+                );
+              })}
+            </>
+          )}
+          {allClosures.length > 0 && (
+            <>
+              {(onCallResult || outThisWeek.length > 0) && <div className="hover-preview-divider" />}
+              <div className="hover-preview-section-title">Closures</div>
+              {renderItems(allClosures, (e, i) => (
+                <div key={i} className="hover-preview-next-item">
+                  <span className="hover-preview-dot" style={{ background: '#64748b', flexShrink: 0 }} />
+                  <span className="hover-preview-next-name">{e.name}</span>
+                  <span className="hover-preview-next-date">{e.date.slice(5).replace('-', '/')}</span>
+                </div>
+              ))}
+            </>
+          )}
         </>
       )}
     </div>
@@ -670,6 +677,7 @@ export default function TopBar({ activeTab, setActiveTab, setupSection, setSetup
     doctorOffClinicIds,
     holidayClosedClinicIds,
     onCallThisWeek,
+    oncall, oncallOverrides,
   } = useApp();
   const weekLabelRef = useRef(null);
   const undoTimerRef = useRef(null);
@@ -1342,12 +1350,13 @@ export default function TopBar({ activeTab, setActiveTab, setupSection, setSetup
           currentWeek={currentWeek}
           people={data?.people ?? []}
           calendarOverrides={calendarOverrides ?? []}
+          oncall={oncall}
+          oncallOverrides={oncallOverrides ?? []}
           onMouseEnter={() => clearTimeout(hoverTimerRef.current)}
           onMouseLeave={() => {
             clearTimeout(hoverTimerRef.current);
             hoverTimerRef.current = setTimeout(() => setShowPreview(false), 200);
           }}
-          onDayClick={(weekStr) => { setShowPreview(false); jumpToWeek(weekStr); }}
         />
       )}
       {showPinModal && (

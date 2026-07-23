@@ -22,6 +22,7 @@ import AdditionalTasks from './components/AdditionalTasks.jsx';
 import UnassignedStaff from './components/UnassignedStaff.jsx';
 import ConflictBanner from './components/ConflictBanner.jsx';
 import MobileStaffView from './components/MobileStaffView.jsx';
+import OnCallRotationView from './components/OnCallRotationView.jsx';
 
 function SavedToast() {
   const { saveStatus } = useApp();
@@ -115,6 +116,7 @@ function AppContent() {
   }
   const [activeTab, setActiveTab] = useState('schedule');
   const [setupSection, setSetupSection] = useState('staff');
+  const [showOnCallRotation, setShowOnCallRotation] = useState(false);
 
   // Guard: staff view must never land on Setup. Belt-and-suspenders for the
   // manager-pill exit fix; also catches deep-links / stale state.
@@ -196,7 +198,7 @@ function AppContent() {
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
                 {isAdmin && <ConflictBanner />}
                 {(!isAdmin && isMobile) ? (
-                  <MobileStaffView onPersonClick={openPerson} />
+                  <MobileStaffView onPersonClick={openPerson} onOpenOnCallRotation={() => setShowOnCallRotation(true)} />
                 ) : (
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
                     <Board
@@ -204,6 +206,7 @@ function AppContent() {
                       setSearch={setSearch}
                       onPersonClick={openPerson}
                       onEditClinic={isAdmin ? setConfigClinicId : () => {}}
+                      onOpenOnCallRotation={() => setShowOnCallRotation(true)}
                       footer={
                         <>
                           {(isAdmin || boardClinics !== null) && <AdditionalTasks onPersonClick={openPerson} />}
@@ -225,7 +228,12 @@ function AppContent() {
           <PersonOverlay
             person={selectedPerson}
             onClose={() => setSelectedPersonId(null)}
+            onOpenOnCallRotation={() => setShowOnCallRotation(true)}
           />
+        )}
+
+        {showOnCallRotation && (
+          <OnCallRotationView onClose={() => setShowOnCallRotation(false)} />
         )}
 
         {isAdmin && configClinicId && (

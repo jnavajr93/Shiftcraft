@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, AlertTriangle } from 'lucide-react';
+import { Search, AlertTriangle, PhoneCall } from 'lucide-react';
 import { useApp, mondayOfWeek, isoWeek } from '../context/AppContext.jsx';
 import { DAYS } from '../data/seed.js';
 import ClinicCard from './ClinicCard.jsx';
+import { getOnCallForWeek } from '../utils/oncall.js';
 
 const LOCATION_ORDER = ['Phoenix', 'Chandler', 'Estrella', 'Scottsdale', 'OBS'];
 
-export default function Board({ search, setSearch, onPersonClick, onEditClinic, footer }) {
-  const { data, isAdmin, boardClinics, currentWeek, doctorOffClinicIds, holidayWorkedMap } = useApp();
+export default function Board({ search, setSearch, onPersonClick, onEditClinic, footer, onOpenOnCallRotation }) {
+  const { data, isAdmin, boardClinics, currentWeek, doctorOffClinicIds, holidayWorkedMap, oncall, oncallOverrides } = useApp();
   const monday = mondayOfWeek(currentWeek);
 
   // ── Staff search dropdown ──────────────────────────────────────────────────
@@ -88,6 +89,14 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic, 
     return () => clearTimeout(t);
   }, [currentWeek, todayDay]);
 
+  // On-call pill — staff view only; shows who's on call for the current viewed week
+  const onCallForWeek = (!isAdmin && oncall?.rotation?.length && oncall?.anchorWeek)
+    ? getOnCallForWeek(currentWeek, oncall, oncallOverrides ?? [])
+    : null;
+  const onCallPersonColor = onCallForWeek
+    ? ((data.people ?? []).find(p => p.name.trim().toLowerCase() === onCallForWeek.person.trim().toLowerCase())?.color ?? '#f59e0b')
+    : null;
+
   // Staff view: boardClinics is null when the week has never been posted
   const showNotPosted = !isAdmin && boardClinics === null;
   const clinics = isAdmin ? (data?.clinics ?? []) : (boardClinics ?? []);
@@ -156,11 +165,20 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic, 
         </div>
       </div>
 
-      {/* Standing staff notice — staff view only */}
+      {/* Standing staff notice + on-call pill — staff view only */}
       {!isAdmin && (
-        <div className="staff-notice">
-          <AlertTriangle size={13} />
-          <span>The schedule is subject to change with short notice. It is your responsibility to review your schedule daily.</span>
+        <div className="staff-notice-bar">
+          <div className="staff-notice-text">
+            <AlertTriangle size={13} />
+            <span>The schedule is subject to change with short notice. It is your responsibility to review your schedule daily.</span>
+          </div>
+          {onCallForWeek && (
+            <button className="staff-oncall-pill" onClick={onOpenOnCallRotation} title="View on-call rotation">
+              <PhoneCall size={11} />
+              <span className="staff-oncall-pill-dot" style={{ background: onCallPersonColor }} />
+              <span>On Call: {onCallForWeek.person}</span>
+            </button>
+          )}
         </div>
       )}
 
