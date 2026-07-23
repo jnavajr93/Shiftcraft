@@ -973,7 +973,17 @@ export function AppProvider({ children }) {
     // (our own echo or another manager's save).  Saving would echo back and trigger an
     // infinite loop; the DB already has the correct value, so there's nothing to write.
     if (scheduleFromRemoteRef.current) { scheduleFromRemoteRef.current = false; return; }
-    saveScheduleDB(toDefinitionData(globalData));
+    setSaveStatus('saving');
+    saveScheduleDB(toDefinitionData(globalData)).then(({ error }) => {
+      if (error) {
+        setSaveStatus('error');
+        clearTimeout(saveStatusTimerRef.current);
+      } else {
+        setSaveStatus('saved');
+        clearTimeout(saveStatusTimerRef.current);
+        saveStatusTimerRef.current = setTimeout(() => setSaveStatus('idle'), 3000);
+      }
+    });
   }, [globalData, isLoading]);
 
   // ─── Theme (stays per-device in localStorage) ─

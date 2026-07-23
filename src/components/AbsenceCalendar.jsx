@@ -2259,7 +2259,8 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
   const handleSaveOncallBlock = useCallback(async (weekStr, personName, blockLength) => {
     for (let i = 0; i < blockLength; i++) {
       const wk = i === 0 ? weekStr : addWeeks(weekStr, i);
-      await saveOncallOverride({ week_key: wk, person_name: personName, note: null });
+      const result = await saveOncallOverride({ week_key: wk, person_name: personName, note: null });
+      if (result?.error) break;
     }
   }, [saveOncallOverride]);
 
