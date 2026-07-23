@@ -152,10 +152,12 @@ export default function MobileStaffView({ onPersonClick }) {
         </>
       )}
 
-      {/* My schedule — centered modal (not bottom sheet; bottom sheet clips Friday) */}
+      {/* My schedule — bottom sheet (same presentation as PersonOverlay on mobile) */}
       {sheetOpen && (
-        <div className="my-schedule-backdrop" onClick={() => setShowMySchedule(false)}>
-          <div className="my-schedule-modal" onClick={e => e.stopPropagation()}>
+        <div className="bottom-sheet-wrapper">
+          <div className="bottom-sheet-backdrop" onClick={() => setShowMySchedule(false)} />
+          <div className="bottom-sheet">
+            <div className="sheet-handle" />
             <div className="mobile-my-schedule-header">
               <span className="mobile-my-schedule-title">{myName}'s Week</span>
               <button className="btn-icon" onClick={() => setShowMySchedule(false)} aria-label="Close">
@@ -228,7 +230,8 @@ function MobileNameBar({ myName, nameSearch, nameSuggestions, onNameChange, onSe
 }
 
 function MobileClinicCard({ clinic, people, onPersonClick }) {
-  const slots = getRenderedSlotEntries(clinic);
+  // Hide slots with no person assigned — same rule as desktop staff view
+  const slots = getRenderedSlotEntries(clinic).filter(([, slotVal]) => !!getSlotPersonId(slotVal));
 
   return (
     <div className="mobile-clinic-card">

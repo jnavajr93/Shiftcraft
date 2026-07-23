@@ -1219,7 +1219,7 @@ export default function TopBar({ activeTab, setActiveTab, setupSection, setSetup
             )}
             <button
               data-tour="admin-button"
-              className={`btn btn-pill btn-admin ${isAdmin ? 'active' : ''}`}
+              className={`btn btn-pill btn-admin topbar-mobile-hidden ${isAdmin ? 'active' : ''}`}
               onClick={() => {
                 if (isAdmin) {
                   if (isDirty) {
