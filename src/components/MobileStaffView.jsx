@@ -127,7 +127,7 @@ export default function MobileStaffView({ onPersonClick }) {
           {/* Standing staff notice */}
           <div className="staff-notice staff-notice--mobile">
             <AlertTriangle size={12} />
-            <span>The schedule, opening times, and traveling to offices are subject to change with short notice. Please check your schedule regularly.</span>
+            <span>The schedule, opening times, and traveling to offices are subject to change with short notice. It is your responsibility to check your schedule regularly.</span>
           </div>
 
           {/* Day content */}
