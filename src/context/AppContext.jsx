@@ -1157,6 +1157,7 @@ export function AppProvider({ children }) {
     const channel = subscribeAbsences((payload) => {
       setAbsences(prev => {
         if (payload.eventType === 'INSERT') {
+          if (prev.some(a => a.id === payload.new.id)) return prev; // already added optimistically
           return [...prev, payload.new].sort((a, b) => a.start_date.localeCompare(b.start_date));
         }
         if (payload.eventType === 'UPDATE') {
@@ -1217,8 +1218,10 @@ export function AppProvider({ children }) {
     });
     const channel = subscribeCalendarOverrides((payload) => {
       setCalendarOverrides(prev => {
-        if (payload.eventType === 'INSERT')
+        if (payload.eventType === 'INSERT') {
+          if (prev.some(o => o.id === payload.new.id)) return prev; // already added optimistically
           return [...prev, payload.new].sort((a, b) => a.date.localeCompare(b.date));
+        }
         if (payload.eventType === 'UPDATE')
           return prev.map(o => o.id === payload.new.id ? payload.new : o);
         if (payload.eventType === 'DELETE')
@@ -1266,8 +1269,10 @@ export function AppProvider({ children }) {
     });
     const channel = subscribeResearchAssignments((payload) => {
       setResearchAssignments(prev => {
-        if (payload.eventType === 'INSERT')
+        if (payload.eventType === 'INSERT') {
+          if (prev.some(r => r.id === payload.new.id)) return prev; // already added optimistically
           return [...prev, payload.new].sort((a, b) => a.date.localeCompare(b.date));
+        }
         if (payload.eventType === 'UPDATE')
           return prev.map(r => r.id === payload.new.id ? payload.new : r)
             .sort((a, b) => a.date.localeCompare(b.date));
