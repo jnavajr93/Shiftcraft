@@ -1,5 +1,10 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { getSeedData, migratePerson, generateId, getSlotPersonId, OBS_SLOT_TYPES, getBoardClinics, getAssignmentsForPerson, getRenderedSlotEntries, getActiveFDSlots, minutesToTime, SLOT_DISPLAY_LABELS } from '../data/seed.js';
+import {
+  blankObsSlots, blankStandardSlots,
+  extractSlotMap, applySlotMap, blankSlotMap,
+  hasAnyAssignment, stripClinicConfig, sortedJSON, toDefinitionData,
+} from './slotMap.js';
 import { supabase } from '../supabase.js';
 import {
   saveSchedule as saveScheduleDB,
@@ -98,96 +103,17 @@ export function mondayOfWeek(weekStr) {
   return monday;
 }
 
-/** Slot map: { [clinicId]: {scribe,opener,...}, [`task:${taskId}`]: personId|null, __clinicConfig: per-week config } */
-function extractSlotMap(clinics, tasks) {
-  const map = {};
-  for (const c of clinics) map[c.id] = { ...c.slots };
-  for (const t of (tasks ?? [])) map[`task:${t.id}`] = t.assignedPersonId;
-  // Per-week clinic config snapshot: open/closed, start/end times, patient count.
-  // Stored alongside assignments so each week independently preserves its clinic settings.
-  map.__clinicConfig = Object.fromEntries(
-    clinics.map(c => [c.id, { open: c.open, startTime: c.startTime, endTime: c.endTime, patientCount: c.patientCount }])
-  );
-  return map;
-}
+// extractSlotMap, applySlotMap, blankSlotMap, blankObsSlots, blankStandardSlots,
+// hasAnyAssignment, stripClinicConfig, sortedJSON, toDefinitionData are imported
+// from ./slotMap.js (pure utilities, tested independently).
 
-// Read from localStorage (used during migration only)
+// ─── localStorage fallback (migration only) ──────────────────────────────────
 function readLocalWeekSlotMap(weekStr) {
   try {
     const raw = localStorage.getItem(`shiftcraft.week.${weekStr}`);
     if (raw) return JSON.parse(raw);
   } catch { /* ignore */ }
   return null;
-}
-
-/** Apply a slotMap onto clinics and tasks, returning new arrays.
- *  If the map contains __clinicConfig, those per-week values (open, times, patientCount)
- *  override the base clinic definitions for this week only. */
-function applySlotMap(clinics, tasks, map) {
-  const clinicConfig = map.__clinicConfig ?? {};
-  const newClinics = clinics.map(c => {
-    // Apply per-week clinic config (open/closed, times, patient count) if present.
-    // Only these four fields are per-week; structural fields (provider, location) stay global.
-    const override = clinicConfig[c.id];
-    const base = override ? { ...c, ...override } : c;
-
-    if (base.location === 'OBS') {
-      // Merge with blank OBS shape, then strip any non-OBS keys that leaked in from
-      // stale Supabase data (e.g. a prior bad generation that wrote 'frontDesk' to OBS).
-      const merged = { ...blankObsSlots(), ...(map[c.id] ?? {}) };
-      const invalidKeys = Object.keys(merged).filter(k => !OBS_SLOT_TYPES.includes(k));
-      if (invalidKeys.length > 0) {
-        console.warn(`[Shiftcraft applySlotMap] OBS clinic ${c.id}: stripping invalid slot keys:`, invalidKeys);
-        for (const k of invalidKeys) delete merged[k];
-      }
-      return { ...base, slots: merged };
-    }
-    // Merge with blank standard shape, then clear personIds in inactive FD slots.
-    const merged = { ...blankStandardSlots(), ...(map[c.id] ?? {}) };
-    const activeFD = new Set(getActiveFDSlots(base));
-    const ALL_FD = ['openingFrontDesk', 'closingFrontDesk', 'frontDesk'];
-    for (const fdKey of ALL_FD) {
-      if (!activeFD.has(fdKey) && merged[fdKey]) {
-        console.warn(`[Shiftcraft applySlotMap] Regular clinic ${c.id} (${base.provider} ${base.day}): clearing stale inactive FD slot "${fdKey}"`);
-        merged[fdKey] = null;
-      }
-    }
-    return { ...base, slots: merged };
-  });
-  const newTasks = (tasks ?? []).map(t => ({
-    ...t,
-    assignedPersonId: map[`task:${t.id}`] ?? null,
-  }));
-  return { clinics: newClinics, additionalTasks: newTasks };
-}
-
-function blankObsSlots() {
-  return {
-    preop: { personId: null, start: null, end: null },
-    sterile: { personId: null, start: null, end: null },
-    circulator: { personId: null, start: null, end: null },
-    scrub: { personId: null, start: null, end: null },
-  };
-}
-
-function blankStandardSlots() {
-  return {
-    openingFrontDesk: null, closingFrontDesk: null, frontDesk: null,
-    scribe: { personId: null, start: null, end: null },
-    opener: null, closing: null,
-    middle: { personId: null, start: null, end: null },
-    training: { personId: null, start: null, end: null },
-  };
-}
-
-function blankSlotMap(clinics, tasks) {
-  const map = {};
-  for (const c of clinics) map[c.id] = c.location === 'OBS' ? blankObsSlots() : blankStandardSlots();
-  for (const t of (tasks ?? [])) map[`task:${t.id}`] = null;
-  // Intentionally no __clinicConfig here: new weeks fall through to the original global
-  // defaults via the clinic-config reset in navigateWeek/jumpToWeek. Per-week clinic
-  // config is added to the map on the first mutation via extractSlotMap.
-  return map;
 }
 
 // IDs that were pre-seeded and should be stripped on migration
@@ -568,52 +494,8 @@ function runMigrations(data) {
   return { data: d, dirty };
 }
 
-// ─── Snapshot helpers (module-level, usable in init()) ────────────────────
-// Canonical slot map string with stable key order for dirty-state comparison.
-// Postgres JSONB may return keys in a different order than we wrote them.
-
-/** Remove __clinicConfig before dirty comparisons so clinic-config changes
- *  don't incorrectly mark the schedule dirty relative to a posted snapshot. */
-function stripClinicConfig(map) {
-  if (!map || typeof map !== 'object' || !('__clinicConfig' in map)) return map;
-  const { __clinicConfig: _, ...rest } = map;
-  return rest;
-}
-
-function sortedJSON(obj) {
-  if (obj === null || typeof obj !== 'object' || Array.isArray(obj)) return JSON.stringify(obj);
-  const keys = Object.keys(obj).sort();
-  const inner = keys.map(k => `${JSON.stringify(k)}:${sortedJSON(obj[k])}`).join(',');
-  return `{${inner}}`;
-}
-
-function hasAnyAssignment(map) {
-  for (const [key, val] of Object.entries(map)) {
-    if (key === '__clinicConfig') continue; // skip per-week config metadata
-    if (key.startsWith('task:')) { if (val) return true; continue; }
-    if (!val) continue;
-    if (typeof val === 'string') return true;
-    if (typeof val === 'object') {
-      for (const sv of Object.values(val)) {
-        if (getSlotPersonId(sv)) return true;
-      }
-    }
-  }
-  return false;
-}
-
-// Strip slots from clinic definitions before saving global store
-function toDefinitionData(globalData) {
-  const { clinics, additionalTasks, ...rest } = globalData;
-  const definitionClinics = clinics.map(({ slots, ...def }) => ({
-    ...def,
-    slots: def.location === 'OBS' ? blankObsSlots() : blankStandardSlots(),
-  }));
-  const definitionTasks = (additionalTasks ?? []).map(({ assignedPersonId, ...t }) => ({
-    ...t, assignedPersonId: null,
-  }));
-  return { ...rest, clinics: definitionClinics, additionalTasks: definitionTasks };
-}
+// stripClinicConfig, sortedJSON, hasAnyAssignment, toDefinitionData are imported
+// from ./slotMap.js — see that file for documentation.
 
 // ─── Provider ─────────────────────────────────
 export function AppProvider({ children }) {
@@ -1008,7 +890,10 @@ export function AppProvider({ children }) {
     // infinite loop; the DB already has the correct value, so there's nothing to write.
     if (scheduleFromRemoteRef.current) { scheduleFromRemoteRef.current = false; return; }
     setSaveStatus('saving');
-    saveScheduleDB(toDefinitionData(globalData)).then(({ error }) => {
+    // Pass originalClinicDefsRef so toDefinitionData restores the baseline values
+    // for per-week fields (open, times, patientCount) instead of writing the live
+    // per-week state to the global record and contaminating other weeks.
+    saveScheduleDB(toDefinitionData(globalData, originalClinicDefsRef.current)).then(({ error }) => {
       if (error) {
         setSaveStatus('error');
         clearTimeout(saveStatusTimerRef.current);
@@ -1078,6 +963,18 @@ export function AppProvider({ children }) {
           // Flag the following setGlobalData as coming from Realtime so the
           // auto-save useEffect skips the echo write back to Supabase.
           scheduleFromRemoteRef.current = true;
+          // If another manager added new clinics, track them in the original-defs
+          // ref so toDefinitionData can correctly restore per-week baselines for them.
+          if (originalClinicDefsRef.current && Array.isArray(value.clinics)) {
+            const existingIds = new Set(originalClinicDefsRef.current.map(d => d.id));
+            const newClinics = value.clinics.filter(c => !existingIds.has(c.id));
+            if (newClinics.length > 0) {
+              originalClinicDefsRef.current = [
+                ...originalClinicDefsRef.current,
+                ...newClinics.map(c => ({ id: c.id, open: c.open, startTime: c.startTime, endTime: c.endTime, patientCount: c.patientCount })),
+              ];
+            }
+          }
           setGlobalData(g => {
             if (!g) return g;
             const currentMap = extractSlotMap(g.clinics, g.additionalTasks);
@@ -2112,11 +2009,24 @@ export function AppProvider({ children }) {
         console.warn(`[addClinic] Blocked duplicate clinic: ${clinic.location} ${clinic.day}`);
         return prev;
       }
+      // Track the new clinic's initial config as the per-week baseline so that
+      // future per-week mutations on this clinic (open/times/patientCount) are
+      // correctly restored to these values before writing to the global record.
+      if (originalClinicDefsRef.current) {
+        originalClinicDefsRef.current = [
+          ...originalClinicDefsRef.current,
+          { id: clinic.id, open: clinic.open, startTime: clinic.startTime, endTime: clinic.endTime, patientCount: clinic.patientCount },
+        ];
+      }
       return { ...prev, clinics: [...prev.clinics, clinic] };
     });
   }, []);
 
   const removeClinic = useCallback((clinicId) => {
+    // Keep the ref in sync so it does not grow stale entries.
+    if (originalClinicDefsRef.current) {
+      originalClinicDefsRef.current = originalClinicDefsRef.current.filter(d => d.id !== clinicId);
+    }
     setGlobalData(prev => ({
       ...prev,
       clinics: prev.clinics.filter(c => c.id !== clinicId),
