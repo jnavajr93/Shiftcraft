@@ -160,7 +160,7 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic, 
       {!isAdmin && (
         <div className="staff-notice">
           <AlertTriangle size={13} />
-          <span>The schedule, opening times, and traveling to offices are subject to change with short notice. It is your responsibility to check your schedule regularly.</span>
+          <span>The schedule is subject to change with short notice. It is your responsibility to review your schedule daily.</span>
         </div>
       )}
 
