@@ -264,6 +264,19 @@ function ClinicClosedModal({ initStart, initEnd, managerInitials, onSave, onClos
   );
 }
 
+// ─── Person dedupe helper ──────────────────────────────────────────────────────
+// One entry per unique name, preferring the tech record for color.
+// Matches the Board.jsx staff-search dedup so all pickers stay consistent.
+export function dedupeByName(people) {
+  return Object.values(
+    (people ?? []).reduce((acc, p) => {
+      const key = p.name.trim().toLowerCase();
+      if (!acc[key] || (p.staffType ?? 'tech') !== 'admin') acc[key] = p;
+      return acc;
+    }, {})
+  );
+}
+
 // ─── Person typeahead ─────────────────────────────────────────────────────────
 
 function PersonTypeahead({ value, onChange, roster, placeholder }) {
@@ -480,7 +493,7 @@ function AbsenceModal({ mode, initStart, initEnd, initType, absence, people, abs
               <PersonTypeahead
                 value={personKey}
                 onChange={setPersonKey}
-                roster={[...people]
+                roster={dedupeByName(people)
                   .sort((a, b) => a.name.localeCompare(b.name))
                   .map(p => ({ key: p.name.trim().toLowerCase(), label: p.name, color: p.color ?? null }))}
                 placeholder="Search Staff…"
@@ -694,7 +707,7 @@ function ResearchModal({ mode, initDate, assignment, people, managerInitials, on
             <PersonTypeahead
               value={personKey}
               onChange={setPersonKey}
-              roster={[...people]
+              roster={dedupeByName(people)
                 .sort((a, b) => a.name.localeCompare(b.name))
                 .map(p => ({ key: p.name.trim().toLowerCase(), label: p.name, color: p.color ?? null }))}
               placeholder="Search Staff…"
@@ -1806,9 +1819,9 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
     [data.people],
   );
 
-  // Eligible pool: techs with the 'On Call' role
+  // Eligible pool: techs with the 'On Call' role, deduped by name
   const eligiblePool = useMemo(
-    () => people.filter(p => (p.roles ?? []).includes('On Call')),
+    () => dedupeByName(people.filter(p => (p.roles ?? []).includes('On Call'))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [data.people],
   );

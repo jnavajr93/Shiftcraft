@@ -9,6 +9,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { useApp } from '../context/AppContext.jsx';
 import { getOnCallPerson } from '../utils/oncall.js';
+import { dedupeByName } from './AbsenceCalendar.jsx';
 
 // ─── Sortable pool item ───────────────────────
 function SortablePoolItem({ person, index }) {
@@ -31,9 +32,9 @@ function SortablePoolItem({ person, index }) {
 export default function OnCallManager() {
   const { oncall, saveOncall, currentWeek, data } = useApp();
 
-  // Eligible pool: techs with 'On Call' role
+  // Eligible pool: people with 'On Call' role, deduped by name (linked tech+admin records)
   const eligiblePool = useMemo(
-    () => (data.people ?? []).filter(p => (p.roles ?? []).includes('On Call')),
+    () => dedupeByName((data.people ?? []).filter(p => (p.roles ?? []).includes('On Call'))),
     [data.people],
   );
 
