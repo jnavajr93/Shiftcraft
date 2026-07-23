@@ -565,7 +565,7 @@ export default function ClinicCard({ clinic, onPersonClick, onEditClinic, matche
       ) : (
         <div>
           {clinic.location === 'OBS'
-            ? OBS_SLOT_TYPES.map(slotType => (
+            ? (isAdmin ? OBS_SLOT_TYPES : OBS_SLOT_TYPES.filter(st => !!getSlotPersonId(clinic.slots[st]))).map(slotType => (
                 <ObsSlotRow
                   key={slotType}
                   clinic={clinic}
@@ -585,9 +585,13 @@ export default function ClinicCard({ clinic, onPersonClick, onEditClinic, matche
                   : ['frontDesk'];
                 const clinicSlotTypes = [
                   ...fdSlots,
-                  'scribe', 'opener', 'closing', 'middle', 'training',
+                  'scribe', 'opener', 'middle', 'training', 'closing',
                 ];
-                return clinicSlotTypes.map(slotType => (
+                // Staff view: hide slots with no one assigned (keeps cards compact)
+                const visibleSlotTypes = isAdmin
+                  ? clinicSlotTypes
+                  : clinicSlotTypes.filter(st => !!getSlotPersonId(clinic.slots[st]));
+                return visibleSlotTypes.map(slotType => (
                   <SlotRow
                     key={slotType}
                     clinic={clinic}
