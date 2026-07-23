@@ -401,6 +401,10 @@ function AbsenceModal({ mode, initStart, initEnd, initType, absence, people, abs
   const [dupWarning, setDupWarning] = useState(null);
   const [saveError,   setSaveError]   = useState(null);
   const [deleteError, setDeleteError] = useState(null);
+  // Ref-based re-entry guard: setSaving(true) is async (schedules re-render) so a second
+  // click that arrives before the first re-render sees saving===false and slips through.
+  // A ref update is synchronous and blocks the second call in the same event-loop tick.
+  const savingRef = useRef(false);
 
   const handleTypeSelect = (newType) => {
     if ((type === 'DoctorOff') !== (newType === 'DoctorOff')) setPersonKey('');
@@ -416,11 +420,13 @@ function AbsenceModal({ mode, initStart, initEnd, initType, absence, people, abs
   }, [personKey, startD, endD, absences, isEdit, absence]);
 
   const handleSubmit = async (force = false) => {
+    if (savingRef.current) return;
     if (!personKey || !startD || !endD) return;
     if (!force) {
       const dup = checkDup();
       if (dup) { setDupWarning(dup); return; }
     }
+    savingRef.current = true;
     setSaving(true);
     setSaveError(null);
     const payload = {
@@ -436,6 +442,7 @@ function AbsenceModal({ mode, initStart, initEnd, initType, absence, people, abs
     };
     const result = isEdit ? await onSave(absence.id, payload) : await onSave(payload);
     if (result?.error) setSaveError('Save failed — check your connection and try again.');
+    savingRef.current = false;
     setSaving(false);
   };
 
