@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, X, Clock, Plus, Trash2, AlertCircle, History, Building2, PhoneCall, UserCheck } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Clock, Plus, Trash2, AlertCircle, History, Building2, PhoneCall, UserCheck, Users } from 'lucide-react';
 import { useApp, mondayOfWeek, isoWeek } from '../context/AppContext.jsx';
 import { minutesToTime, minutesToTimeInput, timeInputToMinutes } from '../data/seed.js';
 import { getFederalHolidays } from '../utils/federalHolidays.js';
@@ -50,6 +50,31 @@ const ONCALL_COLOR = '#f59e0b';
 
 // Research assignments shown in purple (freed by Partial Day merge)
 const RESEARCH_COLOR = '#8b5cf6';
+
+// Personal absence categories shown in the Roster view — excludes doctor-off,
+// request, and other non-personal types.
+const PERSONAL_ABSENCE_TYPES = ['Callout', 'Sick', 'Approved'];
+
+// Local-date today string — consistent with how the calendar uses it
+function localTodayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Lower-bound date string for range filtering (null = no lower bound)
+function rangeCutoffStr(range) {
+  if (range === 'alltime') return null;
+  const d = new Date();
+  if (range === 'thisyear') return `${d.getFullYear()}-01-01`;
+  // last12: exactly 12 months ago
+  const c = new Date(d);
+  c.setFullYear(c.getFullYear() - 1);
+  return `${c.getFullYear()}-${String(c.getMonth() + 1).padStart(2, '0')}-${String(c.getDate()).padStart(2, '0')}`;
+}
+
+function absenceDays(absence) {
+  return Math.round((parseUTC(absence.end_date) - parseUTC(absence.start_date)) / 86400000) + 1;
+}
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
@@ -1444,6 +1469,204 @@ function DayPanel({ dateStr, rect, absences, personByKey, holidayDetail, dayClos
 
 // ─── History view ─────────────────────────────────────────────────────────────
 
+// ─── RosterPanel ──────────────────────────────────────────────────────────────
+// Lists every person once (deduped by personKey), with their personal-absence
+// day-counts for the selected time range.  Clicking a row opens PersonAbsenceDetail.
+function RosterPanel({ people, absences, onPersonClick }) {
+  const [search, setSearch]   = useState('');
+  const [range,  setRange]    = useState('last12');
+
+  const roster = useMemo(() => dedupeByName(people), [people]);
+
+  const todayStr = useMemo(localTodayStr, []);
+  const cutoff   = useMemo(() => rangeCutoffStr(range), [range]);
+
+  // Per-personKey day counts for the three personal-absence categories.
+  const personSummary = useMemo(() => {
+    const acc = {};
+    for (const a of absences) {
+      const ct = canonicalType(a.type);
+      if (!PERSONAL_ABSENCE_TYPES.includes(ct)) continue;
+      if (cutoff && a.start_date < cutoff) continue;
+      if (a.start_date > todayStr) continue; // skip future entries
+      const k = a.person_name;
+      if (!acc[k]) acc[k] = { Callout: 0, Sick: 0, Approved: 0 };
+      acc[k][ct] = (acc[k][ct] || 0) + absenceDays(a);
+    }
+    return acc;
+  }, [absences, cutoff, todayStr]);
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return roster;
+    const q = search.trim().toLowerCase();
+    return roster.filter(p => p.name.toLowerCase().includes(q));
+  }, [roster, search]);
+
+  const RANGE_OPTIONS = [
+    { key: 'last12',   label: 'Last 12 Mo.' },
+    { key: 'thisyear', label: 'This Year' },
+    { key: 'alltime',  label: 'All Time' },
+  ];
+
+  return (
+    <div className="absence-roster">
+      <div className="absence-roster-controls">
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          {RANGE_OPTIONS.map(r => (
+            <button key={r.key} className={`pill small${range === r.key ? ' active' : ''}`} onClick={() => setRange(r.key)}>
+              {r.label}
+            </button>
+          ))}
+        </div>
+        <input
+          type="text"
+          className="setup-input"
+          placeholder="Search staff…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{ maxWidth: 200, fontSize: 12, height: 28, padding: '0 8px' }}
+        />
+      </div>
+      <div className="absence-roster-list">
+        {filtered.map(p => {
+          const key = p.name.trim().toLowerCase();
+          const s = personSummary[key] ?? {};
+          const hasActivity = (s.Callout ?? 0) + (s.Sick ?? 0) + (s.Approved ?? 0) > 0;
+          return (
+            <div key={key} className="absence-roster-row" onClick={() => onPersonClick(key, p)}>
+              <span className="absence-roster-row-dot" style={{ background: p.color }} />
+              <span className="absence-roster-row-name">{p.name}</span>
+              {hasActivity ? (
+                <span className="absence-roster-row-counts">
+                  {s.Callout > 0 && (
+                    <span className="absence-roster-count-chip" style={{ background: `${colorOf('Callout')}18`, color: colorOf('Callout'), borderColor: `${colorOf('Callout')}50` }}>
+                      {s.Callout}d callout
+                    </span>
+                  )}
+                  {s.Sick > 0 && (
+                    <span className="absence-roster-count-chip" style={{ background: `${colorOf('Sick')}18`, color: colorOf('Sick'), borderColor: `${colorOf('Sick')}50` }}>
+                      {s.Sick}d sick
+                    </span>
+                  )}
+                  {s.Approved > 0 && (
+                    <span className="absence-roster-count-chip" style={{ background: `${colorOf('Approved')}18`, color: colorOf('Approved'), borderColor: `${colorOf('Approved')}50` }}>
+                      {s.Approved}d PTO
+                    </span>
+                  )}
+                </span>
+              ) : (
+                <span className="absence-roster-row-none">—</span>
+              )}
+            </div>
+          );
+        })}
+        {filtered.length === 0 && (
+          <div style={{ padding: '32px 16px', textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>
+            No staff match
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── PersonAbsenceDetail ──────────────────────────────────────────────────────
+// Shows one person's personal-absence history with day-count totals.
+// Linked tech+admin records are merged by personKey (same lowercased name).
+function PersonAbsenceDetail({ personKey, personName, personColor, absences, onBack }) {
+  const [range, setRange] = useState('last12');
+
+  const todayStr = useMemo(localTodayStr, []);
+  const cutoff   = useMemo(() => rangeCutoffStr(range), [range]);
+
+  const entries = useMemo(() =>
+    absences
+      .filter(a => {
+        if (a.person_name !== personKey) return false;
+        if (!PERSONAL_ABSENCE_TYPES.includes(canonicalType(a.type))) return false;
+        if (cutoff && a.start_date < cutoff) return false;
+        return true;
+      })
+      .sort((a, b) => b.start_date.localeCompare(a.start_date)),
+  [absences, personKey, cutoff]);
+
+  const counts = useMemo(() => {
+    const c = { Callout: 0, Sick: 0, Approved: 0 };
+    for (const a of entries) {
+      const ct = canonicalType(a.type);
+      if (c[ct] !== undefined) c[ct] += absenceDays(a);
+    }
+    return c;
+  }, [entries]);
+
+  const RANGE_OPTIONS = [
+    { key: 'last12',   label: 'Last 12 Mo.' },
+    { key: 'thisyear', label: 'This Year' },
+    { key: 'alltime',  label: 'All Time' },
+  ];
+
+  const DETAIL_TYPES = [
+    { key: 'Callout',  label: 'Last-Minute Callout', color: colorOf('Callout')  },
+    { key: 'Sick',     label: 'Sick',                 color: colorOf('Sick')     },
+    { key: 'Approved', label: 'Approved Time Off',    color: colorOf('Approved') },
+  ];
+
+  return (
+    <div className="absence-roster">
+      {/* Sub-header: back + name + range */}
+      <div className="absence-roster-detail-header">
+        <button className="btn btn-icon" onClick={onBack} title="Back to roster">
+          <ChevronLeft size={16} />
+        </button>
+        <span className="absence-roster-row-dot" style={{ background: personColor, width: 10, height: 10, borderRadius: '50%', display: 'inline-block', flexShrink: 0 }} />
+        <span style={{ fontWeight: 600, fontSize: 14 }}>{personName}</span>
+        <div style={{ flex: 1 }} />
+        <div style={{ display: 'flex', gap: 4 }}>
+          {RANGE_OPTIONS.map(r => (
+            <button key={r.key} className={`pill small${range === r.key ? ' active' : ''}`} onClick={() => setRange(r.key)}>
+              {r.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Totals */}
+      <div className="absence-roster-totals">
+        {DETAIL_TYPES.map(({ key, label, color }) => (
+          <div key={key} className="absence-roster-total-chip" style={{ borderColor: `${color}50`, background: `${color}10` }}>
+            <span className="absence-roster-total-count" style={{ color }}>{counts[key]}</span>
+            <span className="absence-roster-total-label">{label}</span>
+            <span className="absence-roster-total-unit" style={{ color: 'var(--text-muted)' }}>days</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Entry list */}
+      <div className="absence-history-list">
+        {entries.length === 0 ? (
+          <div className="absence-history-empty">No absences in this period</div>
+        ) : (
+          entries.map(a => {
+            const color = colorOf(a.type);
+            const days  = absenceDays(a);
+            return (
+              <div key={a.id} className="absence-history-row" style={{ cursor: 'default' }}>
+                <div className="absence-history-row-dot" style={{ background: color }} />
+                <div className="absence-history-row-date">{formatRange(a.start_date, a.end_date)}</div>
+                <div className="absence-history-row-type" style={{ background: color }}>{labelOf(a.type)}</div>
+                {days > 1 && (
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>{days}d</div>
+                )}
+                {a.note && <div className="absence-history-row-note">{a.note}</div>}
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AbsenceHistory({ absences, people, personByKey, onAbsenceClick }) {
   const [selectedKey, setSelectedKey] = useState('');
   const [selectedYear, setSelectedYear] = useState('all');
@@ -1842,7 +2065,9 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
 
   // Open focused on the month containing the currently viewed board week
   const initMonday = currentWeek ? mondayOfWeek(currentWeek) : new Date();
-  const [view,           setView]           = useState('calendar'); // 'calendar' | 'history'
+  const [view,           setView]           = useState('calendar'); // 'calendar' | 'history' | 'roster'
+  // Roster sub-navigation: null = roster list, object = { key, name, color } for person detail
+  const [rosterPerson,   setRosterPerson]   = useState(null);
   const [showOncallPanel, setShowOncallPanel] = useState(false);
   const [viewYear,  setViewYear]  = useState(initMonday.getUTCFullYear());
   const [viewMonth, setViewMonth] = useState(initMonday.getUTCMonth());
@@ -2067,7 +2292,7 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
     return dates;
   }, [currentWeek]);
 
-  // Escape layering: closure modal → absence modal → range chooser → dayPanel → calendar
+  // Escape layering: closure modal → absence modal → range chooser → dayPanel → roster detail → calendar
   useEffect(() => {
     const handler = (e) => {
       if (e.key === 'Escape') {
@@ -2077,12 +2302,14 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
         if (onCallPopover)   { setOnCallPopover(null);    return; }
         if (dayPanel)        { setDayPanel(null);          return; }
         if (showOncallPanel) { setShowOncallPanel(false); return; }
+        if (rosterPerson)    { setRosterPerson(null);     return; }
+        if (view !== 'calendar') { setView('calendar');   return; }
         onClose();
       }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [closureModal, modal, rangeChooser, onCallPopover, dayPanel, showOncallPanel, onClose]);
+  }, [closureModal, modal, rangeChooser, onCallPopover, dayPanel, showOncallPanel, rosterPerson, view, onClose]);
 
   // ─── Drag-range selection (manager only) ───────────────────────────────────
   const handleCellMouseDown = useCallback((ds) => {
@@ -2321,8 +2548,20 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
                 This Month
               </button>
             </>
+          ) : view === 'roster' && rosterPerson ? (
+            // Person detail sub-header: back arrow + name
+            <>
+              <button className="btn btn-icon" onClick={() => setRosterPerson(null)} title="Back to Roster">
+                <ChevronLeft size={16} />
+              </button>
+              <span className="absence-month-label" style={{ paddingLeft: 0, minWidth: 0 }}>
+                {rosterPerson.name}
+              </span>
+            </>
           ) : (
-            <span className="absence-month-label" style={{ paddingLeft: 4 }}>Absence History</span>
+            <span className="absence-month-label" style={{ paddingLeft: 4 }}>
+              {view === 'roster' ? 'Roster' : 'Absence History'}
+            </span>
           )}
           <div style={{ flex: 1 }} />
           {/* On call panel button — manager only */}
@@ -2337,11 +2576,23 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
               On Call
             </button>
           )}
+          {/* Roster button — manager only */}
+          {isAdmin && (
+            <button
+              className={`btn btn-pill topbar-mobile-hidden${view === 'roster' ? ' active' : ''}`}
+              style={{ fontSize: 11, minHeight: 26, padding: '2px 10px', gap: 4 }}
+              onClick={() => { setView(v => v === 'roster' ? 'calendar' : 'roster'); setRosterPerson(null); }}
+              title={view === 'roster' ? 'Back To Calendar' : 'Absence Roster'}
+            >
+              <Users size={13} />
+              Roster
+            </button>
+          )}
           {/* History toggle */}
           <button
             className={`btn btn-pill topbar-mobile-hidden${view === 'history' ? ' active' : ''}`}
             style={{ fontSize: 11, minHeight: 26, padding: '2px 10px', gap: 4 }}
-            onClick={() => setView(v => v === 'history' ? 'calendar' : 'history')}
+            onClick={() => { setView(v => v === 'history' ? 'calendar' : 'history'); setRosterPerson(null); }}
             title={view === 'history' ? 'Back To Calendar' : 'View Absence History'}
           >
             <History size={13} />
@@ -2415,6 +2666,22 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
               showOncallPanel={showOncallPanel}
             />
           </div>
+        ) : view === 'roster' ? (
+          rosterPerson ? (
+            <PersonAbsenceDetail
+              personKey={rosterPerson.key}
+              personName={rosterPerson.name}
+              personColor={rosterPerson.color}
+              absences={absences}
+              onBack={() => setRosterPerson(null)}
+            />
+          ) : (
+            <RosterPanel
+              people={people}
+              absences={absences}
+              onPersonClick={(key, p) => setRosterPerson({ key, name: p.name, color: p.color })}
+            />
+          )
         ) : (
           <AbsenceHistory
             absences={absences}
