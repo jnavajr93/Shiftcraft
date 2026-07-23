@@ -1271,14 +1271,24 @@ export function AppProvider({ children }) {
 
   const addResearchAssignment = useCallback(async (payload) => {
     const { error, data } = await saveResearchAssignmentDB(payload);
-    if (error) { console.error('[Shiftcraft] addResearchAssignment error:', error); return { error }; }
+    if (error) {
+      console.error('[Shiftcraft] addResearchAssignment error:', error);
+      setSaveStatus('error');
+      clearTimeout(saveStatusTimerRef.current);
+      return { error };
+    }
     setResearchAssignments(prev => [...prev, data].sort((a, b) => a.date.localeCompare(b.date)));
     return { error: null, data };
   }, []);
 
   const editResearchAssignment = useCallback(async (id, payload) => {
     const { error, data } = await updateResearchAssignmentDB(id, payload);
-    if (error) { console.error('[Shiftcraft] editResearchAssignment error:', error); return { error }; }
+    if (error) {
+      console.error('[Shiftcraft] editResearchAssignment error:', error);
+      setSaveStatus('error');
+      clearTimeout(saveStatusTimerRef.current);
+      return { error };
+    }
     setResearchAssignments(prev => prev.map(r => r.id === id ? data : r)
       .sort((a, b) => a.date.localeCompare(b.date)));
     return { error: null, data };
@@ -1286,7 +1296,12 @@ export function AppProvider({ children }) {
 
   const removeResearchAssignment = useCallback(async (id) => {
     const { error } = await deleteResearchAssignmentDB(id);
-    if (error) { console.error('[Shiftcraft] removeResearchAssignment error:', error); return { error }; }
+    if (error) {
+      console.error('[Shiftcraft] removeResearchAssignment error:', error);
+      setSaveStatus('error');
+      clearTimeout(saveStatusTimerRef.current);
+      return { error };
+    }
     setResearchAssignments(prev => prev.filter(r => r.id !== id));
     return { error: null };
   }, []);

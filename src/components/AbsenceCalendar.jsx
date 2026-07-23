@@ -618,31 +618,35 @@ function ResearchModal({ mode, initDate, assignment, people, managerInitials, on
     assignment?.end_min != null ? minutesToTimeInput(assignment.end_min) : ''
   );
   const [note,      setNote]        = useState(assignment?.note ?? '');
-  const [saving,    setSaving]      = useState(false);
-  const [deleting,  setDeleting]    = useState(false);
+  const [saving,      setSaving]      = useState(false);
+  const [deleting,    setDeleting]    = useState(false);
+  const [saveError,   setSaveError]   = useState(null);
+  const [deleteError, setDeleteError] = useState(null);
 
   const canSave = personKey && startD && endD && startD <= endD;
 
   const handleSave = async () => {
     if (!canSave) return;
     setSaving(true);
+    setSaveError(null);
     const start_min = startTime ? timeInputToMinutes(startTime) : null;
     const end_min   = endTime   ? timeInputToMinutes(endTime)   : null;
     const noteVal   = note.trim() || null;
     if (isEdit) {
-      await onSave(assignment.id, {
+      const result = await onSave(assignment.id, {
         person_name: personKey,
         date:        startD,
         start_min,
         end_min,
         note:        noteVal,
       });
+      if (result?.error) { setSaveError('Save failed — check your connection and try again.'); setSaving(false); return; }
     } else {
-      // Insert one row per calendar day in the range
+      // Insert one row per calendar day in the range; abort on first error
       let d = parseUTC(startD);
       const endDate = parseUTC(endD);
       while (d <= endDate) {
-        await onSave({
+        const result = await onSave({
           person_name: personKey,
           date:        toDateStr(d),
           start_min,
@@ -650,6 +654,7 @@ function ResearchModal({ mode, initDate, assignment, people, managerInitials, on
           note:        noteVal,
           entered_by:  managerInitials ?? null,
         });
+        if (result?.error) { setSaveError('Save failed — check your connection and try again.'); setSaving(false); return; }
         d = new Date(d);
         d.setUTCDate(d.getUTCDate() + 1);
       }
@@ -660,7 +665,9 @@ function ResearchModal({ mode, initDate, assignment, people, managerInitials, on
 
   const handleDelete = async () => {
     setDeleting(true);
-    await onDelete(assignment.id);
+    setDeleteError(null);
+    const result = await onDelete(assignment.id);
+    if (result?.error) { setDeleteError('Delete failed — check your connection.'); setDeleting(false); return; }
     setDeleting(false);
     onClose();
   };
@@ -726,6 +733,9 @@ function ResearchModal({ mode, initDate, assignment, people, managerInitials, on
             <label className="setup-label">Note <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span></label>
             <input className="setup-input" value={note} onChange={e => setNote(e.target.value)} placeholder="E.g. IRB Study, Chart Review…" />
           </div>
+
+          {saveError && <div className="absence-modal-error">{saveError}</div>}
+          {deleteError && <div className="absence-modal-error">{deleteError}</div>}
 
         </div>
 
@@ -2224,15 +2234,15 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
   const handleResearchSave = useCallback(async (idOrPayload, payloadOrUndefined) => {
     if (payloadOrUndefined !== undefined) {
       // edit: (id, payload)
-      await editResearchAssignment(idOrPayload, payloadOrUndefined);
+      return editResearchAssignment(idOrPayload, payloadOrUndefined);
     } else {
       // add: (payload)
-      await addResearchAssignment(idOrPayload);
+      return addResearchAssignment(idOrPayload);
     }
   }, [addResearchAssignment, editResearchAssignment]);
 
   const handleResearchDelete = useCallback(async (id) => {
-    await removeResearchAssignment(id);
+    return removeResearchAssignment(id);
   }, [removeResearchAssignment]);
 
   // ─── On-call chip handlers (manager only) ──────
