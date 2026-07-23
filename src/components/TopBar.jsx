@@ -759,7 +759,7 @@ export default function TopBar({ activeTab, setActiveTab, setupSection, setSetup
     weekLabel, currentWeek, navigateWeek, jumpToWeek, weekIsEmpty, copyFromTwoWeeksAgo, clearWeek,
     data, absences, calendarOverrides, addLog, applyBulkAssignments, restoreClinicSlots, lastSaved, saveStatus,
     historyScores, presentManagers, conflictToast, setConflictToast,
-    isDirty, postedSnapshot, dirtyWeeks, postWeek,
+    isDirty, postedSnapshot, dirtyWeeks, postWeek, sessionScheduleChangedRef,
     doctorOffClinicIds,
     holidayClosedClinicIds,
     onCallThisWeek,
@@ -1316,7 +1316,11 @@ export default function TopBar({ activeTab, setActiveTab, setupSection, setSetup
               className={`btn btn-pill btn-admin topbar-mobile-hidden ${isAdmin ? 'active' : ''}`}
               onClick={() => {
                 if (isAdmin) {
-                  if (isDirty) {
+                  // Only prompt to post if (a) the week has unposted schedule changes AND
+                  // (b) THIS session made at least one schedule mutation.  Calendar-only
+                  // sessions (absences, doctor-off, closures, research, on-call) must not
+                  // trigger the post prompt — they don't touch the schedule snapshot.
+                  if (isDirty && sessionScheduleChangedRef.current) {
                     setShowExitNudge(true);
                   } else {
                     setIsAdmin(false);

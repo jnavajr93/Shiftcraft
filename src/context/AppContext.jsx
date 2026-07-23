@@ -557,6 +557,11 @@ export function AppProvider({ children }) {
   // On Call toggle could overwrite the toggle with the pre-toggle DB value, which is
   // exactly the reported bug.  Same pattern as changelogFromRemoteRef.
   const scheduleFromRemoteRef = useRef(false);
+  // Session-scope: did the current admin session make any SCHEDULE mutations (slot, clinic,
+  // task, clear, copy)?  Reset when admin logs in; set inside doSaveWeek and clearWeek.
+  // Used so the exit prompt only fires when THIS session actually changed the schedule,
+  // not just because the week had pre-existing unposted changes from a previous session.
+  const sessionScheduleChangedRef = useRef(false);
   // Presence: other managers currently viewing this week.
   const [presentManagers, setPresentManagers] = useState([]);
   // Conflict toast: shown when a save is rejected due to a version mismatch.
@@ -587,6 +592,7 @@ export function AppProvider({ children }) {
   // On network error: retries once, then gives up.
   // Returns true on success, false on conflict or permanent error.
   const doSaveWeek = useCallback(async (weekStr, map) => {
+    sessionScheduleChangedRef.current = true;
     setSaveStatus('saving');
 
     const trySave = () =>
@@ -913,6 +919,12 @@ export function AppProvider({ children }) {
 
   // ─── Keep stable refs in sync ────────────────
   useEffect(() => { managerInitialsRef.current = managerInitials; }, [managerInitials]);
+
+  // Reset session-schedule-changed flag whenever admin mode is entered (not exited — the flag
+  // must remain true through the exit flow so the prompt can fire correctly if a post is needed).
+  useEffect(() => {
+    if (isAdmin) sessionScheduleChangedRef.current = false;
+  }, [isAdmin]);
 
   // ─── Changelog ────────────────────────────────
   useEffect(() => {
@@ -1513,6 +1525,7 @@ export function AppProvider({ children }) {
 
   const clearWeek = useCallback(async () => {
     if (!globalData) return;
+    sessionScheduleChangedRef.current = true;
     // Delete the week row entirely — a cleared week must have zero leftover data in Supabase.
     // On next load the init() path will see status:'empty' and seed a fresh blank map.
     await deleteWeekSlotMapDB(currentWeek);
@@ -2240,6 +2253,7 @@ export function AppProvider({ children }) {
       oncall, saveOncall, oncallOverrides, saveOncallOverride, deleteOncallOverride,
       onCallThisWeek: getOnCallPerson(currentWeek, oncall),
       isDirty, postedSnapshot, dirtyWeeks, boardClinics, postWeek,
+      sessionScheduleChangedRef,
       doctorOffClinicIds,
       holidayClosedClinicIds,
       holidayWorkedMap,
