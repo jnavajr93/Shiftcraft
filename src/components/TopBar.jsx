@@ -34,7 +34,7 @@ import ChatPanel from './ChatPanel.jsx';
 import AbsenceCalendar, { ABSENCE_TYPES } from './AbsenceCalendar.jsx';
 import { getFederalHolidays } from '../utils/federalHolidays.js';
 import { buildClosureMap } from '../utils/holidayClosures.js';
-import { getOnCallPerson, getOnCallForWeek } from '../utils/oncall.js';
+import { getOnCallPerson, getOnCallForWeek, addWeeks } from '../utils/oncall.js';
 import { generateSchedule } from '../engine/adapter.js';
 import { validateAndRepairAssignments, findObsViolations, findInvalidSlotAssignments, getPostViolations } from '../engine/validator.js';
 import { fetchAbsencesForWeek } from '../services/dataService.js';
@@ -541,121 +541,207 @@ OUTPUT: respond ONLY with valid JSON, no explanation, no markdown, no code fence
 
 Only include slots that should be filled. Omit middle/training unless needed. If a slot cannot be filled, omit it entirely.`;
 
-// ─── Hover preview (read-only status card for the viewed week) ───────────────
+// ─── Hover preview (month grid + events list) ────────────────────────────────
 
-function HoverPreview({ anchorRef, absences, currentWeek, people, calendarOverrides, oncall, oncallOverrides, onMouseEnter, onMouseLeave }) {
+function hpDs(d) { return d.toISOString().slice(0, 10); }
+function hpUTC(str) { return new Date(str + 'T00:00:00Z'); }
+function hpIsoWeek(date) {
+  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const ys = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return `${d.getUTCFullYear()}-W${String(Math.ceil(((d - ys) / 86400000 + 1) / 7)).padStart(2, '0')}`;
+}
+function hpGrid(year, month) {
+  const dow = new Date(Date.UTC(year, month, 1)).getUTCDay();
+  const cur = new Date(Date.UTC(year, month, 1 - dow));
+  const g = [];
+  for (let r = 0; r < 6; r++) {
+    const w = [];
+    for (let c = 0; c < 7; c++) { w.push(new Date(cur)); cur.setUTCDate(cur.getUTCDate() + 1); }
+    g.push(w);
+  }
+  return g;
+}
+
+const HP_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const HP_DOW = ['S','M','T','W','T','F','S'];
+const HP_CLOSED  = '#64748b';
+const HP_RESEARCH = '#8b5cf6';
+const HP_ONCALL  = '#f59e0b';
+const _HP_TMAP = new Map(ABSENCE_TYPES.map(t => [t.key, t]));
+const _HP_LR   = { Partial: 'Approved' };
+const hpColor  = (k) => _HP_TMAP.get(_HP_LR[k] ?? k)?.color ?? '#6b7280';
+const hpShort  = (k) => _HP_TMAP.get(_HP_LR[k] ?? k)?.short ?? k;
+
+function HoverPreview({ anchorRef, absences, currentWeek, people, calendarOverrides,
+  oncall, oncallOverrides, researchAssignments, onMouseEnter, onMouseLeave, onJumpAndDismiss }) {
   if (!anchorRef?.current) return null;
   const rect = anchorRef.current.getBoundingClientRect();
 
-  const width = 240;
-  let left = Math.round(rect.left + rect.width / 2 - width / 2);
-  if (left + width > window.innerWidth - 12) left = window.innerWidth - width - 12;
+  const initMon = mondayOfWeek(currentWeek);
+  const [hY, setHY] = useState(() => initMon.getUTCFullYear());
+  const [hM, setHM] = useState(() => initMon.getUTCMonth());
+
+  const W = 468;
+  let left = Math.round(rect.left + rect.width / 2 - W / 2);
+  if (left + W > window.innerWidth - 12) left = window.innerWidth - W - 12;
   if (left < 8) left = 8;
   const top = Math.round(rect.bottom + 8);
 
-  const monday = mondayOfWeek(currentWeek);
-  const toDs = (d) => d.toISOString().slice(0, 10);
-  const weekStart = toDs(monday);
-  const weekEnd = toDs(new Date(Date.UTC(monday.getUTCFullYear(), monday.getUTCMonth(), monday.getUTCDate() + 4)));
-  // Closures window: viewed week through Friday of W+2
-  const closureEndDs = toDs(new Date(Date.UTC(monday.getUTCFullYear(), monday.getUTCMonth(), monday.getUTCDate() + 18)));
+  const prevM = (e) => { e.stopPropagation(); if (hM === 0) { setHY(y => y - 1); setHM(11); } else setHM(m => m - 1); };
+  const nextM = (e) => { e.stopPropagation(); if (hM === 11) { setHY(y => y + 1); setHM(0); } else setHM(m => m + 1); };
 
-  // On-call
-  const onCallResult = getOnCallForWeek(currentWeek, oncall, oncallOverrides);
+  const grid = hpGrid(hY, hM);
+  const mStart = `${hY}-${String(hM + 1).padStart(2, '0')}-01`;
+  const mEnd   = hpDs(new Date(Date.UTC(hY, hM + 1, 0)));
+  const gStart = hpDs(grid[0][0]);
+  const gEnd   = hpDs(grid[5][6]);
 
-  // Out This Week — non-DoctorOff absences overlapping Mon–Fri of viewed week
-  const colorOf = (key) => ABSENCE_TYPES.find(t => t.key === key)?.color ?? '#6b7280';
-  const personByName = new Map((people ?? []).map(p => [p.name.trim().toLowerCase(), p]));
-
-  const outThisWeek = (absences ?? [])
-    .filter(a => a.type !== 'DoctorOff' && a.end_date >= weekStart && a.start_date <= weekEnd)
-    .sort((a, b) => a.start_date.localeCompare(b.start_date));
-
-  // Closures — observed holidays + office-closed in 3-week window
-  const year = monday.getUTCFullYear();
-  const allHolidays = [...getFederalHolidays(year), ...getFederalHolidays(year + 1)];
-  const closureMap = buildClosureMap(allHolidays, calendarOverrides ?? []);
-
-  const holidayClosures = [];
-  for (const [date, entry] of closureMap) {
-    if (date >= weekStart && date <= closureEndDs) {
-      holidayClosures.push({ date, name: entry.name });
-    }
+  // Current-week row highlight (Mon–Sun span)
+  const curMon = mondayOfWeek(currentWeek);
+  const curWkSet = new Set();
+  for (let i = 0; i < 7; i++) {
+    curWkSet.add(hpDs(new Date(Date.UTC(curMon.getUTCFullYear(), curMon.getUTCMonth(), curMon.getUTCDate() + i))));
   }
 
-  const doctorOffItems = (absences ?? [])
-    .filter(a => a.type === 'DoctorOff' && a.end_date >= weekStart && a.start_date <= closureEndDs)
-    .map(a => {
-      const person = personByName.get(a.person_name?.trim().toLowerCase());
-      const name = person?.name ?? a.person_name ?? 'Doctor';
-      return { date: a.start_date, name: `${name} Off` };
-    });
+  // Closure map
+  const hols = [...getFederalHolidays(hY - 1), ...getFederalHolidays(hY), ...getFederalHolidays(hY + 1)];
+  const closureMap = buildClosureMap(hols, calendarOverrides ?? []);
 
-  const allClosures = [...holidayClosures, ...doctorOffItems]
-    .sort((a, b) => a.date.localeCompare(b.date));
+  // Today (local timezone, same pattern as AbsenceCalendar)
+  const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
 
-  const isEmpty = !onCallResult && outThisWeek.length === 0 && allClosures.length === 0;
-
-  const MAX = 5;
-  const renderItems = (items, renderFn) => {
-    const shown = items.slice(0, MAX);
-    const extra = items.length - MAX;
-    return (
-      <>
-        {shown.map((item, i) => renderFn(item, i))}
-        {extra > 0 && <div className="hover-preview-overflow">+{extra} more</div>}
-      </>
-    );
+  // Dot map: dateStr → color[]
+  const dotMap = new Map();
+  const pushDot = (ds, color) => {
+    if (ds < gStart || ds > gEnd) return;
+    if (!dotMap.has(ds)) dotMap.set(ds, []);
+    dotMap.get(ds).push(color);
   };
 
+  for (const a of (absences ?? [])) {
+    if (a.end_date < gStart || a.start_date > gEnd) continue;
+    const color = hpColor(a.type);
+    const s = hpUTC(a.start_date > gStart ? a.start_date : gStart);
+    const e = hpUTC(a.end_date   < gEnd   ? a.end_date   : gEnd);
+    for (const d = new Date(s); hpDs(d) <= hpDs(e); d.setUTCDate(d.getUTCDate() + 1))
+      pushDot(hpDs(d), color);
+  }
+  for (const [ds] of closureMap) pushDot(ds, HP_CLOSED);
+  for (const ra of (researchAssignments ?? [])) pushDot(ra.date, HP_RESEARCH);
+
+  // Events list for viewed month
+  const byName = new Map((people ?? []).map(p => [p.name.trim().toLowerCase(), p]));
+  const evts = [];
+
+  for (const a of (absences ?? [])) {
+    if (a.end_date < mStart || a.start_date > mEnd) continue;
+    const p = byName.get((a.person_name ?? '').trim().toLowerCase());
+    evts.push({ key: `a-${a.id}`, date: a.start_date, color: hpColor(a.type),
+      name: p?.name ?? a.person_name ?? '—', detail: hpShort(a.type) });
+  }
+  for (const [ds, e] of closureMap) {
+    if (ds < mStart || ds > mEnd) continue;
+    evts.push({ key: `c-${ds}`, date: ds, color: HP_CLOSED,
+      name: e.name, detail: e.kind === 'office_closed' ? 'Closed' : 'Holiday' });
+  }
+  for (const ra of (researchAssignments ?? [])) {
+    if (ra.date < mStart || ra.date > mEnd) continue;
+    const p = byName.get((ra.person_name ?? '').trim().toLowerCase());
+    evts.push({ key: `r-${ra.id}`, date: ra.date, color: HP_RESEARCH,
+      name: p?.name ?? ra.person_name ?? '—', detail: 'Research' });
+  }
+  if (oncall?.rotation?.length > 0 && oncall?.anchorWeek) {
+    const d1 = new Date(Date.UTC(hY, hM, 1));
+    const dow1 = d1.getUTCDay() === 0 ? 7 : d1.getUTCDay();
+    let wMon = new Date(Date.UTC(hY, hM, 1 - (dow1 - 1)));
+    while (hpDs(wMon) <= mEnd) {
+      const monStr = hpDs(wMon);
+      if (monStr >= mStart) {
+        const wk = hpIsoWeek(wMon);
+        const r = getOnCallForWeek(wk, oncall, oncallOverrides ?? []);
+        if (r) {
+          const pColor = byName.get(r.person.trim().toLowerCase())?.color ?? HP_ONCALL;
+          evts.push({ key: `oc-${wk}`, date: monStr, color: pColor,
+            name: r.person, detail: `On Call${r.isOverride ? ' ↩' : ''}` });
+        }
+      }
+      wMon = new Date(Date.UTC(wMon.getUTCFullYear(), wMon.getUTCMonth(), wMon.getUTCDate() + 7));
+    }
+  }
+  evts.sort((a, b) => a.date.localeCompare(b.date));
+
+  const fmtD = (ds) => { const d = hpUTC(ds); return `${HP_MONTHS[d.getUTCMonth()].slice(0,3)} ${d.getUTCDate()}`; };
+
   return (
-    <div className="hover-preview" style={{ top, left, width }} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
-      {isEmpty ? (
-        <div className="hover-preview-empty">Nothing Scheduled This Week.</div>
-      ) : (
-        <>
-          {onCallResult && (
-            <>
-              <div className="hover-preview-section-title">On Call</div>
-              <div className="hover-preview-next-item">
-                <PhoneCall size={10} style={{ flexShrink: 0, color: 'var(--text-muted)', marginTop: 1 }} />
-                <span className="hover-preview-next-name">{onCallResult.person}</span>
-                {onCallResult.isOverride && <span className="hover-preview-next-date">override</span>}
+    <div className="hover-preview" style={{ top, left, width: W, padding: 0 }}
+      onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+      <div className="hp-cols">
+
+        {/* LEFT: compact month grid */}
+        <div className="hp-grid-col">
+          <div className="hp-month-nav">
+            <button className="hp-nav-btn" onClick={prevM}><ChevronLeft size={13} /></button>
+            <span className="hp-month-label">{HP_MONTHS[hM].slice(0,3)} {hY}</span>
+            <button className="hp-nav-btn" onClick={nextM}><ChevronRight size={13} /></button>
+          </div>
+          <div className="hp-dow-row">
+            {HP_DOW.map((d, i) => <span key={i} className="hp-dow-cell">{d}</span>)}
+          </div>
+          {grid.map((week, wi) => {
+            const isCurWeek = week.some(d => curWkSet.has(hpDs(d)));
+            return (
+              <div key={wi} className={`hp-week-row${isCurWeek ? ' hp-week-row--cur' : ''}`}>
+                {week.map((day, di) => {
+                  const ds = hpDs(day);
+                  const isOther = day.getUTCMonth() !== hM;
+                  const isToday = ds === todayStr;
+                  const dots = dotMap.get(ds) ?? [];
+                  const shown = dots.slice(0, 3);
+                  const extra = dots.length - 3;
+                  return (
+                    <button key={di}
+                      className={`hp-day${isOther ? ' hp-day--other' : ''}${isToday ? ' hp-day--today' : ''}`}
+                      onClick={(e) => { e.stopPropagation(); onJumpAndDismiss(hpIsoWeek(day)); }}
+                    >
+                      <span className="hp-day-num">{day.getUTCDate()}</span>
+                      {dots.length > 0 && (
+                        <span className="hp-dots">
+                          {shown.map((c, ci) => <span key={ci} className="hp-dot" style={{ background: c }} />)}
+                          {extra > 0 && <span className="hp-dot-plus">+</span>}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
-            </>
-          )}
-          {outThisWeek.length > 0 && (
-            <>
-              {onCallResult && <div className="hover-preview-divider" />}
-              <div className="hover-preview-section-title">Out This Week</div>
-              {renderItems(outThisWeek, (a, i) => {
-                const person = personByName.get(a.person_name?.trim().toLowerCase());
-                const name = person?.name ?? a.person_name;
-                return (
-                  <div key={a.id ?? i} className="hover-preview-next-item">
-                    <span className="hover-preview-dot" style={{ background: colorOf(a.type), flexShrink: 0 }} />
-                    <span className="hover-preview-next-name">{name}</span>
-                    <span className="hover-preview-next-date">{a.type}</span>
-                  </div>
-                );
-              })}
-            </>
-          )}
-          {allClosures.length > 0 && (
-            <>
-              {(onCallResult || outThisWeek.length > 0) && <div className="hover-preview-divider" />}
-              <div className="hover-preview-section-title">Closures</div>
-              {renderItems(allClosures, (e, i) => (
-                <div key={i} className="hover-preview-next-item">
-                  <span className="hover-preview-dot" style={{ background: '#64748b', flexShrink: 0 }} />
-                  <span className="hover-preview-next-name">{e.name}</span>
-                  <span className="hover-preview-next-date">{e.date.slice(5).replace('-', '/')}</span>
+            );
+          })}
+        </div>
+
+        <div className="hp-divider" />
+
+        {/* RIGHT: events list */}
+        <div className="hp-events-col">
+          <div className="hp-events-hdr">{HP_MONTHS[hM].slice(0,3)} {hY}</div>
+          {evts.length === 0 ? (
+            <div className="hp-events-empty">Nothing scheduled.</div>
+          ) : (
+            <div className="hp-events-list">
+              {evts.map(ev => (
+                <div key={ev.key} className="hp-event-row">
+                  <span className="hp-event-date">{fmtD(ev.date)}</span>
+                  <span className="hp-event-dot" style={{ background: ev.color }} />
+                  <span className="hp-event-name">{ev.name}</span>
+                  <span className="hp-event-what">{ev.detail}</span>
                 </div>
               ))}
-            </>
+            </div>
           )}
-        </>
-      )}
+        </div>
+
+      </div>
     </div>
   );
 }
@@ -677,7 +763,7 @@ export default function TopBar({ activeTab, setActiveTab, setupSection, setSetup
     doctorOffClinicIds,
     holidayClosedClinicIds,
     onCallThisWeek,
-    oncall, oncallOverrides,
+    oncall, oncallOverrides, researchAssignments,
   } = useApp();
   const weekLabelRef = useRef(null);
   const undoTimerRef = useRef(null);
@@ -1352,10 +1438,16 @@ export default function TopBar({ activeTab, setActiveTab, setupSection, setSetup
           calendarOverrides={calendarOverrides ?? []}
           oncall={oncall}
           oncallOverrides={oncallOverrides ?? []}
+          researchAssignments={researchAssignments ?? []}
           onMouseEnter={() => clearTimeout(hoverTimerRef.current)}
           onMouseLeave={() => {
             clearTimeout(hoverTimerRef.current);
             hoverTimerRef.current = setTimeout(() => setShowPreview(false), 200);
+          }}
+          onJumpAndDismiss={(weekStr) => {
+            clearTimeout(hoverTimerRef.current);
+            setShowPreview(false);
+            jumpToWeek(weekStr);
           }}
         />
       )}
