@@ -399,6 +399,8 @@ function AbsenceModal({ mode, initStart, initEnd, initType, absence, people, abs
   const [saving,    setSaving]    = useState(false);
   const [deleting,  setDeleting]  = useState(false);
   const [dupWarning, setDupWarning] = useState(null);
+  const [saveError,   setSaveError]   = useState(null);
+  const [deleteError, setDeleteError] = useState(null);
 
   const handleTypeSelect = (newType) => {
     if ((type === 'DoctorOff') !== (newType === 'DoctorOff')) setPersonKey('');
@@ -420,6 +422,7 @@ function AbsenceModal({ mode, initStart, initEnd, initType, absence, people, abs
       if (dup) { setDupWarning(dup); return; }
     }
     setSaving(true);
+    setSaveError(null);
     const payload = {
       person_name:   personKey,
       start_date:    startD,
@@ -431,14 +434,16 @@ function AbsenceModal({ mode, initStart, initEnd, initType, absence, people, abs
       note:          note.trim() || null,
       entered_by:    managerInitials,
     };
-    if (isEdit) await onSave(absence.id, payload);
-    else        await onSave(payload);
+    const result = isEdit ? await onSave(absence.id, payload) : await onSave(payload);
+    if (result?.error) setSaveError('Save failed — check your connection and try again.');
     setSaving(false);
   };
 
   const handleDelete = async () => {
     setDeleting(true);
-    await onDelete(absence.id);
+    setDeleteError(null);
+    const result = await onDelete(absence.id);
+    if (result?.error) setDeleteError('Delete failed — check your connection.');
     setDeleting(false);
   };
 
@@ -558,6 +563,20 @@ function AbsenceModal({ mode, initStart, initEnd, initType, absence, people, abs
                   </button>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Save / delete error banners — shown inline so the manager sees them with the form */}
+          {saveError && (
+            <div className="absence-modal-error">
+              <AlertCircle size={13} style={{ flexShrink: 0 }} />
+              <span>{saveError}</span>
+            </div>
+          )}
+          {deleteError && (
+            <div className="absence-modal-error">
+              <AlertCircle size={13} style={{ flexShrink: 0 }} />
+              <span>{deleteError}</span>
             </div>
           )}
         </div>
@@ -2142,12 +2161,16 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
     } else {
       await removeCalendarOverride(id);
     }
+    // errors surface via saveStatus toast in AppContext
   }, [addCalendarOverride, removeCalendarOverride]);
 
   // Move a holiday to a new date (replaces any existing holiday_moved override for that holiday)
   const handleMoveHoliday = useCallback(async (holidayName, newDate) => {
     const existing = (calendarOverrides ?? []).find(o => o.kind === 'holiday_moved' && o.holiday_name === holidayName);
-    if (existing) await removeCalendarOverride(existing.id);
+    if (existing) {
+      const { error } = await removeCalendarOverride(existing.id);
+      if (error) return; // error already surfaced via saveStatus
+    }
     await addCalendarOverride({ date: newDate, kind: 'holiday_moved', holiday_name: holidayName });
   }, [calendarOverrides, removeCalendarOverride, addCalendarOverride]);
 
@@ -2159,7 +2182,10 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
   // Set location scope for a holiday (null = all; array = specific closed locations)
   const handleSetHolidayScope = useCallback(async (dateStr, holidayName, locations) => {
     const existing = (calendarOverrides ?? []).find(o => o.kind === 'holiday_scope' && o.date === dateStr);
-    if (existing) await removeCalendarOverride(existing.id);
+    if (existing) {
+      const { error } = await removeCalendarOverride(existing.id);
+      if (error) return; // error already surfaced via saveStatus; don't write a second override
+    }
     // If locations is null or all 5 locations selected: no scope override needed (all closed = default)
     if (locations !== null && locations.length > 0 && locations.length < CLOSURE_LOCATIONS.length) {
       await addCalendarOverride({ date: dateStr, kind: 'holiday_scope', holiday_name: holidayName, locations });
@@ -2169,13 +2195,15 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
   const handleAddClosure = useCallback(async (payloads) => {
     const arr = Array.isArray(payloads) ? payloads : [payloads];
     for (const p of arr) {
-      await addCalendarOverride(p);
+      const { error } = await addCalendarOverride(p);
+      if (error) return; // error surfaced via saveStatus; don't close modal or continue writing
     }
     setClosureModal(null);
   }, [addCalendarOverride]);
 
   const handleDeleteClosure = useCallback(async (id) => {
     await removeCalendarOverride(id);
+    // error surfaces via saveStatus toast
   }, [removeCalendarOverride]);
 
   const handleAddDoctorOff = useCallback((ds) => {

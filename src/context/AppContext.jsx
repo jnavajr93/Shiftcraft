@@ -1164,7 +1164,12 @@ export function AppProvider({ children }) {
 
   const addAbsence = useCallback(async (payload) => {
     const { error, data } = await saveAbsenceDB(payload);
-    if (error) { console.error('[Shiftcraft] addAbsence error:', error); return { error }; }
+    if (error) {
+      console.error('[Shiftcraft] addAbsence error:', error);
+      setSaveStatus('error');
+      clearTimeout(saveStatusTimerRef.current);
+      return { error };
+    }
     // realtime will update state; set optimistically too for instant feedback
     setAbsences(prev => [...prev, data].sort((a, b) => a.start_date.localeCompare(b.start_date)));
     return { error: null, data };
@@ -1172,7 +1177,12 @@ export function AppProvider({ children }) {
 
   const editAbsence = useCallback(async (id, payload) => {
     const { error, data } = await updateAbsenceDB(id, payload);
-    if (error) { console.error('[Shiftcraft] editAbsence error:', error); return { error }; }
+    if (error) {
+      console.error('[Shiftcraft] editAbsence error:', error);
+      setSaveStatus('error');
+      clearTimeout(saveStatusTimerRef.current);
+      return { error };
+    }
     setAbsences(prev => prev.map(a => a.id === id ? data : a)
       .sort((a, b) => a.start_date.localeCompare(b.start_date)));
     return { error: null, data };
@@ -1180,7 +1190,12 @@ export function AppProvider({ children }) {
 
   const removeAbsence = useCallback(async (id) => {
     const { error } = await deleteAbsenceDB(id);
-    if (error) { console.error('[Shiftcraft] removeAbsence error:', error); return { error }; }
+    if (error) {
+      console.error('[Shiftcraft] removeAbsence error:', error);
+      setSaveStatus('error');
+      clearTimeout(saveStatusTimerRef.current);
+      return { error };
+    }
     setAbsences(prev => prev.filter(a => a.id !== id));
     return { error: null };
   }, []);
@@ -1206,14 +1221,24 @@ export function AppProvider({ children }) {
 
   const addCalendarOverride = useCallback(async (payload) => {
     const { error, data } = await saveCalendarOverrideDB(payload);
-    if (error) { console.error('[Shiftcraft] addCalendarOverride error:', error); return { error }; }
+    if (error) {
+      console.error('[Shiftcraft] addCalendarOverride error:', error);
+      setSaveStatus('error');
+      clearTimeout(saveStatusTimerRef.current);
+      return { error };
+    }
     setCalendarOverrides(prev => [...prev, data].sort((a, b) => a.date.localeCompare(b.date)));
     return { error: null, data };
   }, []);
 
   const removeCalendarOverride = useCallback(async (id) => {
     const { error } = await deleteCalendarOverrideDB(id);
-    if (error) { console.error('[Shiftcraft] removeCalendarOverride error:', error); return { error }; }
+    if (error) {
+      console.error('[Shiftcraft] removeCalendarOverride error:', error);
+      setSaveStatus('error');
+      clearTimeout(saveStatusTimerRef.current);
+      return { error };
+    }
     setCalendarOverrides(prev => prev.filter(o => o.id !== id));
     return { error: null };
   }, []);
@@ -1287,7 +1312,11 @@ export function AppProvider({ children }) {
   const saveOncall = useCallback(async (settings) => {
     setOncall(settings);
     const { error } = await saveOncallSettingsDB(settings);
-    if (error) console.error('[Shiftcraft] saveOncall error:', error);
+    if (error) {
+      console.error('[Shiftcraft] saveOncall error:', error);
+      setSaveStatus('error');
+      clearTimeout(saveStatusTimerRef.current);
+    }
     return { error: error ?? null };
   }, []);
 
@@ -1299,10 +1328,9 @@ export function AppProvider({ children }) {
         return [...next, result.data ?? payload];
       });
     } else {
-      // Surface DB failures via the existing save-error toast so they can't hide silently
+      // Surface DB failures — no auto-dismiss, manager must acknowledge or retry
       setSaveStatus('error');
       clearTimeout(saveStatusTimerRef.current);
-      saveStatusTimerRef.current = setTimeout(() => setSaveStatus('idle'), 4000);
     }
     return result;
   }, []);
@@ -1314,7 +1342,6 @@ export function AppProvider({ children }) {
     } else {
       setSaveStatus('error');
       clearTimeout(saveStatusTimerRef.current);
-      saveStatusTimerRef.current = setTimeout(() => setSaveStatus('idle'), 4000);
     }
     return result;
   }, []);
@@ -2177,12 +2204,20 @@ export function AppProvider({ children }) {
     return workedHolidayMap;
   }, [calendarOverrides, globalData, currentWeek]);
 
+  const dismissSaveError = useCallback(() => {
+    if (saveStatus === 'error') {
+      clearTimeout(saveStatusTimerRef.current);
+      setSaveStatus('idle');
+    }
+  }, [saveStatus]);
+
   return (
     <AppContext.Provider value={{
       data,
       isLoading,
       loadError,
       saveStatus,
+      dismissSaveError,
       lastSaved,
       isAdmin, setIsAdmin,
       managerInitials, setManagerInitials,

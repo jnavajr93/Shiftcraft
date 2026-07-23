@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { X as XIcon } from 'lucide-react';
 import {
   DndContext,
   DragOverlay,
@@ -54,7 +55,7 @@ function SavedToast() {
 }
 
 function AppContent() {
-  const { data, isAdmin, boardClinics, isLoading, loadError, saveStatus, assignSlot, assignTask } = useApp();
+  const { data, isAdmin, boardClinics, isLoading, loadError, saveStatus, dismissSaveError, assignSlot, assignTask } = useApp();
 
   if (isLoading) {
     return (
@@ -246,13 +247,15 @@ function AppContent() {
 
       <SavedToast />
       {saveStatus === 'error' && (
-        <div className="saved-toast" style={{
-          background: '#dc2626',
-          color: '#fff',
-          bottom: 'auto',
-          top: 68,
-        }}>
-          ⚠ Change not saved — check connection
+        <div className="saved-toast saved-toast--error">
+          <span>⚠ Change not saved — check connection</span>
+          <button
+            className="saved-toast-dismiss"
+            onClick={dismissSaveError}
+            aria-label="Dismiss"
+          >
+            <XIcon size={13} />
+          </button>
         </div>
       )}
 
