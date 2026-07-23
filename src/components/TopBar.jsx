@@ -1339,8 +1339,10 @@ export default function TopBar({ activeTab, setActiveTab, setupSection, setSetup
         </div>
       </div>
 
-      {/* Unposted changes banner — persistent, manager-only, not dismissible */}
-      {isAdmin && isDirty && (
+      {/* Unposted changes banner — only shown when this session made schedule changes.
+          Calendar-only sessions (absences, doctor-off, closures, research, on-call)
+          never set sessionScheduleChangedRef so the banner stays hidden for them. */}
+      {isAdmin && isDirty && sessionScheduleChangedRef.current && (
         <div className="unposted-banner">
           <span className="unposted-banner-msg">
             {postedSnapshot
