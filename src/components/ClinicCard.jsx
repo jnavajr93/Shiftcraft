@@ -502,8 +502,10 @@ export default function ClinicCard({ clinic, onPersonClick, onEditClinic, matche
     return (
       <div data-clinic-id={clinic.id} className={`clinic-card clinic-card--doctor-off${isToday ? ' col-today-cell' : ''}`}>
         <div className="clinic-card-header">
-          <div>
+          <div className="clinic-card-header-row">
             <div className="clinic-card-title">{clinic.provider}</div>
+          </div>
+          <div className="clinic-card-header-row">
             <div className="clinic-card-sub">{clinic.location}</div>
           </div>
         </div>
@@ -517,19 +519,10 @@ export default function ClinicCard({ clinic, onPersonClick, onEditClinic, matche
   return (
     <div data-tour="clinic-card" data-clinic-id={clinic.id} className={`clinic-card${!clinic.open ? ' closed' : ''}${isToday ? ' col-today-cell' : ''}`}>
       <div className="clinic-card-header">
-        <div>
+        <div className="clinic-card-header-row">
           <div className="clinic-card-title">{clinic.provider}</div>
-          <div className="clinic-card-sub">{clinic.location}</div>
-        </div>
-        <div className="clinic-card-header-right">
           {isAdmin && (
-            <span className="clinic-time-pill">
-              {minutesToTime(clinic.startTime)} – {minutesToTime(clinic.endTime)}
-            </span>
-          )}
-          {clinic.open && <PatientBadge count={clinic.patientCount} />}
-          {isAdmin && (
-            <>
+            <div className="clinic-card-header-controls">
               <button
                 className="clinic-edit-btn"
                 onClick={(e) => { e.stopPropagation(); updateClinic(clinic.id, { open: !clinic.open }); }}
@@ -545,7 +538,20 @@ export default function ClinicCard({ clinic, onPersonClick, onEditClinic, matche
               >
                 <Pencil size={14} />
               </button>
-            </>
+            </div>
+          )}
+        </div>
+        <div className="clinic-card-header-row">
+          <div className="clinic-card-sub">{clinic.location}</div>
+          {(isAdmin || clinic.open) && (
+            <div className="clinic-card-header-meta">
+              {isAdmin && (
+                <span className="clinic-time-pill">
+                  {minutesToTime(clinic.startTime)} – {minutesToTime(clinic.endTime)}
+                </span>
+              )}
+              {clinic.open && <PatientBadge count={clinic.patientCount} />}
+            </div>
           )}
         </div>
       </div>

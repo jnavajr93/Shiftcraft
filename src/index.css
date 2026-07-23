@@ -516,15 +516,30 @@ html, body, #root {
 .clinic-card.closed { opacity: 0.5; }
 
 .clinic-card-header {
-  display: flex; align-items: center; gap: 6px;
+  display: flex; flex-direction: column; gap: 1px;
   padding: 8px 12px; background: var(--bg-surface);
   border-bottom: 0.5px solid var(--border);
 }
-.clinic-card-title { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.clinic-card-sub   { font-size: 11px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* Left title area absorbs remaining space so the right buttons never overflow */
-.clinic-card-header > div:first-child { flex: 1; min-width: 0; overflow: hidden; }
-.clinic-card-header-right { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+/* Each header row is its own flex line so text never competes with controls */
+.clinic-card-header-row {
+  display: flex; align-items: center; gap: 6px; min-width: 0;
+}
+/* Text grows to fill its row; truncates only when the entire row is exhausted */
+.clinic-card-title {
+  font-size: 13px; font-weight: 500;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  flex: 1; min-width: 0;
+}
+.clinic-card-sub {
+  font-size: 11px; color: var(--text-secondary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  flex: 1; min-width: 0;
+}
+/* Icon buttons (power + pencil) on row 1 — never shrink, never clip */
+.clinic-card-header-controls { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+/* Metadata (hours pill + patient count) on row 2 — flex-shrink: 0 is fine because
+   row 2 never shares space with the longer provider name */
+.clinic-card-header-meta { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 
 .patient-badge {
   display: flex; align-items: center; gap: 4px;
