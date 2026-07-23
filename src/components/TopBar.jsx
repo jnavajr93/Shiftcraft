@@ -635,19 +635,30 @@ function HoverPreview({ anchorRef, absences, currentWeek, people, calendarOverri
   const byName = new Map((people ?? []).map(p => [p.name.trim().toLowerCase(), p]));
   const evts = [];
 
+  // When the user is viewing the current calendar month, suppress events that
+  // have already fully passed.  Viewing any other month (past or future) shows
+  // all events in that month unchanged.
+  const [todayY, todayMStr] = todayStr.split('-');
+  const isCurrentMonth = hY === Number(todayY) && hM === Number(todayMStr) - 1;
+  const evtMinDate = isCurrentMonth ? todayStr : null;
+
   for (const a of (absences ?? [])) {
     if (a.end_date < mStart || a.start_date > mEnd) continue;
+    // Keep in-progress multi-day absences: exclude only when end_date is past
+    if (evtMinDate && a.end_date < evtMinDate) continue;
     const p = byName.get((a.person_name ?? '').trim().toLowerCase());
-    evts.push({ key: `a-${a.id}`, date: a.start_date, color: hpColor(a.type),
-      name: p?.name ?? a.person_name ?? '—', detail: hpShort(a.type) });
+    evts.push({ key: `a-${a.id}`, date: a.start_date < mStart ? mStart : a.start_date,
+      color: hpColor(a.type), name: p?.name ?? a.person_name ?? '—', detail: hpShort(a.type) });
   }
   for (const [ds, e] of closureMap) {
     if (ds < mStart || ds > mEnd) continue;
+    if (evtMinDate && ds < evtMinDate) continue;
     evts.push({ key: `c-${ds}`, date: ds, color: HP_CLOSED,
       name: e.name, detail: e.kind === 'office_closed' ? 'Closed' : 'Holiday' });
   }
   for (const ra of (researchAssignments ?? [])) {
     if (ra.date < mStart || ra.date > mEnd) continue;
+    if (evtMinDate && ra.date < evtMinDate) continue;
     const p = byName.get((ra.person_name ?? '').trim().toLowerCase());
     evts.push({ key: `r-${ra.id}`, date: ra.date, color: HP_RESEARCH,
       name: p?.name ?? ra.person_name ?? '—', detail: 'Research' });
@@ -659,12 +670,16 @@ function HoverPreview({ anchorRef, absences, currentWeek, people, calendarOverri
     while (hpDs(wMon) <= mEnd) {
       const monStr = hpDs(wMon);
       if (monStr >= mStart) {
-        const wk = hpIsoWeek(wMon);
-        const r = getOnCallForWeek(wk, oncall, oncallOverrides ?? []);
-        if (r) {
-          const pColor = byName.get(r.person.trim().toLowerCase())?.color ?? HP_ONCALL;
-          evts.push({ key: `oc-${wk}`, date: monStr, color: pColor,
-            name: r.person, detail: `On Call${r.isOverride ? ' ↩' : ''}` });
+        // On-call: keep if the week hasn't fully ended (Sunday of that week >= today)
+        const sunStr = hpDs(new Date(wMon.getTime() + 6 * 86400000));
+        if (!evtMinDate || sunStr >= evtMinDate) {
+          const wk = hpIsoWeek(wMon);
+          const r = getOnCallForWeek(wk, oncall, oncallOverrides ?? []);
+          if (r) {
+            const pColor = byName.get(r.person.trim().toLowerCase())?.color ?? HP_ONCALL;
+            evts.push({ key: `oc-${wk}`, date: monStr, color: pColor,
+              name: r.person, detail: `On Call${r.isOverride ? ' ↩' : ''}` });
+          }
         }
       }
       wMon = new Date(Date.UTC(wMon.getUTCFullYear(), wMon.getUTCMonth(), wMon.getUTCDate() + 7));
