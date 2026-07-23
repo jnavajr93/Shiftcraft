@@ -116,6 +116,37 @@ function generateSchedulePDF(data, weekLabel, weekMonday, postedBy, filename, ca
     return row;
   });
 
+  // Additional tasks row — appended after clinic rows when any day has tasks.
+  // Med Transport renders as "Med Transport → Destination — Person".
+  // Other tasks render as "Label @ Location — Person (time)" or "Label — Person (time)".
+  const fmtTaskTime = (t) => {
+    if (t.start == null && t.end == null) return null;
+    const s = minutesToTime(t.start);
+    const e = t.end === 'close' ? 'Close' : (t.end != null ? minutesToTime(t.end) : null);
+    return e ? `${s} – ${e}` : s;
+  };
+  const taskRow = ['Addl. Tasks'];
+  let hasAnyTask = false;
+  for (const day of DAYS_LIST) {
+    const dayTasks = (data.additionalTasks ?? [])
+      .filter(t => t.day === day && !t._isResearch)
+      .sort((a, b) => (a.start ?? Infinity) - (b.start ?? Infinity));
+    if (!dayTasks.length) { taskRow.push(''); continue; }
+    hasAnyTask = true;
+    const lines = dayTasks.map(t => {
+      const p = personById.get(t.assignedPersonId);
+      const who = p ? ` — ${p.name}` : '';
+      if (t.label === 'Med Transport') {
+        return `Med Transport${t.locationTag ? ' → ' + t.locationTag : ''}${who}`;
+      }
+      const loc = t.locationTag ? ` @ ${t.locationTag}` : '';
+      const time = fmtTaskTime(t);
+      return `${t.label}${loc}${who}${time ? ` (${time})` : ''}`;
+    });
+    taskRow.push(lines.join('\n'));
+  }
+  if (hasAnyTask) body.push(taskRow);
+
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
   const pageW = doc.internal.pageSize.width;
   const pageH = doc.internal.pageSize.height;

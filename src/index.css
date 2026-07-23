@@ -524,22 +524,28 @@ html, body, #root {
 .clinic-card-header-row {
   display: flex; align-items: center; gap: 6px; min-width: 0;
 }
-/* Text grows to fill its row; truncates only when the entire row is exhausted */
+/* Row 1: title grows to fill, truncates only when the entire row is exhausted */
 .clinic-card-title {
   font-size: 13px; font-weight: 500;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   flex: 1; min-width: 0;
 }
+/* Row 2: location takes its natural content width and does NOT shrink;
+   the metadata (hours pill + patient count) fills the remainder and compresses
+   first — so "Scottsdale" / "Estrella" always render in full */
 .clinic-card-sub {
   font-size: 11px; color: var(--text-secondary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  flex: 1; min-width: 0;
+  flex: 0 0 auto; /* natural width; never shrinks */
 }
 /* Icon buttons (power + pencil) on row 1 — never shrink, never clip */
 .clinic-card-header-controls { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
-/* Metadata (hours pill + patient count) on row 2 — flex-shrink: 0 is fine because
-   row 2 never shares space with the longer provider name */
-.clinic-card-header-meta { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+/* Metadata on row 2 fills remaining space after the location text, right-aligned.
+   flex-shrink:1 lets the time pill compress before the location text does. */
+.clinic-card-header-meta {
+  display: flex; align-items: center; gap: 4px;
+  flex: 1 1 0; min-width: 0; justify-content: flex-end; overflow: hidden;
+}
 
 .patient-badge {
   display: flex; align-items: center; gap: 4px;
