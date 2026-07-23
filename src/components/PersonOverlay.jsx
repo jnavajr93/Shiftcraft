@@ -66,7 +66,10 @@ export function WeekRows({ personIds, clinics, additionalTasks, monday }) {
         (additionalTasks ?? [])
           .filter(t => t.day === day && pidSet.has(t.assignedPersonId))
           .forEach(t => {
-            const label = `${t.label}${t.locationTag ? ' @ ' + t.locationTag : ''}`;
+            // Med Transport uses arrow notation for the destination; other tasks use @ for location tags
+            const label = t.label === 'Med Transport'
+              ? `Med Transport${t.locationTag ? ' → ' + t.locationTag : ''}`
+              : `${t.label}${t.locationTag ? ' @ ' + t.locationTag : ''}`;
             const time = formatTaskTime(t) ?? null;
             assignments.push({ label, time, sortKey: t.start ?? Infinity });
           });

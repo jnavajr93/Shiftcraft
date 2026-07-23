@@ -46,7 +46,7 @@ import { getOnCallPerson } from '../utils/oncall.js';
 // localStorage keys kept only for migration and per-device flags
 const STORAGE_KEY = 'shiftcraft.v5';
 
-const BUILTIN_TASK_TYPES = ['Triage', 'See Matt/Jo', 'Imaging Upload', 'Research', 'Training'];
+const BUILTIN_TASK_TYPES = ['Triage', 'See Matt/Jo', 'Imaging Upload', 'Research', 'Training', 'Med Transport'];
 
 const AppContext = createContext(null);
 
@@ -98,11 +98,16 @@ export function mondayOfWeek(weekStr) {
   return monday;
 }
 
-/** Slot map: { [clinicId]: {scribe,opener,...}, [`task:${taskId}`]: personId|null } */
+/** Slot map: { [clinicId]: {scribe,opener,...}, [`task:${taskId}`]: personId|null, __clinicConfig: per-week config } */
 function extractSlotMap(clinics, tasks) {
   const map = {};
   for (const c of clinics) map[c.id] = { ...c.slots };
   for (const t of (tasks ?? [])) map[`task:${t.id}`] = t.assignedPersonId;
+  // Per-week clinic config snapshot: open/closed, start/end times, patient count.
+  // Stored alongside assignments so each week independently preserves its clinic settings.
+  map.__clinicConfig = Object.fromEntries(
+    clinics.map(c => [c.id, { open: c.open, startTime: c.startTime, endTime: c.endTime, patientCount: c.patientCount }])
+  );
   return map;
 }
 
@@ -115,10 +120,18 @@ function readLocalWeekSlotMap(weekStr) {
   return null;
 }
 
-/** Apply a slotMap onto clinics and tasks, returning new arrays */
+/** Apply a slotMap onto clinics and tasks, returning new arrays.
+ *  If the map contains __clinicConfig, those per-week values (open, times, patientCount)
+ *  override the base clinic definitions for this week only. */
 function applySlotMap(clinics, tasks, map) {
+  const clinicConfig = map.__clinicConfig ?? {};
   const newClinics = clinics.map(c => {
-    if (c.location === 'OBS') {
+    // Apply per-week clinic config (open/closed, times, patient count) if present.
+    // Only these four fields are per-week; structural fields (provider, location) stay global.
+    const override = clinicConfig[c.id];
+    const base = override ? { ...c, ...override } : c;
+
+    if (base.location === 'OBS') {
       // Merge with blank OBS shape, then strip any non-OBS keys that leaked in from
       // stale Supabase data (e.g. a prior bad generation that wrote 'frontDesk' to OBS).
       const merged = { ...blankObsSlots(), ...(map[c.id] ?? {}) };
@@ -127,24 +140,19 @@ function applySlotMap(clinics, tasks, map) {
         console.warn(`[Shiftcraft applySlotMap] OBS clinic ${c.id}: stripping invalid slot keys:`, invalidKeys);
         for (const k of invalidKeys) delete merged[k];
       }
-      return { ...c, slots: merged };
+      return { ...base, slots: merged };
     }
     // Merge with blank standard shape, then clear personIds in inactive FD slots.
-    // Inactive FD slots on Dr. R Mon/Fri: 'frontDesk' is dead; only
-    // openingFrontDesk/closingFrontDesk are rendered. Stale Supabase data
-    // can leave a personId in the inactive slot, causing phantom "already assigned"
-    // in every popover and conflict banner on that day. Clearing here makes the
-    // fix universal: every week load cleans itself regardless of init() startup week.
     const merged = { ...blankStandardSlots(), ...(map[c.id] ?? {}) };
-    const activeFD = new Set(getActiveFDSlots(c));
+    const activeFD = new Set(getActiveFDSlots(base));
     const ALL_FD = ['openingFrontDesk', 'closingFrontDesk', 'frontDesk'];
     for (const fdKey of ALL_FD) {
       if (!activeFD.has(fdKey) && merged[fdKey]) {
-        console.warn(`[Shiftcraft applySlotMap] Regular clinic ${c.id} (${c.provider} ${c.day}): clearing stale inactive FD slot "${fdKey}"`);
+        console.warn(`[Shiftcraft applySlotMap] Regular clinic ${c.id} (${base.provider} ${base.day}): clearing stale inactive FD slot "${fdKey}"`);
         merged[fdKey] = null;
       }
     }
-    return { ...c, slots: merged };
+    return { ...base, slots: merged };
   });
   const newTasks = (tasks ?? []).map(t => ({
     ...t,
@@ -176,6 +184,9 @@ function blankSlotMap(clinics, tasks) {
   const map = {};
   for (const c of clinics) map[c.id] = c.location === 'OBS' ? blankObsSlots() : blankStandardSlots();
   for (const t of (tasks ?? [])) map[`task:${t.id}`] = null;
+  // Intentionally no __clinicConfig here: new weeks fall through to the original global
+  // defaults via the clinic-config reset in navigateWeek/jumpToWeek. Per-week clinic
+  // config is added to the map on the first mutation via extractSlotMap.
   return map;
 }
 
@@ -560,6 +571,15 @@ function runMigrations(data) {
 // ─── Snapshot helpers (module-level, usable in init()) ────────────────────
 // Canonical slot map string with stable key order for dirty-state comparison.
 // Postgres JSONB may return keys in a different order than we wrote them.
+
+/** Remove __clinicConfig before dirty comparisons so clinic-config changes
+ *  don't incorrectly mark the schedule dirty relative to a posted snapshot. */
+function stripClinicConfig(map) {
+  if (!map || typeof map !== 'object' || !('__clinicConfig' in map)) return map;
+  const { __clinicConfig: _, ...rest } = map;
+  return rest;
+}
+
 function sortedJSON(obj) {
   if (obj === null || typeof obj !== 'object' || Array.isArray(obj)) return JSON.stringify(obj);
   const keys = Object.keys(obj).sort();
@@ -569,6 +589,7 @@ function sortedJSON(obj) {
 
 function hasAnyAssignment(map) {
   for (const [key, val] of Object.entries(map)) {
+    if (key === '__clinicConfig') continue; // skip per-week config metadata
     if (key.startsWith('task:')) { if (val) return true; continue; }
     if (!val) continue;
     if (typeof val === 'string') return true;
@@ -632,6 +653,11 @@ export function AppProvider({ children }) {
   const [postedSnapshots, setPostedSnapshots] = useState({});
   // Session-scoped: weeks that have assignments newer than their last post
   const [dirtyWeeks, setDirtyWeeks] = useState(() => new Set());
+
+  // Snapshot of clinic config (open, times, patientCount) captured once at init().
+  // Used to reset per-week overrides when navigating to a week that has no __clinicConfig
+  // in its slot map, preventing one week's config from bleeding into another.
+  const originalClinicDefsRef = useRef(null); // [{ id, open, startTime, endTime, patientCount }]
 
   // ─── Realtime & concurrency ────────────────
   // Per-week version loaded from DB — used for conditional (optimistic) saves.
@@ -849,6 +875,7 @@ export function AppProvider({ children }) {
 
         for (const [clinicId, slots] of Object.entries(cleanedWeekMap)) {
           if (clinicId.startsWith('task:')) continue;
+          if (clinicId === '__clinicConfig') continue; // skip per-week clinic config metadata
           if (!slots || typeof slots !== 'object') continue;
           const clinic = clinicById.get(clinicId);
           if (!clinic) continue;
@@ -903,6 +930,12 @@ export function AppProvider({ children }) {
         try { localStorage.setItem('shiftcraft.migration.clearshadowslots', '1'); } catch { /* ignore */ }
       }
 
+      // Snapshot original clinic config BEFORE per-week overrides are applied.
+      // This ref serves as the fallback for weeks whose slot maps predate per-week config.
+      originalClinicDefsRef.current = data.clinics.map(c => ({
+        id: c.id, open: c.open, startTime: c.startTime, endTime: c.endTime, patientCount: c.patientCount,
+      }));
+
       const applied = applySlotMap(data.clinics, data.additionalTasks, weekMap);
 
       // 5. Load changelog; prepend any stale-data removal entries from the cleanup above
@@ -947,10 +980,11 @@ export function AppProvider({ children }) {
       if (!cancelled) {
         const snapValue = snapResult.status === 'ok' ? snapResult.data : null;
         setPostedSnapshots({ [nowWeek]: snapValue });
-        // Dirty check: if week has assignments newer than the snapshot, mark dirty
+        // Dirty check: if week has assignments newer than the snapshot, mark dirty.
+        // Strip __clinicConfig before comparing — clinic config changes are not schedule changes.
         const currentMap = extractSlotMap(applied.clinics, applied.additionalTasks ?? []);
         const isEmpty = !hasAnyAssignment(currentMap);
-        const snapshotMatches = snapValue && sortedJSON(currentMap) === sortedJSON(snapValue.snapshot);
+        const snapshotMatches = snapValue && sortedJSON(stripClinicConfig(currentMap)) === sortedJSON(stripClinicConfig(snapValue.snapshot ?? {}));
         if (!isEmpty && !snapshotMatches) {
           setDirtyWeeks(new Set([nowWeek]));
         }
@@ -1435,12 +1469,24 @@ export function AppProvider({ children }) {
 
     setCurrentWeek(next);
     setGlobalData(g => {
-      const applied = applySlotMap(g.clinics, g.additionalTasks, map);
+      // Reset per-week clinic config to original global defaults before applying
+      // the target week's slot map. This prevents the previously-viewed week's
+      // per-week config from bleeding into a week whose slot map has no __clinicConfig.
+      let baseClinics = g.clinics;
+      if (originalClinicDefsRef.current) {
+        const defsById = new Map(originalClinicDefsRef.current.map(d => [d.id, d]));
+        baseClinics = g.clinics.map(c => {
+          const def = defsById.get(c.id);
+          return def ? { ...c, open: def.open, startTime: def.startTime, endTime: def.endTime, patientCount: def.patientCount } : c;
+        });
+      }
+      const applied = applySlotMap(baseClinics, g.additionalTasks, map);
       return { ...g, ...applied };
     });
     setPostedSnapshots(prev => ({ ...prev, [next]: snapValue }));
-    // Track dirty state for week picker dots
-    if (hasAnyAssignment(map) && !(snapValue && sortedJSON(map) === sortedJSON(snapValue.snapshot))) {
+    // Track dirty state for week picker dots. Strip __clinicConfig before comparing —
+    // clinic config changes are not schedule assignments and should not mark a week dirty.
+    if (hasAnyAssignment(map) && !(snapValue && sortedJSON(stripClinicConfig(map)) === sortedJSON(stripClinicConfig(snapValue.snapshot ?? {})))) {
       setDirtyWeeks(prev => new Set([...prev, next]));
     }
   }, [currentWeek, globalData]);
@@ -1476,11 +1522,20 @@ export function AppProvider({ children }) {
 
     setCurrentWeek(targetWeek);
     setGlobalData(g => {
-      const applied = applySlotMap(g.clinics, g.additionalTasks, map);
+      // Reset per-week clinic config to original global defaults before applying the target week's map.
+      let baseClinics = g.clinics;
+      if (originalClinicDefsRef.current) {
+        const defsById = new Map(originalClinicDefsRef.current.map(d => [d.id, d]));
+        baseClinics = g.clinics.map(c => {
+          const def = defsById.get(c.id);
+          return def ? { ...c, open: def.open, startTime: def.startTime, endTime: def.endTime, patientCount: def.patientCount } : c;
+        });
+      }
+      const applied = applySlotMap(baseClinics, g.additionalTasks, map);
       return { ...g, ...applied };
     });
     setPostedSnapshots(prev => ({ ...prev, [targetWeek]: snapValue2 }));
-    if (hasAnyAssignment(map) && !(snapValue2 && sortedJSON(map) === sortedJSON(snapValue2.snapshot))) {
+    if (hasAnyAssignment(map) && !(snapValue2 && sortedJSON(stripClinicConfig(map)) === sortedJSON(stripClinicConfig(snapValue2.snapshot ?? {})))) {
       setDirtyWeeks(prev => new Set([...prev, targetWeek]));
     }
   }, [currentWeek, globalData]);
@@ -1512,9 +1567,15 @@ export function AppProvider({ children }) {
     }
     if (!prevMap) return null;
 
-    await doSaveWeek(currentWeek, prevMap);
+    // Strip __clinicConfig from the source: copy assignments only.
+    // The current week keeps its own clinic config, not two-weeks-ago's config.
+    const { __clinicConfig: _srcCC, ...prevAssignments } = prevMap;
+    // Merge: current week's clinic config + two-weeks-ago assignments
+    const mergedMap = { ...extractSlotMap(globalData.clinics, globalData.additionalTasks), ...prevAssignments };
+    await doSaveWeek(currentWeek, mergedMap);
     setGlobalData(g => {
-      const applied = applySlotMap(g.clinics, g.additionalTasks, prevMap);
+      // Apply only assignments — no __clinicConfig in prevAssignments so clinic config unchanged
+      const applied = applySlotMap(g.clinics, g.additionalTasks, prevAssignments);
       return { ...g, ...applied };
     });
     setDirtyWeeks(prev => new Set([...prev, currentWeek]));
@@ -2147,7 +2208,8 @@ export function AppProvider({ children }) {
       // Never posted — dirty only if the week has assignments worth posting
       return hasAnyAssignment(liveMap);
     }
-    return sortedJSON(liveMap) !== sortedJSON(snap.snapshot);
+    // Strip __clinicConfig before comparing — clinic config changes are not schedule assignments
+    return sortedJSON(stripClinicConfig(liveMap)) !== sortedJSON(stripClinicConfig(snap.snapshot ?? {}));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [globalData, currentWeek, postedSnapshots]);
 

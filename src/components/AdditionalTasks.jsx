@@ -324,7 +324,19 @@ function TaskSlotRow({ task, onPersonClick, onEdit }) {
         />
       )}
 
-      {(isAdmin || timeDisplay || task.locationTag) && !task._isResearch && (
+      {/* Med Transport: show destination as "→ Location" — no time editing */}
+      {task.label === 'Med Transport' && !task._isResearch && (
+        <div className="variable-time-row" style={{ paddingLeft: 12, paddingRight: 12 }}>
+          {task.locationTag ? (
+            <span style={{ fontWeight: 500 }}>→ {task.locationTag}</span>
+          ) : isAdmin ? (
+            <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>No destination set</span>
+          ) : null}
+        </div>
+      )}
+
+      {/* All other tasks: location tag + time row with optional editing */}
+      {task.label !== 'Med Transport' && (isAdmin || timeDisplay || task.locationTag) && !task._isResearch && (
         editingTime ? (
           <TaskTimeEditor
             task={task}
@@ -385,13 +397,15 @@ function AddTaskForm({ day, initialTask = null, onSubmit, onCancel }) {
   };
 
   const effectiveLabel = labelMode === '__custom' ? customLabel : labelMode;
+  const isMedTransport = effectiveLabel === 'Med Transport';
 
-  const timeError = !taskTime.endIsClose &&
+  const timeError = !isMedTransport && !taskTime.endIsClose &&
     taskTime.start != null && taskTime.end != null &&
     taskTime.end <= taskTime.start;
 
   const handleSubmit = () => {
     if (!effectiveLabel.trim() || timeError) return;
+    if (isMedTransport && !locationTag) return; // destination required for Med Transport
     onSubmit({
       id: initialTask?.id ?? generateId(),
       label: effectiveLabel.trim(),
@@ -399,8 +413,9 @@ function AddTaskForm({ day, initialTask = null, onSubmit, onCancel }) {
       locationTag: locationTag || null,
       assignedPersonId: initialTask?.assignedPersonId ?? null,
       isLocationSpecific: !!locationTag,
-      start: isTimeSet ? taskTime.start : null,
-      end:   isTimeSet ? (taskTime.endIsClose ? 'close' : taskTime.end) : null,
+      // Med Transport is always timeless — no time conflicts, no hours contribution
+      start: isMedTransport ? null : (isTimeSet ? taskTime.start : null),
+      end:   isMedTransport ? null : (isTimeSet ? (taskTime.endIsClose ? 'close' : taskTime.end) : null),
     });
   };
 
@@ -431,54 +446,74 @@ function AddTaskForm({ day, initialTask = null, onSubmit, onCancel }) {
         )}
       </div>
 
-      {/* Location tag */}
-      <div className="form-group">
-        <label className="form-label">Location Tag (Optional)</label>
-        <select
-          className="form-input"
-          style={{ fontSize: 13 }}
-          value={locationTag}
-          onChange={e => setLocationTag(e.target.value)}
-        >
-          <option value="">None</option>
-          {data.locations.map(l => <option key={l}>{l}</option>)}
-        </select>
-      </div>
-
-      {/* Time */}
-      <div className="form-group">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-          <label className="form-label" style={{ marginBottom: 0 }}>Time (Optional)</label>
-          {isTimeSet && (
-            <button
-              type="button"
-              style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, padding: 0 }}
-              onClick={clearTime}
-            >
-              <X size={10} /> No Time
-            </button>
-          )}
+      {/* Med Transport: destination picker (required) instead of time fields */}
+      {isMedTransport ? (
+        <div className="form-group">
+          <label className="form-label">
+            Destination <span style={{ color: 'var(--red, #dc2626)', fontWeight: 400 }}>*</span>
+          </label>
+          <select
+            className="form-input"
+            style={{ fontSize: 13 }}
+            value={locationTag}
+            onChange={e => setLocationTag(e.target.value)}
+          >
+            <option value="">Select destination…</option>
+            {data.locations.map(l => <option key={l}>{l}</option>)}
+          </select>
         </div>
-        {!isTimeSet && (
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic', paddingBottom: 6 }}>
-            All Shift — No Set Time
+      ) : (
+        <>
+          {/* Location tag — optional for non-Med-Transport tasks */}
+          <div className="form-group">
+            <label className="form-label">Location Tag (Optional)</label>
+            <select
+              className="form-input"
+              style={{ fontSize: 13 }}
+              value={locationTag}
+              onChange={e => setLocationTag(e.target.value)}
+            >
+              <option value="">None</option>
+              {data.locations.map(l => <option key={l}>{l}</option>)}
+            </select>
           </div>
-        )}
-        <TimeRangePicker
-          key={pickerKey}
-          defaultStart={taskTime.start}
-          defaultEnd={taskTime.end}
-          defaultEndIsClose={taskTime.endIsClose}
-          onChange={(s, e, eic) => setTaskTime({ start: s, end: e, endIsClose: eic })}
-        />
-      </div>
+
+          {/* Time */}
+          <div className="form-group">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <label className="form-label" style={{ marginBottom: 0 }}>Time (Optional)</label>
+              {isTimeSet && (
+                <button
+                  type="button"
+                  style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, padding: 0 }}
+                  onClick={clearTime}
+                >
+                  <X size={10} /> No Time
+                </button>
+              )}
+            </div>
+            {!isTimeSet && (
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic', paddingBottom: 6 }}>
+                All Shift — No Set Time
+              </div>
+            )}
+            <TimeRangePicker
+              key={pickerKey}
+              defaultStart={taskTime.start}
+              defaultEnd={taskTime.end}
+              defaultEndIsClose={taskTime.endIsClose}
+              onChange={(s, e, eic) => setTaskTime({ start: s, end: e, endIsClose: eic })}
+            />
+          </div>
+        </>
+      )}
 
       <div style={{ display: 'flex', gap: 6 }}>
         <button
           className="btn btn-primary"
           style={{ minHeight: 32, fontSize: 12 }}
           onClick={handleSubmit}
-          disabled={!effectiveLabel.trim() || !!timeError}
+          disabled={!effectiveLabel.trim() || !!timeError || (isMedTransport && !locationTag)}
         >{initialTask ? 'Save' : 'Add'}</button>
         <button
           className="btn"
