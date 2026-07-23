@@ -155,7 +155,7 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
   const variableTimeDisplay = isVariable ? formatVariableSlotTime(slotVal) : null;
   const scribeTimeDisplay = isScribe ? formatScribeTimeDisplay(slotVal) : null;
   const scribeHasOverride = isScribe && slotVal && typeof slotVal === 'object' && (slotVal.start != null || slotVal.end != null);
-  const showScribeTimeRow = isScribe && ((isAdmin && clinicOpen) || scribeHasOverride);
+  const showScribeTimeRow = isScribe && (clinicOpen || scribeHasOverride);
   // Opener display (uses clinic start time)
   const openerDisplay = isOpener ? formatOpenerTimeDisplay(clinic, slotVal)
     : isOpeningFrontDesk ? formatOpeningFDTimeDisplay(slotVal, clinic) : null;
@@ -287,7 +287,7 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
             className={`variable-time-row${isAdmin && clinicOpen ? ' editable' : ''}`}
             onClick={isAdmin && clinicOpen ? (e) => { e.stopPropagation(); setEditingTime(true); } : undefined}
           >
-            <span className="slot-time-label">{scribeTimeDisplay ?? (isAdmin && clinicOpen ? '1st Patient – Close' : '—')}</span>
+            <span className="slot-time-label">{scribeTimeDisplay ?? '1st Patient – Close'}</span>
             <HoursPill slotHrs={slotHrs} />
             {isAdmin && clinicOpen && <Pencil size={9} style={{ opacity: 0.5 }} />}
           </div>
