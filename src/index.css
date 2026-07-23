@@ -1833,11 +1833,10 @@ html, body, #root {
   transition: background 80ms;
   position: relative;
 }
-.absence-day-add-btn {
+.absence-day-jump-btn {
   position: absolute; top: 2px; right: 3px;
-  width: 30px; height: 30px;
+  width: 28px; height: 28px;
   background: none; border: none; padding: 0;
-  font-size: 20px; line-height: 1;
   color: var(--text-secondary);
   cursor: pointer;
   opacity: 0;
@@ -1845,8 +1844,8 @@ html, body, #root {
   border-radius: 5px;
   transition: opacity 100ms, background 100ms, color 100ms;
 }
-.absence-day-cell:hover .absence-day-add-btn { opacity: 0.65; }
-.absence-day-add-btn:hover { opacity: 1 !important; background: var(--border); color: var(--text-primary); }
+.absence-day-cell:hover .absence-day-jump-btn { opacity: 0.55; }
+.absence-day-jump-btn:hover { opacity: 1 !important; background: var(--border); color: var(--text-primary); }
 .absence-day-cell:last-child { border-right: none; }
 .absence-day-cell:hover { background: var(--bg-surface); }
 .absence-day-cell--drag { background: color-mix(in srgb, var(--accent) 12%, transparent); }
@@ -2711,6 +2710,23 @@ html, body, #root {
   border-color: color-mix(in srgb, #f59e0b 25%, transparent);
   color: #fbbf24;
 }
+
+/* On-call rotation projection list */
+.oncall-projection-list {
+  display: flex; flex-direction: column; gap: 3px;
+  margin-top: 8px; padding: 8px 10px;
+  background: var(--bg-surface); border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+}
+.oncall-projection-row {
+  display: flex; align-items: baseline; gap: 8px;
+  font-size: 12px;
+}
+.oncall-projection-name {
+  font-weight: 600; color: var(--text-primary); min-width: 80px; flex-shrink: 0;
+}
+.oncall-projection-range { color: var(--text-secondary); }
+.oncall-projection-more { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 
 /* Setup tab content wrapper for oncall */
 .setup-tab-content { padding: 20px 24px; }

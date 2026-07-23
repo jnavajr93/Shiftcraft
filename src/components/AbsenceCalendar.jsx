@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, X, Clock, Plus, Trash2, AlertCircle, History, Building2, PhoneCall, UserCheck, Users } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Clock, Plus, Trash2, AlertCircle, History, Building2, PhoneCall, UserCheck, Users, ArrowUpRight } from 'lucide-react';
 import { useApp, mondayOfWeek, isoWeek } from '../context/AppContext.jsx';
 import { minutesToTime, minutesToTimeInput, timeInputToMinutes } from '../data/seed.js';
 import { getFederalHolidays } from '../utils/federalHolidays.js';
@@ -852,18 +852,17 @@ function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, o
     ? researchAssignments.filter(ra => ra.date >= weekStart && ra.date <= weekEnd)
     : [];
 
-  // Single click on cell → jump to that week directly
+  // Click on cell → open day panel
   const handleCellInteraction = (ds, e) => {
     if (suppressClickRef?.current) { suppressClickRef.current = false; return; }
-    onDayDoubleClick(ds);
+    const rect = e.currentTarget.getBoundingClientRect();
+    onDayClick(ds, rect);
   };
 
-  // + button click → open day panel (admin only)
-  const handleAddBtnClick = (ds, e) => {
+  // Jump icon → navigate to that week on the board
+  const handleJumpClick = (ds, e) => {
     e.stopPropagation();
-    if (suppressClickRef?.current) { suppressClickRef.current = false; return; }
-    const rect = e.currentTarget.closest('.absence-day-cell').getBoundingClientRect();
-    onDayClick(ds, rect);
+    onDayDoubleClick(ds);
   };
 
   const allBars = weekClosures.length + weekAbsences.length + weekResearch.length;
@@ -887,15 +886,13 @@ function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, o
             <span className={`absence-day-num${isToday ? ' absence-day-num--today' : ''}${!isThisMonth ? ' absence-day-num--other' : ''}`}>
               {day.getUTCDate()}
             </span>
-            {isAdmin && (
-              <button
-                className="absence-day-add-btn"
-                onClick={(e) => handleAddBtnClick(ds, e)}
-                title="Add Absence Or Closure"
-              >
-                +
-              </button>
-            )}
+            <button
+              className="absence-day-jump-btn"
+              onClick={(e) => handleJumpClick(ds, e)}
+              title="Jump To This Week"
+            >
+              <ArrowUpRight size={13} />
+            </button>
           </div>
         );
       })}
