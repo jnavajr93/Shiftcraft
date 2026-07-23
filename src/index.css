@@ -367,6 +367,15 @@ html, body, #root {
 }
 .staff-notice svg { color: var(--red); flex-shrink: 0; }
 .staff-notice--mobile { padding: 5px 12px; }
+
+/* Footer notice inside personal overlays (bottom sheet + desktop modal) */
+.overlay-schedule-notice {
+  display: flex; align-items: flex-start; justify-content: center; gap: 6px;
+  padding: 10px 20px 16px;
+  border-top: 0.5px solid var(--border);
+  font-size: 11px; color: var(--text-muted); line-height: 1.5; text-align: center;
+}
+.overlay-schedule-notice svg { color: var(--red); flex-shrink: 0; margin-top: 1px; }
 .search-wrap { position: relative; display: inline-flex; align-items: center; width: 100%; max-width: 300px; }
 .search-icon { position: absolute; left: 10px; color: var(--text-muted); pointer-events: none; display: flex; }
 .search-input {

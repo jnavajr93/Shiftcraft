@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, User, X, AlertTriangle } from 'lucide-react';
+import { Search, User, X, AlertTriangle } from 'lucide-react'; // AlertTriangle used for board notice + overlay footer
 import { useApp, isoWeek, mondayOfWeek } from '../context/AppContext.jsx';
 import {
   DAYS,
@@ -171,6 +171,10 @@ export default function MobileStaffView({ onPersonClick }) {
                 additionalTasks={effectiveAdditionalTasks}
                 monday={mondayOfWeek(currentWeek)}
               />
+            </div>
+            <div className="overlay-schedule-notice">
+              <AlertTriangle size={12} />
+              <span>The schedule is subject to change with short notice. It is your responsibility to review your schedule daily.</span>
             </div>
           </div>
         </div>

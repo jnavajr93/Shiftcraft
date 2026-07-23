@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { X } from 'lucide-react';
+import { X, AlertTriangle } from 'lucide-react';
 import { useApp, mondayOfWeek } from '../context/AppContext.jsx';
 import { DAYS, calcPersonWeeklyHours, getBoardClinics, getSlotLabel, getSlotPersonId, getRenderedSlotEntries, formatVariableSlotTime, formatOpenerTimeDisplay, formatOpeningFDTimeDisplay, formatClosingOverlayDisplay, formatClosingFDOverlayDisplay, formatScribeTimeDisplay, formatTaskTime, OBS_SLOT_TYPES, slotEffectiveRange } from '../data/seed.js';
 import ArcChart from './ArcChart.jsx';
@@ -135,6 +135,12 @@ function OverlayInner({ person, onClose }) {
           />
         )}
       </div>
+      {!isAdmin && (
+        <div className="overlay-schedule-notice">
+          <AlertTriangle size={12} />
+          <span>The schedule is subject to change with short notice. It is your responsibility to review your schedule daily.</span>
+        </div>
+      )}
       {isAdmin && (
         <div style={{ padding: '12px 24px 20px', borderTop: '0.5px solid var(--border)' }}>
           {confirming ? (
