@@ -516,13 +516,15 @@ html, body, #root {
 .clinic-card.closed { opacity: 0.5; }
 
 .clinic-card-header {
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex; align-items: center; gap: 6px;
   padding: 8px 12px; background: var(--bg-surface);
   border-bottom: 0.5px solid var(--border);
 }
-.clinic-card-title { font-size: 13px; font-weight: 500; }
-.clinic-card-sub   { font-size: 11px; color: var(--text-secondary); }
-.clinic-card-header-right { display: flex; align-items: center; gap: 4px; }
+.clinic-card-title { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clinic-card-sub   { font-size: 11px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Left title area absorbs remaining space so the right buttons never overflow */
+.clinic-card-header > div:first-child { flex: 1; min-width: 0; overflow: hidden; }
+.clinic-card-header-right { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 
 .patient-badge {
   display: flex; align-items: center; gap: 4px;
@@ -569,10 +571,12 @@ html, body, #root {
 /* ─── Variable Slot Time Row ─────────────── */
 .variable-time-row {
   display: flex; align-items: center; gap: 5px;
-  padding: 3px 12px 6px 64px;
+  padding: 3px 20px 6px 64px;
   font-size: 10px; color: var(--text-muted);
   min-height: 0;
 }
+/* Prevent pencil icon from shrinking or being clipped by the card's rounded corner */
+.variable-time-row svg { flex-shrink: 0; }
 .variable-time-row.editable { cursor: pointer; }
 .variable-time-row.editable:hover { color: var(--text-secondary); }
 .variable-time-row.editable:hover svg { opacity: 1 !important; }
