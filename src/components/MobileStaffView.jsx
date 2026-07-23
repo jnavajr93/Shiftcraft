@@ -70,6 +70,12 @@ export default function MobileStaffView({ onPersonClick }) {
         .map(p => p.id)
     : [];
 
+  // Color for the avatar dot in the sheet header — prefer tech record
+  const myPersonColor = myName
+    ? ((data.people ?? []).find(p => p.name.toLowerCase() === myName.toLowerCase() && (p.staffType ?? 'tech') !== 'admin')
+        ?? (data.people ?? []).find(p => p.name.toLowerCase() === myName.toLowerCase()))?.color ?? 'var(--text-muted)'
+    : 'var(--text-muted)';
+
   // Touch swipe to change day
   const touchStartX = useRef(null);
   const handleTouchStart = (e) => { touchStartX.current = e.touches[0].clientX; };
@@ -158,9 +164,12 @@ export default function MobileStaffView({ onPersonClick }) {
           <div className="bottom-sheet-backdrop" onClick={() => setShowMySchedule(false)} />
           <div className="bottom-sheet">
             <div className="sheet-handle" />
-            <div className="mobile-my-schedule-header">
-              <span className="mobile-my-schedule-title">{myName}'s Week</span>
-              <button className="btn-icon" onClick={() => setShowMySchedule(false)} aria-label="Close">
+            <div className="overlay-header">
+              <div className="dot-lg" style={{ background: myPersonColor }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 20, fontWeight: 500 }}>{myName}'s Week</div>
+              </div>
+              <button className="overlay-close" onClick={() => setShowMySchedule(false)} aria-label="Close">
                 <X size={16} />
               </button>
             </div>
@@ -174,7 +183,7 @@ export default function MobileStaffView({ onPersonClick }) {
             </div>
             <div className="overlay-schedule-notice">
               <AlertTriangle size={12} />
-              <span>The schedule is subject to change with short notice. It is your responsibility to review your schedule daily.</span>
+              <span>The schedule is subject to change with short notice.<br />It is your responsibility to review your schedule daily.</span>
             </div>
           </div>
         </div>

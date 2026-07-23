@@ -374,6 +374,7 @@ html, body, #root {
   padding: 10px 20px 16px;
   border-top: 0.5px solid var(--border);
   font-size: 11px; color: var(--text-muted); line-height: 1.5; text-align: center;
+  flex-shrink: 0;
 }
 .overlay-schedule-notice svg { color: var(--red); flex-shrink: 0; margin-top: 1px; }
 .search-wrap { position: relative; display: inline-flex; align-items: center; width: 100%; max-width: 300px; }
@@ -650,7 +651,7 @@ html, body, #root {
   to   { opacity: 1; transform: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .overlay-modal, .bottom-sheet, .my-schedule-modal { animation: none; }
+  .overlay-modal, .bottom-sheet { animation: none; }
   .config-panel { transition: none; }
 }
 
@@ -661,9 +662,14 @@ html, body, #root {
   position: absolute; bottom: 0; left: 0; right: 0;
   background: var(--bg-elevated); border-top: 0.5px solid var(--border-strong);
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  max-height: 90vh; overflow-y: auto;
+  max-height: 90vh;
+  display: flex; flex-direction: column; overflow: hidden;
   animation: sheet-up 250ms ease;
 }
+/* Sheet handle and header don't shrink; body scrolls; notice is pinned */
+.bottom-sheet .sheet-handle { flex-shrink: 0; }
+.bottom-sheet .overlay-header { flex-shrink: 0; }
+.bottom-sheet .overlay-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 @keyframes sheet-up {
   from { transform: translateY(100%); }
   to   { transform: none; }
@@ -673,27 +679,6 @@ html, body, #root {
   background: var(--border-strong); margin: 8px auto 4px;
 }
 
-/* ─── My Schedule Modal (replaces bottom sheet on mobile) ──────────────────── */
-.my-schedule-backdrop {
-  position: fixed; inset: 0; z-index: 200;
-  display: flex; align-items: center; justify-content: center;
-  padding: 16px;
-  background: var(--bg-overlay); backdrop-filter: blur(4px);
-}
-.my-schedule-modal {
-  background: var(--bg-elevated);
-  border: 0.5px solid var(--border-strong);
-  border-radius: var(--radius-lg);
-  width: 100%; max-width: 480px;
-  max-height: 85vh;
-  display: flex; flex-direction: column;
-  overflow: hidden;
-  animation: modal-in 200ms ease;
-}
-@keyframes modal-in {
-  from { opacity: 0; transform: scale(0.96); }
-  to   { opacity: 1; transform: none; }
-}
 
 /* ─── Overlay Content ─────────────────────────── */
 .overlay-header {
@@ -1539,7 +1524,7 @@ html, body, #root {
   min-width: 0;
   border: none;
   background: transparent;
-  font-size: 15px;
+  font-size: 16px; /* ≥16px prevents iOS Safari auto-zoom on focus */
   font-weight: 500;
   color: var(--text-primary);
   outline: none;
@@ -1848,22 +1833,6 @@ html, body, #root {
   flex-shrink: 0;
 }
 
-/* "My schedule" full-week screen */
-.mobile-my-schedule-header {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  border-bottom: 0.5px solid var(--border);
-  background: var(--bg-elevated);
-  flex-shrink: 0;
-}
-.mobile-my-schedule-title {
-  flex: 1;
-  font-size: 15px;
-  font-weight: 500;
-  text-align: center;
-}
 .mobile-my-schedule-body {
   flex: 1;
   overflow-y: auto;

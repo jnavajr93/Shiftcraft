@@ -116,7 +116,9 @@ function OverlayInner({ person, onClose }) {
       <div className="overlay-header">
         <div className="dot-lg" style={{ background: person.color }} />
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 20, fontWeight: 500 }}>{person.name}</div>
+          <div style={{ fontSize: 20, fontWeight: 500 }}>
+            {isAdmin ? person.name : `${person.name}'s Week`}
+          </div>
           {isAdmin && person.grade && (
             <span className={`grade-badge ${person.grade}`} style={{ marginTop: 4, display: 'inline-block' }}>
               {person.grade}
@@ -138,7 +140,7 @@ function OverlayInner({ person, onClose }) {
       {!isAdmin && (
         <div className="overlay-schedule-notice">
           <AlertTriangle size={12} />
-          <span>The schedule is subject to change with short notice. It is your responsibility to review your schedule daily.</span>
+          <span>The schedule is subject to change with short notice.<br />It is your responsibility to review your schedule daily.</span>
         </div>
       )}
       {isAdmin && (
