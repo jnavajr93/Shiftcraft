@@ -26,14 +26,14 @@ import MobileStaffView from './components/MobileStaffView.jsx';
 import OnCallRotationView from './components/OnCallRotationView.jsx';
 
 function SavedToast() {
-  const { saveStatus } = useApp();
+  const { saveStatus, isAdmin } = useApp();
   const [visible, setVisible] = useState(false);
   const [fadingOut, setFadingOut] = useState(false);
   const holdTimerRef = useRef(null);
   const fadeTimerRef = useRef(null);
 
   useEffect(() => {
-    if (saveStatus === 'saved') {
+    if (saveStatus === 'saved' && isAdmin) {
       clearTimeout(holdTimerRef.current);
       clearTimeout(fadeTimerRef.current);
       setFadingOut(false);
@@ -46,7 +46,7 @@ function SavedToast() {
         }, 300);
       }, 2700);
     }
-  }, [saveStatus]);
+  }, [saveStatus, isAdmin]);
 
   if (!visible) return null;
   return (

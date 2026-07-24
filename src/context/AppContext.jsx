@@ -550,6 +550,11 @@ export function AppProvider({ children }) {
   const managerInitialsRef = useRef(null);
   // Guard: skip the changelog save useEffect when the update came from Realtime.
   const changelogFromRemoteRef = useRef(false);
+  // Guard: skip the global-definitions auto-save when setGlobalData was called by
+  // week navigation (navigateWeek / jumpToWeek).  Navigation is read-only — the
+  // global schedule definition did not change, so writing it back would be redundant
+  // and would fire the "✓ Saved" toast misleadingly.
+  const skipDefinitionSaveRef = useRef(false);
   // Guard: skip the global-definitions auto-save when the update came from a Realtime
   // SCHEDULE_KEY broadcast (our own echo or another manager's save).
   // Without this guard every save triggers a realtime echo → setGlobalData → another
@@ -891,6 +896,9 @@ export function AppProvider({ children }) {
   useEffect(() => {
     if (isLoading || !globalData) return;
     if (isFirstRender.current) { isFirstRender.current = false; return; }
+    // Skip when update came from week navigation — the global schedule definition did
+    // not change, so writing it back would be redundant and fire a misleading toast.
+    if (skipDefinitionSaveRef.current) { skipDefinitionSaveRef.current = false; return; }
     // Skip saving when this render was triggered by a Realtime SCHEDULE_KEY broadcast
     // (our own echo or another manager's save).  Saving would echo back and trigger an
     // infinite loop; the DB already has the correct value, so there's nothing to write.
@@ -995,7 +1003,13 @@ export function AppProvider({ children }) {
               value.additionalTasks ?? g.additionalTasks,
               currentMap,
             );
-            return { ...value, ...applied };
+            // Merge BUILTIN_TASK_TYPES so a broadcast from a manager with an older
+            // Supabase record can never wipe built-in types (e.g. Med Transport).
+            const mergedTaskTypes = [
+              ...BUILTIN_TASK_TYPES,
+              ...((value.taskTypes ?? []).filter(t => !BUILTIN_TASK_TYPES.includes(t))),
+            ];
+            return { ...value, taskTypes: mergedTaskTypes, ...applied };
           });
         } else if (key === CHANGELOG_KEY) {
           // Merge remote changelog — guard against echo loop in the save useEffect.
@@ -1377,6 +1391,7 @@ export function AppProvider({ children }) {
     const snapValue = snapResult.status === 'ok' ? snapResult.data : null;
 
     setCurrentWeek(next);
+    skipDefinitionSaveRef.current = true; // week navigation is read-only — skip auto-save
     setGlobalData(g => {
       // Reset per-week clinic config to original global defaults before applying
       // the target week's slot map. This prevents the previously-viewed week's
@@ -1430,6 +1445,7 @@ export function AppProvider({ children }) {
     const snapValue2 = snapResult2.status === 'ok' ? snapResult2.data : null;
 
     setCurrentWeek(targetWeek);
+    skipDefinitionSaveRef.current = true; // week navigation is read-only — skip auto-save
     setGlobalData(g => {
       // Reset per-week clinic config to original global defaults before applying the target week's map.
       let baseClinics = g.clinics;
