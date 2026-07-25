@@ -1,41 +1,66 @@
 # Shiftcraft Session Status — 2026-07-25
 
-## Deployed SHA
-`8a90953` — https://shiftcraft-azretvit.vercel.app
+## SHA deployed: bf23314
 
-## Completed this session
+## Work completed this session
 
-### Med Transport dropdown (3rd report — now fixed)
-**Root cause confirmed:** `migrateData()` (which merges `BUILTIN_TASK_TYPES`) was only called on the localStorage/empty Supabase path, never on the normal "ok" Supabase load path. Every page load from Supabase returned raw `taskTypes` without Med Transport.
-**Fix:** `init()` now calls `migrateData(schedResult.data)` on the Supabase "ok" path. Added `tasktypes_medtransport` migration (idempotent, saves to Supabase so it persists).
+### 1. Save toast fix (completed in prior session, confirmed)
+- `skipDefinitionSaveRef.current = true` added in `jumpToWeek` (was only in `navigateWeek`)
+- `SavedToast` guarded by `isAdmin`
 
-### Save toast fixes (from prior session, now committed)
-- `skipDefinitionSaveRef` set in both `navigateWeek` AND `jumpToWeek` — navigation no longer triggers "✓ Saved"
-- `SavedToast` guarded by `isAdmin` — staff view never sees the toast
+### 2. Med Transport task type (completed in prior session, confirmed)
+- `migrateData()` now called on the Supabase "ok" load path (line ~664 in AppContext.jsx)
+- `tasktypes_medtransport` localStorage migration added as belt-and-suspenders
+- Realtime SCHEDULE_KEY handler merges `BUILTIN_TASK_TYPES`
 
-### Realtime SCHEDULE_KEY fix (from prior session, now committed)
-- BUILTIN_TASK_TYPES merged into incoming `value.taskTypes` so a broadcast from a stale Supabase record cannot wipe Med Transport
+### 3. Absence enforcement Phase 3 (completed in prior session, confirmed)
+- `computeAbsenceConstraints()` in adapter.js
+- Full-day → UNAVAILABLE solver constraints
+- Partial-day → overlap filter (clinic.startTime < absentEnd && clinic.endTime > absentStart)
+- Linked-record support (same display name → block all person IDs)
+- Post-gate conflict check in AbsenceCalendar.jsx handleSave
+- 10 automated tests in src/engine/absences.test.js
 
-### Absence enforcement — Phase 3 (NEW)
-Absences are now a hard rule in schedule generation:
+### 4. Per-week task instance isolation (completed this session)
+- **Root cause**: `additionalTasks` (task instances) lived in the global SCHEDULE_KEY record,
+  so adding a task in week B made it appear in every week.
+- **Fix**: Task instances are now per-week via `__tasks` in the week slot map row.
 
-**Full-day absences** (Approved Time Off, Sick, Last-Minute Callout) add `UNAVAILABLE` solver constraints — the person gets zero clinic/OBS slot assignments that day.
+**Files changed:**
+- `src/context/slotMap.js`:
+  - `extractSlotMap`: stores task defs in `__tasks` (excludes `_isResearch`, strips `assignedPersonId`)
+  - `applySlotMap`: uses `map.__tasks ?? tasks ?? []` (per-week list wins; fallback = migration path)
+  - `blankSlotMap(clinics)`: signature simplified (no tasks arg), seeds `__tasks: []`
+  - `toDefinitionData(globalData, originalClinicDefs, originalTaskDefs)`: third param for task baseline
+  - `hasAnyAssignment`: skips `__tasks` key
+  - `stripClinicConfig`: also strips `__tasks`; short-circuits if neither key present
 
-**Partial-day absences** post-filter assignments: if a clinic's time range overlaps the absent window (`clinic.startTime < absentEnd && clinic.endTime > absentStart`), the assignment is dropped.
+- `src/context/AppContext.jsx`:
+  - `originalTaskDefsRef = useRef(null)` — mirrors `originalClinicDefsRef`
+  - `init()`: captures `originalTaskDefsRef.current` from global data before `applySlotMap`
+  - Auto-save: passes `originalTaskDefsRef.current` to `toDefinitionData`
+  - `navigateWeek` + `jumpToWeek`: pass `originalTaskDefsRef.current` as task fallback
+  - Realtime SCHEDULE_KEY: syncs `originalTaskDefsRef.current` from incoming global record
+  - `copyFromTwoWeeksAgo`: strips `__tasks` from source map (keeps current week's task list)
+  - `clearWeek`: saves blank map with `__tasks: []`; sets `additionalTasks: []` in state
+  - All `blankSlotMap(clinics, tasks)` → `blankSlotMap(clinics)`
 
-**Linked records** (Hailey tech + Hailey admin, Katina tech + Katina admin): matched by display name → all person IDs blocked by one absence entry.
+- `src/context/__tests__/slotMap.test.js`: 9 new per-week task isolation tests (120 total)
 
-**Post gate** in `AbsenceCalendar.handleSave`: before saving a personal absence, checks current week's slot map for conflicts. If the person has assignments on those dates, blocks save with named conflicts: person name, date, slot type, clinic/provider.
+## Migration notes
+- Old week rows without `__tasks` fall back to global baseline via `??` chain — no rewrites
+- `provider` and `day` on clinics remain global (not per-week)
 
-**10 vitest tests** covering all spec requirements:
-- Full-day absent → zero assignments that day, other days unaffected
-- Multi-day range → zero assignments across every covered day
-- Partial-day → not assigned to overlapping shifts
-- Linked-record → both tech and admin records blocked
-- Regression: no absences = identical generation; Research/DoctorOff types not blocked
+## Test results
+- 120/120 passing
+- Build: zero errors
 
-## Test totals
-`111 tests, 9 test files — all pass`
-
-## Nothing pending
-All reported bugs fixed and deployed.
+## Global record field classification (final)
+| Field | Status |
+|---|---|
+| people[], locations[], providers[], taskTypes[] | Global |
+| clinics[].id/provider/location/day/week | Global |
+| clinics[].open/startTime/endTime/patientCount | Global baseline (per-week override in __clinicConfig) |
+| clinics[].slots | Per-week (blanked in global record) |
+| additionalTasks[].id/label/day/start/end | Global baseline (per-week instances in __tasks) |
+| additionalTasks[].assignedPersonId | Per-week (nulled in global record, stored as task:<id>) |
