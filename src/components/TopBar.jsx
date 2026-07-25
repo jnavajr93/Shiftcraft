@@ -1389,15 +1389,25 @@ export default function TopBar({ activeTab, setActiveTab, setupSection, setSetup
         </div>
       </div>
 
-      {/* Unposted changes banner — only shown when this session made schedule changes.
-          Calendar-only sessions (absences, doctor-off, closures, research, on-call)
-          never set sessionScheduleChangedRef so the banner stays hidden for them. */}
-      {isAdmin && isDirty && sessionScheduleChangedRef.current && (
+      {/* Posted-week edit warning — shown when a previously-posted week has been re-edited.
+          Distinct from the "never posted" banner: orange border, different message.
+          Calendar-only changes (absences, doctor-off, closures, research, on-call) do NOT
+          set sessionScheduleChangedRef so this stays hidden for calendar-only sessions. */}
+      {isAdmin && isDirty && postedSnapshot && sessionScheduleChangedRef.current && (
+        <div className="posted-edit-banner">
+          <span className="posted-edit-banner-icon">⚠</span>
+          <span className="posted-edit-banner-msg">
+            {`This week is posted — your edits are not visible to staff until you re-post. Last posted ${formatPostedTime(postedSnapshot.posted_at)} by ${postedSnapshot.posted_by ?? '—'}.`}
+          </span>
+        </div>
+      )}
+
+      {/* Unposted changes banner — shown when week has never been posted and this session
+          made schedule changes. Calendar-only sessions never set sessionScheduleChangedRef. */}
+      {isAdmin && isDirty && !postedSnapshot && sessionScheduleChangedRef.current && (
         <div className="unposted-banner">
           <span className="unposted-banner-msg">
-            {postedSnapshot
-              ? `Your changes have not been posted — staff cannot see your changes until you post. Version posted ${formatPostedTime(postedSnapshot.posted_at)} by ${postedSnapshot.posted_by ?? '—'}.`
-              : 'This schedule has not been posted — staff cannot see it until you post.'}
+            This schedule has not been posted — staff cannot see it until you post.
           </span>
         </div>
       )}

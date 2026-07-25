@@ -1493,7 +1493,7 @@ html, body, #root {
 
 /* ─── Post / Draft workflow ──────────────────── */
 
-/* Persistent amber banner below topbar for unposted changes */
+/* Persistent amber banner below topbar — week never posted */
 .unposted-banner {
   position: sticky; top: 52px; z-index: 90;
   display: flex; align-items: center; justify-content: space-between;
@@ -1508,6 +1508,25 @@ html, body, #root {
   color: #fcd34d;
 }
 .unposted-banner-msg { flex: 1; min-width: 0; }
+
+/* Persistent orange banner — week was posted but now has unsaved-to-staff edits */
+.posted-edit-banner {
+  position: sticky; top: 52px; z-index: 90;
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 16px;
+  background: #fff7ed;
+  border-bottom: 1px solid #fb923c;
+  border-left: 3px solid #ea580c;
+  font-size: 12px; color: #7c2d12; line-height: 1.4;
+}
+[data-theme="dark"] .posted-edit-banner {
+  background: rgba(234,88,12,0.13);
+  border-bottom-color: rgba(251,146,60,0.4);
+  border-left-color: #fb923c;
+  color: #fed7aa;
+}
+.posted-edit-banner-icon { flex-shrink: 0; font-size: 13px; }
+.posted-edit-banner-msg  { flex: 1; min-width: 0; }
 
 /* Inline "✓ Posted" status when clean */
 .topbar-posted-status {
