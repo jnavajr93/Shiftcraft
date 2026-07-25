@@ -31,12 +31,16 @@ function VariableTimeEditor({ slotType, slotVal, clinic, clinicId, onClose }) {
   const { updateSlotTime } = useApp();
   const timeObj = getSlotTimeObj(slotVal);
   const defaultEndIsClose = timeObj.end == null || timeObj.end === 'close';
+  // null start = Open semantic: pass null to store as "Open" so the card shows "Open – ..."
+  const defaultStartIsOpen = timeObj.start == null;
   return (
     <div className="variable-time-editor" onClick={e => e.stopPropagation()}>
       <TimeRangePicker
-        defaultStart={timeObj.start ?? clinic?.startTime ?? null}
+        defaultStart={defaultStartIsOpen ? null : timeObj.start}
         defaultEnd={!defaultEndIsClose ? timeObj.end : null}
         defaultEndIsClose={defaultEndIsClose}
+        defaultStartIsOpen={defaultStartIsOpen}
+        openSemantic={true}
         openTime={clinic?.startTime ?? null}
         onSave={(s, e) => { updateSlotTime(clinicId, slotType, s, e); onClose(); }}
         onCancel={onClose}
@@ -78,19 +82,23 @@ function OpenerTimeEditor({ slotVal, clinicId, clinic, slotType = 'opener', onCl
   // Migration compat: treat stored literal openTime as the Open semantic so the editor
   // opens with the Open badge active on existing slots that pre-date this change.
   const defaultStartIsOpen = obj.start == null || (openTime != null && obj.start === openTime);
+  // Migration compat: null end from old saves = Close semantic (treat same as 'close' string).
+  const defaultEndIsClose = obj.end == null || obj.end === 'close';
   return (
     <div className="variable-time-editor" onClick={e => e.stopPropagation()}>
       <TimeRangePicker
         defaultStart={defaultStartIsOpen ? null : obj.start}
-        defaultEnd={obj.end != null && obj.end !== 'close' ? obj.end : null}
-        defaultEndIsClose={obj.end === 'close'}
+        defaultEnd={!defaultEndIsClose ? obj.end : null}
+        defaultEndIsClose={defaultEndIsClose}
         defaultStartIsOpen={defaultStartIsOpen}
         openSemantic={true}
         openTime={openTime}
         onSave={(s, e) => {
           // Also catch manual-typed exact openTime → store null (Open semantic)
           const finalStart = (s != null && openTime != null && s === openTime) ? null : s;
-          updateSlotTime(clinicId, slotType, finalStart, e === 'close' ? null : e);
+          // Pass 'close' through unchanged so formatOpenerTimeDisplay shows "Close"
+          // and rawSlotHours uses endTime+60 for the closing buffer.
+          updateSlotTime(clinicId, slotType, finalStart, e);
           onClose();
         }}
         onCancel={onClose}

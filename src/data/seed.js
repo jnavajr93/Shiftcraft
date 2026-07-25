@@ -59,11 +59,12 @@ export function getSlotTimeObj(slotVal) {
   return { start: slotVal.start ?? null, end: slotVal.end ?? null };
 }
 // Format variable slot time for display. Returns null if not set.
+// null start = "Open" semantic (start of clinic); null+null = unset (returns null).
 export function formatVariableSlotTime(slotVal) {
   if (!slotVal || typeof slotVal !== 'object') return null;
   const { start, end } = slotVal;
   if (start == null && end == null) return null;
-  const startStr = start != null ? minutesToTime(start) : '?';
+  const startStr = start != null ? minutesToTime(start) : 'Open';
   const endStr = end === 'close' ? 'Close' : end != null ? minutesToTime(end) : '?';
   return `${startStr} – ${endStr}`;
 }
@@ -110,7 +111,7 @@ export function formatOpenerTimeDisplay(clinic, slotVal) {
   const openTime = clinic ? (clinic.startTime - 15) : null;
   const startIsOpen = obj.start == null || (openTime != null && obj.start === openTime);
   const startStr = startIsOpen ? 'Open' : minutesToTime(obj.start);
-  const endStr   = obj.end != null ? minutesToTime(obj.end) : minutesToTime(Math.min(1020, clinic?.endTime ?? 1020));
+  const endStr   = (obj.end == null || obj.end === 'close') ? 'Close' : minutesToTime(obj.end);
   return `${startStr} – ${endStr}`;
 }
 
@@ -121,7 +122,7 @@ export function formatOpeningFDTimeDisplay(slotVal, clinic) {
   const openTime = clinic ? (clinic.startTime - 15) : null;
   const startIsOpen = obj.start == null || (openTime != null && obj.start === openTime);
   const startStr = startIsOpen ? 'Open' : minutesToTime(obj.start);
-  const endStr   = obj.end != null ? minutesToTime(obj.end) : '3:30 PM';
+  const endStr   = obj.end === 'close' ? 'Close' : obj.end != null ? minutesToTime(obj.end) : '3:30 PM';
   return `${startStr} – ${endStr}`;
 }
 
@@ -196,7 +197,8 @@ function rawSlotHours(clinic, slotType) {
       const sv = clinic.slots?.opener;
       const obj = (sv && typeof sv === 'object') ? sv : {};
       const s = obj.start != null ? obj.start : (startTime - 15);
-      const e = obj.end   != null ? obj.end   : Math.min(1020, endTime);
+      // null/close both mean "Close" (end of clinic + 1h buffer)
+      const e = (obj.end == null || obj.end === 'close') ? (endTime + 60) : obj.end;
       return (e - s) / 60;
     }
     case 'closing': {
@@ -209,13 +211,14 @@ function rawSlotHours(clinic, slotType) {
     case 'middle': {
       const sv = clinic.slots?.middle;
       if (!sv || typeof sv !== 'object' || sv.start == null || sv.end == null) return 0;
-      const endMin = sv.end === 'close' ? endTime : sv.end;
+      // close = end of clinic + 1h buffer (same convention as opener)
+      const endMin = sv.end === 'close' ? (endTime + 60) : sv.end;
       return (endMin - sv.start) / 60;
     }
     case 'training': {
       const sv = clinic.slots?.training;
       if (!sv || typeof sv !== 'object' || sv.start == null || sv.end == null) return 0;
-      const endMin = sv.end === 'close' ? endTime : sv.end;
+      const endMin = sv.end === 'close' ? (endTime + 60) : sv.end;
       return (endMin - sv.start) / 60;
     }
     case 'preop':
@@ -351,7 +354,7 @@ export function slotEffectiveRange(slot, clinic) {
     case 'closing':
       return { start: cs ?? Math.max(540, clinicStart), end: ce ?? (clinicEnd + 75) };
     case 'opener':
-      return { start: cs ?? (clinicStart - 15), end: ce ?? Math.min(1020, clinicEnd) };
+      return { start: cs ?? (clinicStart - 15), end: (ce == null || ce === 'close') ? (clinicEnd + 60) : ce };
     // FD slots: opening gets 30-min early arrival, no post buffer; ends 3:30 PM
     case 'openingFrontDesk':
       return { start: cs ?? (clinicStart - 30), end: ce ?? 930 };
@@ -375,6 +378,10 @@ export function slotEffectiveRange(slot, clinic) {
       if (provider.includes('Dr. A')) return { start: cs ?? (clinicStart - 60), end: ce ?? (clinicEnd + 60) };
       return { start: cs ?? clinicStart, end: ce ?? clinicEnd };
     }
+    case 'middle':
+    case 'training':
+      // close = end of clinic + 1h buffer (same as opener/rawSlotHours)
+      return { start: cs ?? clinicStart, end: (ce === 'close') ? (clinicEnd + 60) : (ce ?? clinicEnd) };
     default:
       return { start: cs ?? clinicStart, end: ce ?? clinicEnd };
   }

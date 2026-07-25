@@ -135,7 +135,7 @@ function effectiveRange(roleId, shift) {
     case 'closing':
       return { start: Math.max(540, s), end: e + 75 };
     case 'opener':
-      return { start: s - 15, end: Math.min(1020, e) };
+      return { start: s - 15, end: e + 60 };
     case 'openingFrontDesk':
       return { start: s - 30, end: 930 };
     case 'closingFrontDesk':
