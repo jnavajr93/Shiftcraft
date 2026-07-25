@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Trash2, Plus, Pencil, GripVertical, X, Upload, ArrowLeft, PhoneCall } from 'lucide-react';
+import { Trash2, Plus, Pencil, GripVertical, X, Upload, ArrowLeft, PhoneCall, AlertTriangle, CheckCircle } from 'lucide-react';
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
 } from '@dnd-kit/core';
@@ -12,6 +12,7 @@ import {
   generateId, DAYS, minutesToTime, ROLES, EMPLOYMENT_TYPES, SKILLS, ADMIN_SKILLS,
   ACCOMMODATION_TYPES, EARLY_LEAVE_REASONS, accommodationLabel,
 } from '../data/seed.js';
+import { checkExactDuplicate, findNearMatches, rosterHealthCheck } from '../utils/rosterValidation.js';
 import ClinicConfig from './ClinicConfig.jsx';
 
 const EXPORT_VERSION = 'shiftcraft-v1';
@@ -244,9 +245,56 @@ function AddAccommodationForm({ locations, providers, onAdd, onCancel }) {
 
 // ─── Person Card (sortable) ───────────────────
 function PersonCard({ person, providers, locations }) {
-  const { updatePerson, deletePerson } = useApp();
+  const { updatePerson, deletePerson, data } = useApp();
   const [showAccForm, setShowAccForm] = useState(false);
   const up = (field, value) => updatePerson(person.id, { [field]: value });
+
+  // ── Name edit state ──
+  const [editName, setEditName] = useState(person.name);
+  const [nameError, setNameError] = useState('');
+  const [nearMatchWarning, setNearMatchWarning] = useState(null); // { matches, pendingName } | null
+
+  // Sync if an external realtime update changes the person's name while not focused
+  useEffect(() => { setEditName(person.name); }, [person.name]);
+
+  const commitName = (value, skipNearMatch = false) => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      setEditName(person.name);
+      setNameError('');
+      setNearMatchWarning(null);
+      return;
+    }
+    if (trimmed === person.name) {
+      setNameError('');
+      setNearMatchWarning(null);
+      return;
+    }
+    const dup = checkExactDuplicate(trimmed, person.staffType, data.people, person.id);
+    if (dup === 'third-card') {
+      setNameError(`"${trimmed}" already has both a tech and admin card — cannot add a third`);
+      setEditName(person.name);
+      setNearMatchWarning(null);
+      return;
+    }
+    if (dup === 'same-role') {
+      const role = (person.staffType ?? 'tech') !== 'admin' ? 'Tech' : 'Admin';
+      setNameError(`A ${role} staff member named "${trimmed}" already exists`);
+      setEditName(person.name);
+      setNearMatchWarning(null);
+      return;
+    }
+    if (!skipNearMatch) {
+      const near = findNearMatches(trimmed, data.people, person.id);
+      if (near.length > 0) {
+        setNearMatchWarning({ matches: near, pendingName: trimmed });
+        return;
+      }
+    }
+    up('name', trimmed);
+    setNameError('');
+    setNearMatchWarning(null);
+  };
 
   const {
     attributes, listeners, setNodeRef, transform, transition, isDragging,
@@ -302,13 +350,42 @@ function PersonCard({ person, providers, locations }) {
           />
           <div className="color-swatch" style={{ background: person.color }} />
         </div>
-        <input
-          className="form-input"
-          style={{ flex: 1, fontWeight: 500 }}
-          value={person.name}
-          onChange={e => up('name', e.target.value)}
-          placeholder="Name"
-        />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <input
+            className={`form-input${nameError ? ' input-error' : ''}`}
+            style={{ fontWeight: 500, width: '100%' }}
+            value={editName}
+            onChange={e => { setEditName(e.target.value); setNameError(''); setNearMatchWarning(null); }}
+            onBlur={e => commitName(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') { e.target.blur(); }
+              if (e.key === 'Escape') { setEditName(person.name); setNameError(''); setNearMatchWarning(null); e.target.blur(); }
+            }}
+            placeholder="Name"
+          />
+          {nameError && (
+            <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 3 }}>{nameError}</div>
+          )}
+          {nearMatchWarning && (
+            <div style={{ fontSize: 11, color: 'var(--amber, #b45309)', marginTop: 3, lineHeight: 1.4 }}>
+              A staff member named &quot;{nearMatchWarning.matches[0].person.name}&quot; already exists — is this a different person?{' '}
+              <button
+                className="btn"
+                style={{ fontSize: 11, padding: '1px 6px', minHeight: 'unset', marginLeft: 4 }}
+                onClick={() => commitName(nearMatchWarning.pendingName, true)}
+              >
+                Keep Name
+              </button>
+              <button
+                className="btn"
+                style={{ fontSize: 11, padding: '1px 6px', minHeight: 'unset', marginLeft: 4 }}
+                onClick={() => { setEditName(person.name); setNearMatchWarning(null); }}
+              >
+                Revert
+              </button>
+            </div>
+          )}
+        </div>
         <button className="btn btn-icon btn-danger" onClick={confirmDelete} style={{ minHeight: 36 }}>
           <Trash2 size={15} />
         </button>
@@ -537,6 +614,7 @@ function AddPersonModal({ onClose, existingPeople, providers, locations, default
   const [nameError, setNameError] = useState('');
   const [shake, setShake] = useState(false);
   const [linkPerson, setLinkPerson] = useState(false);
+  const [nearMatchWarning, setNearMatchWarning] = useState([]); // non-blocking near-match warning
 
   // Detect a same-name person in the OTHER staff type (enables the link checkbox)
   const trimmedNameLower = form.name.trim().toLowerCase();
@@ -563,11 +641,13 @@ function AddPersonModal({ onClose, existingPeople, providers, locations, default
       triggerShake();
       return false;
     }
-    // Duplicate check is scoped to the same staffType — same name is allowed across Tech/Admin
-    const sameTypeNames = existingPeople
-      .filter(p => (p.staffType ?? 'tech') === form.staffType)
-      .map(p => p.name.toLowerCase());
-    if (sameTypeNames.includes(trimmed.toLowerCase())) {
+    const dup = checkExactDuplicate(trimmed, form.staffType, existingPeople);
+    if (dup === 'third-card') {
+      setNameError(`"${trimmed}" already has both a tech and admin card — cannot add a third`);
+      triggerShake();
+      return false;
+    }
+    if (dup === 'same-role') {
       setNameError('A staff member with this name already exists in this section');
       triggerShake();
       return false;
@@ -580,8 +660,16 @@ function AddPersonModal({ onClose, existingPeople, providers, locations, default
     setTimeout(() => setShake(false), 400);
   };
 
-  const handleSave = () => {
+  const handleSave = (skipNearMatch = false) => {
     if (!validate()) return;
+    if (!skipNearMatch) {
+      const near = findNearMatches(form.name.trim(), existingPeople);
+      if (near.length > 0) {
+        setNearMatchWarning(near);
+        return;
+      }
+    }
+    setNearMatchWarning([]);
     const shouldLink = linkPerson && !!matchingOtherType;
     const newId = generateId();
     const person = {
@@ -639,9 +727,22 @@ function AddPersonModal({ onClose, existingPeople, providers, locations, default
               autoFocus
               placeholder="Full Name"
               value={form.name}
-              onChange={e => { set('name', e.target.value); setNameError(''); }}
+              onChange={e => { set('name', e.target.value); setNameError(''); setNearMatchWarning([]); }}
             />
             {nameError && <div style={{ fontSize: 12, color: 'var(--red)', marginTop: 4 }}>{nameError}</div>}
+            {nearMatchWarning.length > 0 && (
+              <div style={{ fontSize: 12, color: 'var(--amber, #b45309)', marginTop: 4, padding: '6px 8px', background: 'var(--amber-bg, #fef3c7)', borderRadius: 6, lineHeight: 1.5 }}>
+                <strong>Possible duplicate:</strong> A staff member named &ldquo;{nearMatchWarning[0].person.name}&rdquo; already exists — is this a different person?
+                <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                  <button className="btn btn-primary" style={{ fontSize: 11, padding: '2px 10px', minHeight: 'unset' }} onClick={() => handleSave(true)}>
+                    This Is a Different Person — Add Anyway
+                  </button>
+                  <button className="btn" style={{ fontSize: 11, padding: '2px 10px', minHeight: 'unset' }} onClick={() => setNearMatchWarning([])}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
             {matchingOtherType && (
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)' }}>
                 <input
@@ -793,10 +894,55 @@ function AddPersonModal({ onClose, existingPeople, providers, locations, default
   );
 }
 
+// ─── Roster Health Modal ──────────────────────
+function RosterHealthModal({ people, onClose }) {
+  const issues = rosterHealthCheck(people);
+
+  return (
+    <div className="overlay-backdrop" onClick={e => { if (e.target === e.currentTarget) onClose(); }} style={{ zIndex: 250, alignItems: 'flex-start', paddingTop: 40 }}>
+      <div className="overlay-modal" style={{ maxWidth: 560, maxHeight: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '0.5px solid var(--border)', flexShrink: 0 }}>
+          <div style={{ fontWeight: 500, fontSize: 16 }}>Roster Health Check</div>
+          <button className="overlay-close" style={{ position: 'static' }} onClick={onClose}><X size={16} /></button>
+        </div>
+        <div style={{ overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {issues.length === 0 ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0' }}>
+              <CheckCircle size={20} style={{ color: 'var(--green, #16a34a)', flexShrink: 0 }} />
+              <span style={{ fontSize: 14, color: 'var(--text-primary)' }}>No identity issues found — roster looks healthy.</span>
+            </div>
+          ) : (
+            <>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                {issues.length} potential {issues.length === 1 ? 'issue' : 'issues'} found. This is diagnostic only — no changes are made automatically.
+              </div>
+              {issues.map((issue, i) => (
+                <div key={i} style={{ display: 'flex', gap: 10, padding: '8px 10px', background: issue.type === 'excess-cards' ? 'var(--red-bg, #fef2f2)' : 'var(--amber-bg, #fef3c7)', borderRadius: 6, borderLeft: `3px solid ${issue.type === 'excess-cards' ? 'var(--red, #dc2626)' : 'var(--amber, #b45309)'}` }}>
+                  <AlertTriangle size={15} style={{ color: issue.type === 'excess-cards' ? 'var(--red, #dc2626)' : 'var(--amber, #b45309)', flexShrink: 0, marginTop: 1 }} />
+                  <div style={{ fontSize: 13, lineHeight: 1.5 }}>
+                    <div style={{ fontWeight: 500 }}>
+                      {issue.type === 'excess-cards' ? 'Duplicate card' : 'Near-duplicate names'}
+                    </div>
+                    <div style={{ color: 'var(--text-secondary)' }}>{issue.message}</div>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '12px 20px', borderTop: '0.5px solid var(--border)', flexShrink: 0 }}>
+          <button className="btn btn-primary" style={{ minHeight: 36 }} onClick={onClose}>Done</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Staff Tab ────────────────────────────────
 function StaffTab() {
   const { data, reorderPeople } = useApp();
   const [showModal, setShowModal] = useState(false);
+  const [showHealth, setShowHealth] = useState(false);
   const [staffSubTab, setStaffSubTab] = useState('tech');
 
   const sensors = useSensors(useSensor(PointerSensor, {
@@ -832,9 +978,14 @@ function StaffTab() {
             </button>
           ))}
         </div>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-          <Plus size={15} /> Add Person
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn" style={{ fontSize: 12 }} onClick={() => setShowHealth(true)}>
+            <AlertTriangle size={13} /> Roster Health
+          </button>
+          <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+            <Plus size={15} /> Add Person
+          </button>
+        </div>
       </div>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={visiblePeople.map(p => p.id)} strategy={verticalListSortingStrategy}>
@@ -857,6 +1008,12 @@ function StaffTab() {
           providers={data.providers}
           locations={data.locations}
           defaultStaffType={staffSubTab}
+        />
+      )}
+      {showHealth && (
+        <RosterHealthModal
+          people={data.people}
+          onClose={() => setShowHealth(false)}
         />
       )}
     </div>
