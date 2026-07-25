@@ -338,53 +338,72 @@ export function getAssignmentsForPerson(nameKey, day, people, clinics) {
 }
 
 /**
- * Effective time range for a slot at a clinic, with role-based buffers.
- * Matches the solver's effectiveRange() helper.
- * Custom per-slot start/end overrides are respected when present.
+ * Role buffer defaults — THE single source of truth for time-range buffers.
+ * Given a clinic's base start/end times and a provider name (for OBS),
+ * returns the default { start, end } range a person in that role occupies.
+ *
+ * Used by BOTH:
+ *   • slotEffectiveRange()  (UI conflict detection, hours display)
+ *   • solver.js effectiveRange()  (generation conflict detection, hours scoring)
+ *
+ * Buffers:
+ *   scribe / closing          : [start,      end + 75]
+ *   opener                    : [start − 15, end + 60]
+ *   openingFrontDesk          : [start − 30, 3:30 PM ]  (no post buffer)
+ *   closingFrontDesk          : [10:30 AM,   end + 90]
+ *   frontDesk                 : [start − 30, end + 90]  (both buffers)
+ *   OBS Dr. R                 : [start − 60, end + 120]
+ *   OBS Dr. A                 : [start − 60, end +  60]
+ *   OBS other / blank         : [start,      end     ]  (zero — surfaces as warning)
+ *   all other roles           : [start,      end     ]
+ */
+export function roleBufferRange(roleId, baseStart, baseEnd, providerName = '') {
+  switch (roleId) {
+    case 'scribe':           return { start: baseStart,               end: baseEnd + 75 };
+    case 'closing':          return { start: Math.max(540, baseStart), end: baseEnd + 75 };
+    case 'opener':           return { start: baseStart - 15,          end: baseEnd + 60 };
+    case 'openingFrontDesk': return { start: baseStart - 30,          end: 930 };
+    case 'closingFrontDesk': return { start: 630,                     end: baseEnd + 90 };
+    case 'frontDesk':        return { start: baseStart - 30,          end: baseEnd + 90 };
+    case 'preop': case 'preop2': case 'sterile': case 'circulator': case 'scrub': {
+      const p = providerName ?? '';
+      if (p.includes('Dr. R')) return { start: baseStart - 60, end: baseEnd + 120 };
+      if (p.includes('Dr. A')) return { start: baseStart - 60, end: baseEnd +  60 };
+      return { start: baseStart, end: baseEnd };
+    }
+    default: return { start: baseStart, end: baseEnd };
+  }
+}
+
+/**
+ * Effective time range for a slot at a clinic.
+ * Applies per-slot custom start/end overrides first; falls back to roleBufferRange defaults.
+ * 'close' string end = clinic end + 1h (same buffer as opener default).
+ * opener null end = 'close' semantic (migration compat for pre-'close'-string saves).
  */
 export function slotEffectiveRange(slot, clinic) {
-  const sv         = clinic.slots?.[slot];
-  const cs         = (sv && typeof sv === 'object') ? (sv.start ?? null) : null;
-  const ce         = (sv && typeof sv === 'object') ? (sv.end   ?? null) : null;
+  const sv          = clinic.slots?.[slot];
+  const cs          = (sv && typeof sv === 'object') ? (sv.start ?? null) : null;
+  const ce          = (sv && typeof sv === 'object') ? (sv.end   ?? null) : null;
   const clinicStart = clinic.startTime ?? 0;
   const clinicEnd   = clinic.endTime   ?? 0;
-  switch (slot) {
-    case 'scribe':
-      return { start: cs ?? clinicStart, end: ce ?? (clinicEnd + 75) };
-    case 'closing':
-      return { start: cs ?? Math.max(540, clinicStart), end: ce ?? (clinicEnd + 75) };
-    case 'opener':
-      return { start: cs ?? (clinicStart - 15), end: (ce == null || ce === 'close') ? (clinicEnd + 60) : ce };
-    // FD slots: opening gets 30-min early arrival, no post buffer; ends 3:30 PM
-    case 'openingFrontDesk':
-      return { start: cs ?? (clinicStart - 30), end: ce ?? 930 };
-    // closing FD: starts 10:30 AM, 1.5h post buffer
-    case 'closingFrontDesk':
-      return { start: cs ?? 630, end: ce ?? (clinicEnd + 90) };
-    // single FD: both buffers
-    case 'frontDesk':
-      return { start: cs ?? (clinicStart - 30), end: ce ?? (clinicEnd + 90) };
-    // OBS slots: provider-specific buffers.
-    // Dr. R: 60 min early arrival, 120 min post-case stay.
-    // Dr. A: 60 min early arrival, 60 min post-case stay.
-    // Other/blank: zero buffer (surfaces as validation warning).
-    case 'preop':
-    case 'preop2':
-    case 'sterile':
-    case 'circulator':
-    case 'scrub': {
-      const provider = clinic.provider ?? '';
-      if (provider.includes('Dr. R')) return { start: cs ?? (clinicStart - 60), end: ce ?? (clinicEnd + 120) };
-      if (provider.includes('Dr. A')) return { start: cs ?? (clinicStart - 60), end: ce ?? (clinicEnd + 60) };
-      return { start: cs ?? clinicStart, end: ce ?? clinicEnd };
-    }
-    case 'middle':
-    case 'training':
-      // close = end of clinic + 1h buffer (same as opener/rawSlotHours)
-      return { start: cs ?? clinicStart, end: (ce === 'close') ? (clinicEnd + 60) : (ce ?? clinicEnd) };
-    default:
-      return { start: cs ?? clinicStart, end: ce ?? clinicEnd };
+  const defaults    = roleBufferRange(slot, clinicStart, clinicEnd, clinic.provider ?? '');
+
+  const start = cs ?? defaults.start;
+
+  // End: per-slot override with 'close' semantic, then role default.
+  let end;
+  if (slot === 'opener') {
+    // null end = 'close' semantic for opener (old saves stored null; new saves store 'close')
+    end = (ce == null || ce === 'close') ? defaults.end : ce;
+  } else if (ce === 'close') {
+    // 'close' on middle/training/frontDesk = clinic end + 1h
+    end = clinicEnd + 60;
+  } else {
+    end = ce ?? defaults.end;
   }
+
+  return { start, end };
 }
 
 /**

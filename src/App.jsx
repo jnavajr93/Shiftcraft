@@ -248,7 +248,7 @@ function AppContent() {
       <SavedToast />
       {saveStatus === 'error' && (
         <div className="saved-toast saved-toast--error">
-          <span>⚠ Change not saved — check connection</span>
+          <span>⚠ Change not saved — reverted to last saved state</span>
           <button
             className="saved-toast-dismiss"
             onClick={dismissSaveError}

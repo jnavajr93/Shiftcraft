@@ -23,10 +23,7 @@
 //     - They are OBS-blocked (full-day exclusion — placed in OBS or it's an OBS shift)
 //     - Their existing effective time range overlaps the candidate shift's window
 //
-//   Effective ranges per role (default, no custom slot start/end):
-//     scribe / closing / closingFrontDesk : [shift.start,      shift.end + 75]
-//     opener / openingFrontDesk           : [shift.start - 15, shift.end     ]
-//     all other roles                     : [shift.start,      shift.end     ]
+//   Effective ranges per role: see seed.js roleBufferRange() — the single source of truth.
 //
 //   Two ranges [a.start, a.end) and [b.start, b.end) overlap iff a.start < b.end
 //   AND b.start < a.end (strict). Touching boundaries (a.end === b.start) do NOT
@@ -35,7 +32,7 @@
 // ============================================================================
 
 import { CONSTRAINT_TYPES as CT } from './schema.js';
-import { lunchDeduct } from '../data/seed.js';
+import { lunchDeduct, roleBufferRange } from '../data/seed.js';
 
 // Build fast lookup maps from the config arrays.
 function indexConfig(cfg) {
@@ -113,48 +110,12 @@ function exceedsHourCap(personId, additionalHrs, weekHours, cfg) {
 
 /**
  * Effective time range a person occupies when placed in roleId at shift.
- * Mirrors seed.js slotEffectiveRange() — must stay in sync.
- *   scribe/closing          : [start,      end + 75]
- *   opener                  : [start - 15, end     ]
- *   openingFrontDesk        : [start - 30, 3:30 PM ]   (no post buffer; end at 930)
- *   closingFrontDesk        : [10:30 AM,   end + 90]   (start at 630)
- *   frontDesk               : [start - 30, end + 90]   (both buffers)
- *   OBS (Dr. R)             : [start - 60, end + 120]  (60 min early, 2 h after)
- *   OBS (Dr. A)             : [start - 60, end + 60]   (60 min early, 1 h after)
- *   OBS (other/blank)       : [start,      end     ]   (zero buffer — surfaces as warning)
- *   all other roles         : [start,      end     ]
- *
- * shift.name carries the provider name for OBS shifts (set by adapter.js).
+ * Delegates entirely to seed.js roleBufferRange() — the single source of truth
+ * for all role/OBS buffer values. shift.name carries the provider name for OBS
+ * shifts (set by adapter.js).
  */
 function effectiveRange(roleId, shift) {
-  const s = shift.start ?? 0;
-  const e = shift.end ?? 0;
-  switch (roleId) {
-    case 'scribe':
-      return { start: s, end: e + 75 };
-    case 'closing':
-      return { start: Math.max(540, s), end: e + 75 };
-    case 'opener':
-      return { start: s - 15, end: e + 60 };
-    case 'openingFrontDesk':
-      return { start: s - 30, end: 930 };
-    case 'closingFrontDesk':
-      return { start: 630, end: e + 90 };
-    case 'frontDesk':
-      return { start: s - 30, end: e + 90 };
-    case 'preop':
-    case 'preop2':
-    case 'sterile':
-    case 'circulator':
-    case 'scrub': {
-      const provider = shift.name ?? '';
-      if (provider.includes('Dr. R')) return { start: s - 60, end: e + 120 };
-      if (provider.includes('Dr. A')) return { start: s - 60, end: e + 60 };
-      return { start: s, end: e };
-    }
-    default:
-      return { start: s, end: e };
-  }
+  return roleBufferRange(roleId, shift.start ?? 0, shift.end ?? 0, shift.name ?? '');
 }
 
 /** Hours for a specific role at a shift, including role-specific buffers and lunch deduction. */
