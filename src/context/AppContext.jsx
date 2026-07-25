@@ -488,6 +488,16 @@ function runMigrations(data) {
     try { localStorage.setItem('shiftcraft.migration.tasktypes_research', '1'); } catch { /* ignore */ }
   }
 
+  // ── Migration: tasktypes_medtransport ────────────
+  // Add 'Med Transport' to the built-in task type list and persist to Supabase.
+  if (!localStorage.getItem('shiftcraft.migration.tasktypes_medtransport')) {
+    if (Array.isArray(d.taskTypes) && !d.taskTypes.includes('Med Transport')) {
+      d = { ...d, taskTypes: [...d.taskTypes, 'Med Transport'] };
+      dirty = true;
+    }
+    try { localStorage.setItem('shiftcraft.migration.tasktypes_medtransport', '1'); } catch { /* ignore */ }
+  }
+
   // Return { data, dirty } so init() can save to Supabase immediately when migrations ran.
   // Waiting for the next user action is unsafe: that save would push the migrated state
   // (possibly with cleared or reshaped fields) as a side-effect of an unrelated edit.
@@ -661,7 +671,9 @@ export function AppProvider({ children }) {
       let data;
       if (schedResult.status === 'ok') {
         // Cloud has real data — use it. Never fall through to localStorage.
-        data = schedResult.data;
+        // migrateData merges BUILTIN_TASK_TYPES so newly added built-in types
+        // (e.g. Med Transport) always appear even if Supabase has an old record.
+        data = migrateData(schedResult.data);
       } else {
         // status === 'empty': row genuinely does not exist in Supabase.
         // Safe to seed from localStorage migration or factory defaults.

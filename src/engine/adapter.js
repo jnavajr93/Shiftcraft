@@ -145,9 +145,57 @@ function diagnoseSolverGaps(cfg, result) {
 // options.historyScores — optional Map<patternKey, score> from computeHistoryScores().
 //   When provided, the solver uses historical frequency as a soft tiebreaker when
 //   multiple candidates are equally eligible for a slot.
+// Personal absence types that block staff assignments (not work roles like Research).
+const PERSONAL_ABSENCE_TYPES = new Set(['Approved Time Off', 'Sick', 'Last-Minute Callout']);
+
+// Compute absence constraints for the given week.
+// Returns:
+//   fullDayAbsent[dayName] = Set<personNameLowercase> — fully absent persons
+//   partialAbsent[dayName] = [{personName, absentStart, absentEnd}] — partial-day windows
+function computeAbsenceConstraints(absences, weekMonday) {
+  const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+  const fullDayAbsent = {};
+  const partialAbsent = {};
+  if (!weekMonday || !absences.length) return { fullDayAbsent, partialAbsent };
+
+  const monday = typeof weekMonday === 'string'
+    ? new Date(weekMonday + 'T00:00:00Z')
+    : weekMonday;
+
+  for (let i = 0; i < 5; i++) {
+    const d = new Date(monday);
+    d.setUTCDate(monday.getUTCDate() + i);
+    const dateStr = d.toISOString().slice(0, 10);
+    const dayName = DAYS[i];
+
+    for (const abs of absences) {
+      if (!PERSONAL_ABSENCE_TYPES.has(abs.type)) continue;
+      if (abs.start_date > dateStr || abs.end_date < dateStr) continue;
+      const name = abs.person_name.trim().toLowerCase();
+      if (abs.partial_start == null && abs.partial_end == null) {
+        if (!fullDayAbsent[dayName]) fullDayAbsent[dayName] = new Set();
+        fullDayAbsent[dayName].add(name);
+      } else {
+        if (!partialAbsent[dayName]) partialAbsent[dayName] = [];
+        partialAbsent[dayName].push({
+          personName: name,
+          absentStart: abs.partial_start ?? 0,
+          absentEnd:   abs.partial_end   ?? 1440,
+        });
+      }
+    }
+  }
+  return { fullDayAbsent, partialAbsent };
+}
+
 // Returns { assignments: [{clinicId, slot, personId}], issues: string[] }
 export function generateSchedule(globalData, options = {}) {
-  const { doctorOffClinicIds = new Set(), holidayClosedClinicIds = new Set() } = options;
+  const {
+    doctorOffClinicIds   = new Set(),
+    holidayClosedClinicIds = new Set(),
+    absences   = [],
+    weekMonday = null,
+  } = options;
   const openClinics = (globalData.clinics ?? []).filter(c =>
     c.open && !doctorOffClinicIds.has(c.id) && !holidayClosedClinicIds.has(c.id)
   );
@@ -196,6 +244,18 @@ export function generateSchedule(globalData, options = {}) {
         .map(q => q.id),
     };
   });
+
+  // ── 3b. Absence lookup structures ────────────────────────────────────────────
+  // personName (lowercase) → all person IDs sharing that name (linked-record support).
+  const nameToIds = {};
+  for (const p of globalData.people ?? []) {
+    const key = p.name.trim().toLowerCase();
+    if (!nameToIds[key]) nameToIds[key] = [];
+    nameToIds[key].push(p.id);
+  }
+  const { fullDayAbsent, partialAbsent } = computeAbsenceConstraints(absences, weekMonday);
+  // clinic ID → {startTime, endTime} for partial-absence overlap checks
+  const clinicTimeMap = new Map(openClinics.map(c => [c.id, { start: c.startTime, end: c.endTime, day: c.day }]));
 
   // ── 4. Shifts — one per open clinic ───────────────────────────────────────
   // Dr. R split-day detection: any day with 2+ open Dr. R clinics is a split-day.
@@ -256,7 +316,7 @@ export function generateSchedule(globalData, options = {}) {
     }
   }
 
-  // UNAVAILABLE: per person daysOff
+  // UNAVAILABLE: per person daysOff (recurring weekly blocks)
   for (const person of globalData.people ?? []) {
     if ((person.daysOff ?? []).length > 0) {
       constraints.push({
@@ -266,6 +326,23 @@ export function generateSchedule(globalData, options = {}) {
         personId: person.id,
         days: person.daysOff,
       });
+    }
+  }
+
+  // ABSENT (full-day): personal calendar absences block all assignments that day.
+  // Matched by person name so linked-record pairs (e.g. Hailey tech + Hailey admin)
+  // are both blocked when one absence entry covers the shared display name.
+  for (const [dayName, absentNames] of Object.entries(fullDayAbsent)) {
+    for (const name of absentNames) {
+      for (const personId of (nameToIds[name] ?? [])) {
+        constraints.push({
+          id: `absent_full_${personId}_${dayName}`,
+          type: 'unavailable',
+          enabled: true,
+          personId,
+          days: [dayName],
+        });
+      }
     }
   }
 
@@ -385,13 +462,19 @@ export function generateSchedule(globalData, options = {}) {
   // Covers: scribe/opener (no-substitute rule), closing/middle/training (always empty).
   const DR_B_TECH_ISSUE_ROLES = ['scribe', 'opener', 'closing', 'middle', 'training'];
 
+  // person ID → lowercase name (for partial-absence name lookup)
+  const idToName = new Map(
+    (globalData.people ?? []).map(p => [p.id, p.name.trim().toLowerCase()])
+  );
+
   const assignments = [];
   const issues = [];
 
-  for (const dayResult of Object.values(result)) {
+  for (const [dayName, dayResult] of Object.entries(result)) {
     for (const card of dayResult.shifts) {
       const reqSlots = requiredSlotsMap.get(card.shiftId);
       const isDrB = clinicProviderMap.get(card.shiftId) === 'Dr. B';
+      const clinicTime = clinicTimeMap.get(card.shiftId);
       for (const a of card.assigned) {
         if (!a.personId || !a.role) continue;
         // Filter 1: slot must be required by this specific clinic
@@ -402,6 +485,18 @@ export function generateSchedule(globalData, options = {}) {
           if (a.role === 'opener'  && !mariselaIds.has(a.personId)) continue;
           // closing/middle/training already blocked by filter 1; explicit guard for safety
           if (['closing', 'middle', 'training'].includes(a.role))   continue;
+        }
+        // Filter 3: partial-day absence — person may not be assigned to clinics
+        // whose time range overlaps with their absent window.
+        // Overlap: clinic.startTime < absentEnd AND clinic.endTime > absentStart
+        if (clinicTime && partialAbsent[dayName]?.length) {
+          const personName = idToName.get(a.personId);
+          const blocked = partialAbsent[dayName].some(pa =>
+            pa.personName === personName &&
+            clinicTime.start < pa.absentEnd &&
+            clinicTime.end   > pa.absentStart
+          );
+          if (blocked) continue;
         }
         assignments.push({ clinicId: card.shiftId, slot: a.role, personId: a.personId });
       }

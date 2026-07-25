@@ -479,7 +479,9 @@ function AbsenceModal({ mode, initStart, initEnd, initType, absence, people, abs
       entered_by:    managerInitials,
     };
     const result = isEdit ? await onSave(absence.id, payload) : await onSave(payload);
-    if (result?.error) setSaveError('Save failed — check your connection and try again.');
+    if (result?.error) {
+      setSaveError(typeof result.error === 'string' ? result.error : 'Save failed — check your connection and try again.');
+    }
     savingRef.current = false;
     setSaving(false);
   };
@@ -2379,6 +2381,56 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
   }, []);
 
   const handleSave = useCallback(async (...args) => {
+    // ── Post gate: block saving a personal absence when the person already has
+    // assignments in the current week on the absence's dates. Covers clinic slots
+    // and additional tasks. Linked-record pairs are matched by display name.
+    const PERSONAL_AB_TYPES = new Set(['Approved Time Off', 'Sick', 'Last-Minute Callout']);
+    const DAYS_LIST = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+    const payload = modal?.mode === 'edit' ? args[1] : args[0];
+    if (payload && PERSONAL_AB_TYPES.has(payload.type)) {
+      const monday = mondayOfWeek(currentWeek);
+      const personIds = new Set(
+        (data.people ?? [])
+          .filter(p => p.name.trim().toLowerCase() === (payload.person_name ?? '').trim().toLowerCase())
+          .map(p => p.id)
+      );
+      if (personIds.size > 0) {
+        const conflicts = [];
+        for (let i = 0; i < 5; i++) {
+          const d = new Date(monday);
+          d.setUTCDate(monday.getUTCDate() + i);
+          const dateStr = d.toISOString().slice(0, 10);
+          if (dateStr < payload.start_date || dateStr > payload.end_date) continue;
+          const dayName = DAYS_LIST[i];
+          const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+          for (const clinic of data.clinics ?? []) {
+            if (clinic.day !== dayName) continue;
+            for (const [slotKey, slotVal] of Object.entries(clinic.slots ?? {})) {
+              const assignedId = typeof slotVal === 'string' ? slotVal
+                : (slotVal && typeof slotVal === 'object' ? slotVal.personId : null);
+              if (assignedId && personIds.has(assignedId)) {
+                conflicts.push(`${slotKey} at ${clinic.location} (${clinic.provider}) on ${dateLabel}`);
+              }
+            }
+          }
+          for (const task of data.additionalTasks ?? []) {
+            const taskDayIdx = DAYS_LIST.indexOf(task.day);
+            if (taskDayIdx < 0) continue;
+            const taskDate = new Date(monday);
+            taskDate.setUTCDate(monday.getUTCDate() + taskDayIdx);
+            if (taskDate.toISOString().slice(0, 10) !== dateStr) continue;
+            if (task.assignedPersonId && personIds.has(task.assignedPersonId)) {
+              conflicts.push(`${task.label} task on ${dateLabel}`);
+            }
+          }
+        }
+        if (conflicts.length > 0) {
+          const name = payload.person_name;
+          return { error: `Cannot save absence — ${name} has existing assignments:\n• ${conflicts.join('\n• ')}\nRemove those assignments first.` };
+        }
+      }
+    }
+
     let result;
     if (modal?.mode === 'edit') {
       result = await editAbsence(...args);
@@ -2396,7 +2448,7 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
       }
     }
     if (!result.error) setModal(null);
-  }, [modal, addAbsence, editAbsence, addLog, personByKey]);
+  }, [modal, addAbsence, editAbsence, addLog, personByKey, data, currentWeek]);
 
   const handleDelete = useCallback(async (id) => {
     const absence = modal?.absence;

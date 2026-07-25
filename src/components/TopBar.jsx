@@ -1001,7 +1001,11 @@ export default function TopBar({ activeTab, setActiveTab, setupSection, setSetup
     }
 
     try {
-      const { assignments: raw, issues } = generateSchedule(data, { historyScores, doctorOffClinicIds, holidayClosedClinicIds });
+      const weekMonday = mondayOfWeek(currentWeek);
+      const { assignments: raw, issues } = generateSchedule(data, {
+        historyScores, doctorOffClinicIds, holidayClosedClinicIds,
+        absences: absences ?? [], weekMonday,
+      });
 
       let assignments = raw;
 
