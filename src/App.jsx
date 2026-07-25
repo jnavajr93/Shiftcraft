@@ -11,6 +11,7 @@ import {
 
 import { AppProvider, useApp } from './context/AppContext.jsx';
 import { getAssignmentsForPerson, slotEffectiveRange, rangesOverlap } from './data/seed.js';
+import { getBlockingAbsence, formatAbsenceBlockMsg } from './utils/absenceUtils.js';
 import { TourProvider } from './components/Tour.jsx';
 import TopBar from './components/TopBar.jsx';
 import Board from './components/Board.jsx';
@@ -55,7 +56,7 @@ function SavedToast() {
 }
 
 function AppContent() {
-  const { data, isAdmin, boardClinics, isLoading, loadError, saveStatus, dismissSaveError, assignSlot, assignTask } = useApp();
+  const { data, isAdmin, boardClinics, isLoading, loadError, saveStatus, dismissSaveError, assignSlot, assignTask, absences, weekMonday } = useApp();
 
   if (isLoading) {
     return (
@@ -128,6 +129,7 @@ function AppContent() {
   const [configClinicId, setConfigClinicId] = useState(null);
   const [search, setSearch] = useState('');
   const [activeDragId, setActiveDragId] = useState(null);
+  const [blockMsg, setBlockMsg] = useState('');
 
   const [isMobile, setIsMobile] = useState(() => window.matchMedia('(max-width: 640px)').matches);
   useEffect(() => {
@@ -159,6 +161,16 @@ function AppContent() {
       if (clinic) {
         const person = data.people.find(p => p.id === personId);
         if (person) {
+          // Absence block
+          const pKey = person.name.trim().toLowerCase();
+          const slotTimes = slotEffectiveRange(slotType, clinic);
+          const blockAbs = getBlockingAbsence(pKey, clinic.day, weekMonday, absences, slotTimes.start, slotTimes.end);
+          if (blockAbs) {
+            setBlockMsg(formatAbsenceBlockMsg(person.name, clinic.day, blockAbs));
+            setTimeout(() => setBlockMsg(''), 4000);
+            return;
+          }
+
           const nameKey = person.name.trim().toLowerCase();
           const isObsTarget = clinic.location?.toLowerCase() === 'obs';
           const targetRange = isObsTarget ? null : slotEffectiveRange(slotType, clinic);
@@ -174,9 +186,22 @@ function AppContent() {
       assignSlot(clinicId, slotType, personId);
     } else if (parts.length === 2 && parts[0] === 'task') {
       // Task slot: 'task:taskId'
+      const task = data.additionalTasks.find(t => t.id === parts[1]);
+      const person = data.people.find(p => p.id === active.id);
+      if (task && person) {
+        const pKey = person.name.trim().toLowerCase();
+        const tStart = (task.start != null && task.start !== 'close') ? task.start : null;
+        const tEnd   = (task.end   != null && task.end   !== 'close') ? task.end   : null;
+        const blockAbs = getBlockingAbsence(pKey, task.day, weekMonday, absences, tStart, tEnd);
+        if (blockAbs) {
+          setBlockMsg(formatAbsenceBlockMsg(person.name, task.day, blockAbs));
+          setTimeout(() => setBlockMsg(''), 4000);
+          return;
+        }
+      }
       assignTask(parts[1], active.id);
     }
-  }, [assignSlot, assignTask, data]);
+  }, [assignSlot, assignTask, data, absences, weekMonday]);
 
   const openPerson = useCallback((personId) => setSelectedPersonId(personId), []);
 
@@ -254,6 +279,14 @@ function AppContent() {
             onClick={dismissSaveError}
             aria-label="Dismiss"
           >
+            <XIcon size={13} />
+          </button>
+        </div>
+      )}
+      {blockMsg && (
+        <div className="saved-toast saved-toast--error" style={{ bottom: saveStatus === 'error' ? 88 : 48 }}>
+          <span>{blockMsg}</span>
+          <button className="saved-toast-dismiss" onClick={() => setBlockMsg('')} aria-label="Dismiss">
             <XIcon size={13} />
           </button>
         </div>

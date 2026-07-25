@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { getSeedData, migratePerson, generateId, getSlotPersonId, OBS_SLOT_TYPES, getBoardClinics, getAssignmentsForPerson, getRenderedSlotEntries, getActiveFDSlots, minutesToTime, SLOT_DISPLAY_LABELS } from '../data/seed.js';
+import { getSeedData, migratePerson, generateId, getSlotPersonId, OBS_SLOT_TYPES, getBoardClinics, getAssignmentsForPerson, getRenderedSlotEntries, getActiveFDSlots, minutesToTime, SLOT_DISPLAY_LABELS, slotEffectiveRange } from '../data/seed.js';
 import {
   blankObsSlots, blankStandardSlots,
   extractSlotMap, applySlotMap, blankSlotMap,
@@ -47,6 +47,7 @@ import { computeHistoryScores } from '../data/patterns.js';
 import { getFederalHolidays } from '../utils/federalHolidays.js';
 import { buildClosureMap, computeClinicHolidaySets } from '../utils/holidayClosures.js';
 import { getOnCallPerson } from '../utils/oncall.js';
+import { getBlockingAbsence } from '../utils/absenceUtils.js';
 
 // localStorage keys kept only for migration and per-device flags
 const STORAGE_KEY = 'shiftcraft.v5';
@@ -1675,6 +1676,15 @@ export function AppProvider({ children }) {
     if (!targetClinic) return;
     const isObsAssignment = targetClinic.location?.toLowerCase() === 'obs';
 
+    // Hard block: absent persons cannot be manually assigned
+    if (personId && targetClinic) {
+      const _person = globalData.people.find(p => p.id === personId);
+      const monday = mondayOfWeek(currentWeek);
+      const pKey = (_person?.name ?? '').trim().toLowerCase();
+      const slotTimes = slotEffectiveRange(slotType, targetClinic);
+      if (getBlockingAbsence(pKey, targetClinic.day, monday, absences, slotTimes.start, slotTimes.end)) return;
+    }
+
     // Guard: block writes to inactive FD slots (e.g. plain frontDesk on Dr. R Mon/Fri).
     // The popover only renders active slots, so this should never trigger normally —
     // it catches any code path that bypasses the popover (drag-and-drop, etc.).
@@ -1775,7 +1785,7 @@ export function AppProvider({ children }) {
         createdAt:       new Date().toISOString(),
       }]);
     }
-  }, [currentWeek, globalData, doSaveWeek, managerInitials, appendHistory]);
+  }, [currentWeek, globalData, doSaveWeek, managerInitials, appendHistory, absences]);
 
   const updateSlotTime = useCallback(async (clinicId, slotType, start, end) => {
     if (!globalData) return;
@@ -1804,6 +1814,20 @@ export function AppProvider({ children }) {
 
   const assignTask = useCallback(async (taskId, personId) => {
     if (!globalData) return;
+
+    // Hard block: absent persons cannot be manually assigned
+    if (personId) {
+      const task = globalData.additionalTasks.find(t => t.id === taskId);
+      const person = globalData.people.find(p => p.id === personId);
+      if (task) {
+        const monday = mondayOfWeek(currentWeek);
+        const pKey = (person?.name ?? '').trim().toLowerCase();
+        const tStart = (task.start != null && task.start !== 'close') ? task.start : null;
+        const tEnd   = (task.end   != null && task.end   !== 'close') ? task.end   : null;
+        if (getBlockingAbsence(pKey, task.day, monday, absences, tStart, tEnd)) return;
+      }
+    }
+
     const prevData = globalData;
     const additionalTasks = globalData.additionalTasks.map(t =>
       t.id === taskId ? { ...t, assignedPersonId: personId } : t
@@ -1827,7 +1851,7 @@ export function AppProvider({ children }) {
     const result = await doSaveWeek(currentWeek, map);
     if (result === 'error') { setGlobalData(prevData); return; }
     setDirtyWeeks(prev => new Set([...prev, currentWeek]));
-  }, [currentWeek, globalData, doSaveWeek, managerInitials]);
+  }, [currentWeek, globalData, doSaveWeek, managerInitials, absences]);
 
   const addTask = useCallback(async (task) => {
     if (!globalData) return;
@@ -2312,7 +2336,7 @@ export function AppProvider({ children }) {
       isAdmin, setIsAdmin,
       managerInitials, setManagerInitials,
       theme, setTheme,
-      currentWeek, weekLabel,
+      currentWeek, weekLabel, weekMonday,
       navigateWeek, jumpToWeek, weekIsEmpty, copyFromTwoWeeksAgo, clearWeek, importWeekData,
       updateClinic, assignSlot, updateSlotTime,
       assignTask, addTask, removeTask, updateTask, updateTaskTime,

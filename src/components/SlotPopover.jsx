@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useApp } from '../context/AppContext.jsx';
 import { Trash2, Zap } from 'lucide-react';
 import { DAYS, getSlotPersonId, OBS_SLOT_TYPES, getAssignmentsForPerson, slotEffectiveRange, rangesOverlap, minutesToTime } from '../data/seed.js';
+import { getBlockingAbsence, formatAbsenceIneligibleReason } from '../utils/absenceUtils.js';
 
 // ─── Portal positioning hook ──────────────────────────────────────────────────
 // Renders the popover at a fixed viewport position computed from the trigger element.
@@ -78,7 +79,13 @@ function lockedToProvider(entry) {
 }
 
 /** Returns reason why person can't fill this slot, or null if they can */
-function ineligibleReason(person, clinic, slotType, clinics, additionalTasks, allPeople) {
+function ineligibleReason(person, clinic, slotType, clinics, additionalTasks, allPeople, absences, weekMonday) {
+  // Absence calendar block
+  const pKey = person.name.trim().toLowerCase();
+  const slotTimes = slotEffectiveRange(slotType, clinic);
+  const blockingAbsence = getBlockingAbsence(pKey, clinic.day, weekMonday, absences, slotTimes.start, slotTimes.end);
+  if (blockingAbsence) return formatAbsenceIneligibleReason(blockingAbsence);
+
   // Day off
   if ((person.daysOff ?? []).includes(clinic.day)) return 'Off this day';
 
@@ -150,7 +157,7 @@ function ineligibleReason(person, clinic, slotType, clinics, additionalTasks, al
 }
 
 export default function SlotPopover({ clinic, slotType, currentPersonId, onAssign, onRemove, onClose, triggerRef }) {
-  const { data } = useApp();
+  const { data, absences, weekMonday } = useApp();
   const { popoverStyle, contentRef } = usePortalPopover(triggerRef, onClose);
 
   useEffect(() => {
@@ -185,7 +192,7 @@ export default function SlotPopover({ clinic, slotType, currentPersonId, onAssig
 
   // Classify each person
   const classified = peopleForSlot.map(person => {
-    const reason = ineligibleReason(person, clinic, slotType, data.clinics, data.additionalTasks, data.people);
+    const reason = ineligibleReason(person, clinic, slotType, data.clinics, data.additionalTasks, data.people, absences, weekMonday);
     return { person, eligible: !reason, reason };
   });
 

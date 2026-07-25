@@ -4,6 +4,7 @@ import { useDroppable } from '@dnd-kit/core';
 import { Plus, X, Trash2, Pencil, Zap } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { mondayOfWeek } from '../context/AppContext.jsx';
+import { getBlockingAbsence, formatAbsenceIneligibleReason } from '../utils/absenceUtils.js';
 import { DAYS, generateId, minutesToTime, getAssignmentsForPerson, slotEffectiveRange, rangesOverlap } from '../data/seed.js';
 import { TimeRangePicker } from './TimeRangePicker.jsx';
 
@@ -81,7 +82,13 @@ function TaskTimeEditor({ task, onSave, onClose }) {
 }
 
 // ─── Task eligibility (no role check — any staff can take any task) ───────────
-function taskIneligibleReason(person, task, clinics, allPeople) {
+function taskIneligibleReason(person, task, clinics, allPeople, absences, weekMonday) {
+  const pKey = person.name.trim().toLowerCase();
+  const tStart = (task.start != null && task.start !== 'close') ? task.start : null;
+  const tEnd   = (task.end   != null && task.end   !== 'close') ? task.end   : null;
+  const blockingAbsence = getBlockingAbsence(pKey, task.day, weekMonday, absences, tStart, tEnd);
+  if (blockingAbsence) return formatAbsenceIneligibleReason(blockingAbsence);
+
   if ((person.daysOff ?? []).includes(task.day)) return 'Off This Day';
 
   // Timeless tasks are all-shift annotations — no overlap or OBS conflicts apply.
@@ -114,7 +121,7 @@ function taskIneligibleReason(person, task, clinics, allPeople) {
 // ─── Task Slot Popover ────────────────────────────────────────────────────────
 // Follows SlotPopover pattern: Suggested / All Staff / Ineligible sections.
 function TaskSlotPopover({ task, currentPersonId, onAssign, onRemove, onClose, triggerRef }) {
-  const { data } = useApp();
+  const { data, absences, weekMonday } = useApp();
   const { popoverStyle, contentRef } = usePortalPopover(triggerRef, onClose);
 
   useEffect(() => {
@@ -141,7 +148,7 @@ function TaskSlotPopover({ task, currentPersonId, onAssign, onRemove, onClose, t
 
   // Classify all people
   const classified = data.people.map(person => {
-    const reason = taskIneligibleReason(person, task, data.clinics, data.people);
+    const reason = taskIneligibleReason(person, task, data.clinics, data.people, absences, weekMonday);
     return { person, eligible: !reason, reason };
   });
 
