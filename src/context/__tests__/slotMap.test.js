@@ -437,3 +437,181 @@ describe('hasAnyAssignment', () => {
     expect(hasAnyAssignment(map)).toBe(false);
   });
 });
+
+// ─── Per-week task instance isolation ────────────────────────────────────────
+//
+// Task INSTANCES (label, day, time) are per-week: adding/editing/removing a task
+// in one week must not affect any other week.
+//
+// Key invariants:
+//   1. extractSlotMap stores task definitions in __tasks.
+//   2. applySlotMap uses __tasks from the map (per-week list), ignoring the
+//      global baseline passed as the second argument.
+//   3. blankSlotMap seeds __tasks: [] so new weeks have no task instances.
+//   4. toDefinitionData uses originalTaskDefs (global baseline) when writing the
+//      global SCHEDULE_KEY record, preventing per-week task instances from bleeding.
+//   5. Three-week independence: distinct task lists in A/B/C do not cross-contaminate.
+
+describe('Per-week task instance isolation', () => {
+  const clinic = makeClinic();
+  const origDefs = [{ id: 'c1', open: true, startTime: 480, endTime: 1020, patientCount: 30 }];
+
+  // ── 1. extractSlotMap stores __tasks ──────────────────────────────────────
+
+  it('extractSlotMap stores task definitions in __tasks (without assignedPersonId)', () => {
+    const tasks = [
+      makeTask({ id: 'ta', label: 'Inventory', assignedPersonId: 'person-1' }),
+      makeTask({ id: 'tb', label: 'Triage',    assignedPersonId: 'person-2' }),
+    ];
+    const map = extractSlotMap([clinic], tasks);
+    expect(Array.isArray(map.__tasks)).toBe(true);
+    expect(map.__tasks).toHaveLength(2);
+    // definitions must NOT include assignedPersonId
+    expect(map.__tasks[0].assignedPersonId).toBeUndefined();
+    expect(map.__tasks[1].assignedPersonId).toBeUndefined();
+    // assignments are stored separately as task:<id>
+    expect(map['task:ta']).toBe('person-1');
+    expect(map['task:tb']).toBe('person-2');
+  });
+
+  it('extractSlotMap excludes _isResearch ephemeral overlays from __tasks', () => {
+    const tasks = [
+      makeTask({ id: 'ta', label: 'Triage' }),
+      { ...makeTask({ id: 'tr', label: 'Research' }), _isResearch: true, _researchId: 'r1' },
+    ];
+    const map = extractSlotMap([clinic], tasks);
+    expect(map.__tasks).toHaveLength(1);
+    expect(map.__tasks[0].id).toBe('ta');
+  });
+
+  // ── 2. applySlotMap uses __tasks from the map ─────────────────────────────
+
+  it('applySlotMap uses __tasks from the map, ignoring the global baseline list', () => {
+    // Global baseline has task G; week map has task W only.
+    const globalTask = makeTask({ id: 'g', label: 'GlobalTask' });
+    const weekTask   = makeTask({ id: 'w', label: 'WeekTask' });
+    const weekMap = extractSlotMap([clinic], [weekTask]);
+    // Pass global task list as second arg; week map's __tasks should win.
+    const { additionalTasks } = applySlotMap([clinic], [globalTask], weekMap);
+    expect(additionalTasks).toHaveLength(1);
+    expect(additionalTasks[0].id).toBe('w');
+  });
+
+  it('applySlotMap restores task assignments from task:<id> entries', () => {
+    const task = makeTask({ id: 'ta', assignedPersonId: 'person-5' });
+    const weekMap = extractSlotMap([clinic], [task]);
+    // Pass empty list as global baseline — __tasks provides the definition
+    const { additionalTasks } = applySlotMap([clinic], [], weekMap);
+    expect(additionalTasks[0].assignedPersonId).toBe('person-5');
+  });
+
+  // ── 3. blankSlotMap seeds __tasks: [] ────────────────────────────────────
+
+  it('blankSlotMap produces __tasks: [] so new weeks start with no task instances', () => {
+    const map = blankSlotMap([clinic]);
+    expect(map.__tasks).toEqual([]);
+    // applySlotMap on a blank map yields no tasks regardless of global baseline
+    const globalTask = makeTask({ id: 'g', label: 'GlobalTask' });
+    const { additionalTasks } = applySlotMap([clinic], [globalTask], map);
+    expect(additionalTasks).toHaveLength(0);
+  });
+
+  // ── 4. toDefinitionData uses originalTaskDefs ─────────────────────────────
+
+  it('toDefinitionData uses originalTaskDefs baseline, not the current week task list', () => {
+    // originalTaskDefs: one global task (the baseline at init)
+    const originalTaskDefs = [makeTask({ id: 'global', label: 'GlobalTemplate' })];
+    // This week added a per-week task; live additionalTasks has both
+    const globalData = {
+      clinics: [clinic],
+      additionalTasks: [
+        makeTask({ id: 'global', label: 'GlobalTemplate', assignedPersonId: 'person-1' }),
+        makeTask({ id: 'perweek', label: 'PerWeekTask',   assignedPersonId: 'person-2' }),
+      ],
+      people: [], taskTypes: [], locations: [], providers: [],
+    };
+    const def = toDefinitionData(globalData, origDefs, originalTaskDefs);
+    // Global record must contain ONLY the baseline task, not the per-week addition
+    expect(def.additionalTasks).toHaveLength(1);
+    expect(def.additionalTasks[0].id).toBe('global');
+    expect(def.additionalTasks[0].assignedPersonId).toBeNull();
+  });
+
+  it('toDefinitionData with null originalTaskDefs falls back to live list (first-time seed)', () => {
+    const globalData = {
+      clinics: [clinic],
+      additionalTasks: [makeTask({ id: 'ta', label: 'Triage', assignedPersonId: 'p1' })],
+      people: [], taskTypes: [], locations: [], providers: [],
+    };
+    const def = toDefinitionData(globalData, origDefs, null);
+    // No baseline provided — uses live list (initial seed case)
+    expect(def.additionalTasks).toHaveLength(1);
+    expect(def.additionalTasks[0].id).toBe('ta');
+    expect(def.additionalTasks[0].assignedPersonId).toBeNull();
+  });
+
+  // ── 5. Three-week independence ────────────────────────────────────────────
+
+  it('tasks added in week B do not appear when applying week A or week C maps', () => {
+    // Global baseline: no tasks
+    const globalTasks = [];
+
+    // Week A: one task (Inventory)
+    const weekATask = makeTask({ id: 'inv', label: 'Inventory', assignedPersonId: 'p1' });
+    const mapA = extractSlotMap([clinic], [weekATask]);
+
+    // Week B: different task (Triage)
+    const weekBTask = makeTask({ id: 'tri', label: 'Triage', assignedPersonId: 'p2' });
+    const mapB = extractSlotMap([clinic], [weekBTask]);
+
+    // Week C: no tasks (blank)
+    const mapC = blankSlotMap([clinic]);
+
+    const { additionalTasks: tasksA } = applySlotMap([clinic], globalTasks, mapA);
+    const { additionalTasks: tasksB } = applySlotMap([clinic], globalTasks, mapB);
+    const { additionalTasks: tasksC } = applySlotMap([clinic], globalTasks, mapC);
+
+    // Week A has only Inventory
+    expect(tasksA).toHaveLength(1);
+    expect(tasksA[0].id).toBe('inv');
+    expect(tasksA[0].assignedPersonId).toBe('p1');
+
+    // Week B has only Triage
+    expect(tasksB).toHaveLength(1);
+    expect(tasksB[0].id).toBe('tri');
+    expect(tasksB[0].assignedPersonId).toBe('p2');
+
+    // Week C has no tasks
+    expect(tasksC).toHaveLength(0);
+  });
+
+  it('toDefinitionData writes only the global baseline regardless of which week is viewed', () => {
+    // Baseline: one global template task
+    const originalTaskDefs = [makeTask({ id: 'tmpl', label: 'Template' })];
+
+    // Week B has two tasks: the template (assigned) + a per-week extra
+    const globalDataWeekB = {
+      clinics: [clinic],
+      additionalTasks: [
+        makeTask({ id: 'tmpl',  label: 'Template',    assignedPersonId: 'pA' }),
+        makeTask({ id: 'extra', label: 'WeekBOnlyTask', assignedPersonId: 'pB' }),
+      ],
+      people: [], taskTypes: [], locations: [], providers: [],
+    };
+    // Week C has no tasks
+    const globalDataWeekC = {
+      clinics: [clinic],
+      additionalTasks: [],
+      people: [], taskTypes: [], locations: [], providers: [],
+    };
+
+    const defFromB = toDefinitionData(globalDataWeekB, origDefs, originalTaskDefs);
+    const defFromC = toDefinitionData(globalDataWeekC, origDefs, originalTaskDefs);
+
+    // Both weeks must write the same global baseline (only 'tmpl', unassigned)
+    expect(defFromB.additionalTasks).toHaveLength(1);
+    expect(defFromB.additionalTasks[0].id).toBe('tmpl');
+    expect(defFromC.additionalTasks).toHaveLength(1);
+    expect(defFromC.additionalTasks[0].id).toBe('tmpl');
+  });
+});

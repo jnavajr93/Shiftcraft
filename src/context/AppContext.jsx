@@ -550,6 +550,10 @@ export function AppProvider({ children }) {
   // Used to reset per-week overrides when navigating to a week that has no __clinicConfig
   // in its slot map, preventing one week's config from bleeding into another.
   const originalClinicDefsRef = useRef(null); // [{ id, open, startTime, endTime, patientCount }]
+  // Snapshot of task definitions captured once at init() — before per-week task lists are applied.
+  // Used so toDefinitionData writes the global baseline (not the current week's task list)
+  // to the SCHEDULE_KEY record, preventing per-week task instances from bleeding into all weeks.
+  const originalTaskDefsRef = useRef(null); // [{ id, label, day, ... }]
 
   // ─── Realtime & concurrency ────────────────
   // Per-week version loaded from DB — used for conditional (optimistic) saves.
@@ -757,7 +761,7 @@ export function AppProvider({ children }) {
           if (!seedResult.conflict) weekVersionRef.current[nowWeek] = seedResult.newVersion ?? null;
         } else {
           // Brand-new week: seed a blank map
-          weekMap = blankSlotMap(data.clinics, data.additionalTasks);
+          weekMap = blankSlotMap(data.clinics);
           const seedResult = await saveWeekSlotMapDB(nowWeek, weekMap, null);
           if (!seedResult.conflict) weekVersionRef.current[nowWeek] = seedResult.newVersion ?? null;
         }
@@ -840,6 +844,12 @@ export function AppProvider({ children }) {
       originalClinicDefsRef.current = data.clinics.map(c => ({
         id: c.id, open: c.open, startTime: c.startTime, endTime: c.endTime, patientCount: c.patientCount,
       }));
+      // Snapshot task definitions from the global record BEFORE per-week task lists overwrite them.
+      // toDefinitionData uses this baseline so that adding/removing tasks in one week
+      // does not write those per-week instances back to the global SCHEDULE_KEY record.
+      originalTaskDefsRef.current = (data.additionalTasks ?? []).map(
+        ({ assignedPersonId: _, ...t }) => t
+      );
 
       const applied = applySlotMap(data.clinics, data.additionalTasks, weekMap);
 
@@ -916,10 +926,10 @@ export function AppProvider({ children }) {
     // infinite loop; the DB already has the correct value, so there's nothing to write.
     if (scheduleFromRemoteRef.current) { scheduleFromRemoteRef.current = false; return; }
     setSaveStatus('saving');
-    // Pass originalClinicDefsRef so toDefinitionData restores the baseline values
-    // for per-week fields (open, times, patientCount) instead of writing the live
-    // per-week state to the global record and contaminating other weeks.
-    saveScheduleDB(toDefinitionData(globalData, originalClinicDefsRef.current)).then(({ error }) => {
+    // Pass originalClinicDefsRef / originalTaskDefsRef so toDefinitionData restores the
+    // global-baseline values instead of writing the current week's per-week state
+    // (open/times/patientCount AND task instances) to the global record.
+    saveScheduleDB(toDefinitionData(globalData, originalClinicDefsRef.current, originalTaskDefsRef.current)).then(({ error }) => {
       if (error) {
         setSaveStatus('error');
         clearTimeout(saveStatusTimerRef.current);
@@ -1006,6 +1016,13 @@ export function AppProvider({ children }) {
                 ...newClinics.map(c => ({ id: c.id, open: c.open, startTime: c.startTime, endTime: c.endTime, patientCount: c.patientCount })),
               ];
             }
+          }
+          // Sync the task-definition baseline from the incoming global record.
+          // The global record's additionalTasks IS the task baseline (no per-week instances).
+          if (Array.isArray(value.additionalTasks)) {
+            originalTaskDefsRef.current = value.additionalTasks.map(
+              ({ assignedPersonId: _, ...t }) => t
+            );
           }
           setGlobalData(g => {
             if (!g) return g;
@@ -1388,7 +1405,7 @@ export function AppProvider({ children }) {
         const sr = await saveWeekSlotMapDB(next, localMap, null);
         if (!sr.conflict) weekVersionRef.current[next] = sr.newVersion ?? null;
       } else {
-        map = blankSlotMap(globalData.clinics, globalData.additionalTasks);
+        map = blankSlotMap(globalData.clinics);
         const sr = await saveWeekSlotMapDB(next, map, null);
         if (!sr.conflict) weekVersionRef.current[next] = sr.newVersion ?? null;
       }
@@ -1416,7 +1433,9 @@ export function AppProvider({ children }) {
           return def ? { ...c, open: def.open, startTime: def.startTime, endTime: def.endTime, patientCount: def.patientCount } : c;
         });
       }
-      const applied = applySlotMap(baseClinics, g.additionalTasks, map);
+      // Pass the global task baseline so weeks without __tasks fall back to the
+      // global list (migration path) rather than the current week's per-week tasks.
+      const applied = applySlotMap(baseClinics, originalTaskDefsRef.current ?? g.additionalTasks, map);
       return { ...g, ...applied };
     });
     setPostedSnapshots(prev => ({ ...prev, [next]: snapValue }));
@@ -1444,7 +1463,7 @@ export function AppProvider({ children }) {
         const sr = await saveWeekSlotMapDB(targetWeek, localMap, null);
         if (!sr.conflict) weekVersionRef.current[targetWeek] = sr.newVersion ?? null;
       } else {
-        map = blankSlotMap(globalData.clinics, globalData.additionalTasks);
+        map = blankSlotMap(globalData.clinics);
         const sr = await saveWeekSlotMapDB(targetWeek, map, null);
         if (!sr.conflict) weekVersionRef.current[targetWeek] = sr.newVersion ?? null;
       }
@@ -1468,7 +1487,9 @@ export function AppProvider({ children }) {
           return def ? { ...c, open: def.open, startTime: def.startTime, endTime: def.endTime, patientCount: def.patientCount } : c;
         });
       }
-      const applied = applySlotMap(baseClinics, g.additionalTasks, map);
+      // Pass the global task baseline so weeks without __tasks fall back to the
+      // global list (migration path) rather than the current week's per-week tasks.
+      const applied = applySlotMap(baseClinics, originalTaskDefsRef.current ?? g.additionalTasks, map);
       return { ...g, ...applied };
     });
     setPostedSnapshots(prev => ({ ...prev, [targetWeek]: snapValue2 }));
@@ -1504,9 +1525,9 @@ export function AppProvider({ children }) {
     }
     if (!prevMap) return null;
 
-    // Strip __clinicConfig from the source: copy assignments only.
-    // The current week keeps its own clinic config, not two-weeks-ago's config.
-    const { __clinicConfig: _srcCC, ...prevAssignments } = prevMap;
+    // Strip __clinicConfig and __tasks from the source: copy assignments only.
+    // The current week keeps its own clinic config and task list, not two-weeks-ago's.
+    const { __clinicConfig: _srcCC, __tasks: _srcTasks, ...prevAssignments } = prevMap;
     // Merge: current week's clinic config + two-weeks-ago assignments
     const mergedMap = { ...extractSlotMap(globalData.clinics, globalData.additionalTasks), ...prevAssignments };
     await doSaveWeek(currentWeek, mergedMap);
@@ -1556,18 +1577,21 @@ export function AppProvider({ children }) {
     sessionScheduleChangedRef.current = true;
     // Delete the week row entirely — a cleared week must have zero leftover data in Supabase.
     // On next load the init() path will see status:'empty' and seed a fresh blank map.
-    await deleteWeekSlotMapDB(currentWeek);
+    // Save a blank map (slots cleared, __tasks: []) so the DB row reflects the cleared
+    // state immediately — other managers see a blank week, not a deleted row.
+    // Task instances are per-week; a cleared week has no tasks.
+    const blankMap = blankSlotMap(globalData.clinics);
+    await doSaveWeek(currentWeek, blankMap);
     const clinics = globalData.clinics.map(c => ({
       ...c,
       slots: c.location === 'OBS' ? blankObsSlots() : blankStandardSlots(),
     }));
-    const additionalTasks = (globalData.additionalTasks ?? []).map(t => ({ ...t, assignedPersonId: null }));
-    setGlobalData(prev => ({ ...prev, clinics, additionalTasks }));
+    setGlobalData(prev => ({ ...prev, clinics, additionalTasks: [] }));
     // A cleared week with a prior snapshot is now dirty (snapshot ≠ blank)
     if (postedSnapshots[currentWeek]) {
       setDirtyWeeks(prev => new Set([...prev, currentWeek]));
     }
-  }, [currentWeek, globalData, postedSnapshots]);
+  }, [currentWeek, globalData, postedSnapshots, doSaveWeek]);
 
   // ─── History helpers ─────────────────────────
   const MAX_HISTORY_WEEKS = 52;

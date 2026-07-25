@@ -7,6 +7,14 @@
  *   - { [`task:${id}`]: personId | null }       task assignments
  *   - { __clinicConfig: { [clinicId]: { open, startTime, endTime, patientCount } } }
  *                                                per-week clinic config (never in global record)
+ *   - { __tasks: [{ id, label, day, locationTag, start, end }] }
+ *                                                per-week task definitions (never in global record)
+ *
+ * Per-week task architecture:
+ *   Task INSTANCES (which tasks exist, their label/day/time) are per-week — stored in __tasks.
+ *   Task ASSIGNMENTS (who is doing each task) are per-week — stored in task:${id} entries.
+ *   Task TYPES (the dropdown menu: Inventory, Research, …) are global — stored in taskTypes.
+ *   Adding a task in week B must not create, alter, or remove any task in weeks A or C.
  */
 
 import { OBS_SLOT_TYPES, getSlotPersonId, getActiveFDSlots } from '../data/seed.js';
@@ -47,6 +55,11 @@ export function extractSlotMap(clinics, tasks) {
   map.__clinicConfig = Object.fromEntries(
     clinics.map(c => [c.id, { open: c.open, startTime: c.startTime, endTime: c.endTime, patientCount: c.patientCount }])
   );
+  // Per-week task definitions: store the task list (without assignments) so task
+  // instances are isolated to this week. Never stored in the global SCHEDULE_KEY record.
+  map.__tasks = (tasks ?? [])
+    .filter(t => !t._isResearch)  // exclude ephemeral research overlays
+    .map(({ assignedPersonId: _a, _isResearch: _r, _researchId: _ri, _note: _n, ...def }) => def);
   return map;
 }
 
@@ -84,9 +97,13 @@ export function applySlotMap(clinics, tasks, map) {
     }
     return { ...base, slots: merged };
   });
-  const newTasks = (tasks ?? []).map(t => ({
-    ...t,
-    assignedPersonId: map[`task:${t.id}`] ?? null,
+  // Task definitions: prefer per-week __tasks from the map (new format).
+  // Fall back to the `tasks` parameter (original global list) for week records
+  // that pre-date this format — a safe migration path that never loses data.
+  const weekTaskDefs = map.__tasks ?? tasks ?? [];
+  const newTasks = weekTaskDefs.map(def => ({
+    ...def,
+    assignedPersonId: map[`task:${def.id}`] ?? null,
   }));
   return { clinics: newClinics, additionalTasks: newTasks };
 }
@@ -97,11 +114,13 @@ export function applySlotMap(clinics, tasks, map) {
  * Blank slot map for a brand-new week.
  * Intentionally NO __clinicConfig: new weeks fall through to the global baseline
  * via the clinic-config reset in navigateWeek / jumpToWeek.
+ * Intentionally __tasks: []: new weeks start with no tasks — task instances are
+ * per-week and must be added explicitly for each week.
  */
-export function blankSlotMap(clinics, tasks) {
+export function blankSlotMap(clinics) {
   const map = {};
   for (const c of clinics) map[c.id] = c.location === 'OBS' ? blankObsSlots() : blankStandardSlots();
-  for (const t of (tasks ?? [])) map[`task:${t.id}`] = null;
+  map.__tasks = [];
   return map;
 }
 
@@ -110,6 +129,7 @@ export function blankSlotMap(clinics, tasks) {
 export function hasAnyAssignment(map) {
   for (const [key, val] of Object.entries(map)) {
     if (key === '__clinicConfig') continue;
+    if (key === '__tasks') continue;
     if (key.startsWith('task:')) { if (val) return true; continue; }
     if (!val) continue;
     if (typeof val === 'string') return true;
@@ -124,11 +144,14 @@ export function hasAnyAssignment(map) {
 
 // ─── stripClinicConfig ────────────────────────────────────────────────────────
 
-/** Remove __clinicConfig before dirty comparisons so clinic-config changes
- *  don't incorrectly mark the schedule dirty relative to a posted snapshot. */
+/** Remove per-week metadata keys (__clinicConfig, __tasks) before dirty
+ *  comparisons so config/definition changes don't incorrectly mark the
+ *  schedule dirty relative to a posted snapshot.  Task ASSIGNMENTS (the
+ *  task:${id} entries) remain and still affect dirty state. */
 export function stripClinicConfig(map) {
-  if (!map || typeof map !== 'object' || !('__clinicConfig' in map)) return map;
-  const { __clinicConfig: _, ...rest } = map;
+  if (!map || typeof map !== 'object') return map;
+  if (!('__clinicConfig' in map) && !('__tasks' in map)) return map;
+  const { __clinicConfig: _, __tasks: __, ...rest } = map;
   return rest;
 }
 
@@ -160,8 +183,12 @@ export function sortedJSON(obj) {
  * @param {object} globalData  - live app state (may have per-week overrides)
  * @param {Array|null} originalClinicDefs - [{ id, open, startTime, endTime, patientCount }]
  *   captured once at init before any per-week applySlotMap calls.
+ * @param {Array|null} originalTaskDefs - task definitions captured at init.
+ *   Used instead of the live additionalTasks so tasks added/removed in the
+ *   current week are NOT written to the global record (they are per-week only).
+ *   Pass null to use the live list (e.g. first-time seed when there is no baseline).
  */
-export function toDefinitionData(globalData, originalClinicDefs) {
+export function toDefinitionData(globalData, originalClinicDefs, originalTaskDefs) {
   const { clinics, additionalTasks, ...rest } = globalData;
   const defsById = originalClinicDefs
     ? new Map(originalClinicDefs.map(d => [d.id, d]))
@@ -181,7 +208,11 @@ export function toDefinitionData(globalData, originalClinicDefs) {
       slots: def.location === 'OBS' ? blankObsSlots() : blankStandardSlots(),
     };
   });
-  const definitionTasks = (additionalTasks ?? []).map(({ assignedPersonId, ...t }) => ({
+  // Task definitions in the global record: use the ORIGINAL baseline (captured at init),
+  // not the live per-week list.  This prevents tasks added/removed in the current week
+  // from bleeding into the global record and appearing in every other week.
+  const taskSource = originalTaskDefs ?? (additionalTasks ?? []);
+  const definitionTasks = taskSource.map(({ assignedPersonId: _a, _isResearch: _r, ...t }) => ({
     ...t, assignedPersonId: null,
   }));
   return { ...rest, clinics: definitionClinics, additionalTasks: definitionTasks };
