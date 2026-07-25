@@ -1,8 +1,24 @@
 # Shiftcraft Session Status — 2026-07-25
 
-## SHA deployed: b08075b
+## SHA deployed: 95ca95b
 
 ## Work completed this session
+
+### 5. Fix 6 — Posted-week edit banner
+- Split the single `unposted-banner` into two visually distinct banners:
+  - **`posted-edit-banner`** (orange, left accent border): fires when a POSTED week has been re-edited — "This week is posted — your edits are not visible to staff until you re-post. Last posted X by Y."
+  - **`unposted-banner`** (amber, unchanged style): now only fires for NEVER-POSTED weeks — "This schedule has not been posted…"
+- Both gated on `isAdmin && isDirty && sessionScheduleChangedRef.current`; calendar-only sessions (absences, doctor-off, on-call, research) never trigger either
+- CSS added: `.posted-edit-banner` with light/dark mode variants
+
+### 6. Fix 9 — Test gaps filled (136 → 190 tests, +54)
+- `weekIsolation.test.js` (16): slot assignment round-trip A→B→A, clinic config independence (A/B/C), task instance isolation, dirty-flag invariants for config vs assignment changes
+- `realtimeHandler.test.js` (13): SCHEDULE_KEY broadcast preserves per-week slot assignments; per-week `__clinicConfig` wins over incoming global defs; BUILTIN_TASK_TYPES merge; originalClinicDefs tracking for new clinics
+- `openClosePill.test.js` (31): formatVariableSlotTime null/close, formatOpenerTimeDisplay, formatOpeningFDTimeDisplay, calcSlotHours opener/middle/training null+close semantics, slotEffectiveRange close semantics
+
+---
+
+## Previous work this session
 
 ### 1. Open/Close pill fix
 - `formatVariableSlotTime`: null start → "Open" (was "?")
