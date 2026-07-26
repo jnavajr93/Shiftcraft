@@ -23,10 +23,6 @@ function DraggablePersonChip({ person, onPersonClick }) {
 export default function UnassignedStaff({ onPersonClick }) {
   const { data, absences, weekMonday } = useApp();
 
-  // Build canonical list for one staff group.
-  // groupFilter: predicate on a people record to include it as the "display record" for this group.
-  // Linked records (e.g. Hailey has both tech + admin) appear once in each group.
-  // allRecords (both roles) are used for eligibility checks so name-based assignment is accurate.
   function buildCanonical(groupFilter) {
     const seen = new Set();
     const result = [];
@@ -47,7 +43,6 @@ export default function UnassignedStaff({ onPersonClick }) {
   const techCanonical  = buildCanonical(isTech);
   const adminCanonical = buildCanonical(isAdmin);
 
-  // Split canonical into { unassigned, unavailable } for a given day
   function splitDayColumn(day, canonical) {
     const unavailable = [];
     const unassigned = [];
@@ -56,23 +51,19 @@ export default function UnassignedStaff({ onPersonClick }) {
       const { displayRecord, allRecords } = entry;
       const pKey = displayRecord.name.trim().toLowerCase();
 
-      // Absence check first
       const dayAbsences = getAbsencesOnDay(pKey, day, weekMonday, absences);
       if (dayAbsences.length > 0) {
         unavailable.push({ ...entry, absenceLabel: unavailableLabel(dayAbsences[0]) });
         continue;
       }
 
-      // Physical person is considered "off" only when ALL their records mark this day off.
       const allOff = allRecords.every(r => (r.daysOff ?? []).includes(day));
-      if (allOff) continue; // permanent day off — not shown in either group
+      if (allOff) continue;
 
-      // Assigned via any rendered clinic slot today (name-based, rendered slots only).
       const nameKey = displayRecord.name.trim().toLowerCase();
       const clinicAssignments = getAssignmentsForPerson(nameKey, day, data.people, data.clinics);
       if (clinicAssignments.length > 0) continue;
 
-      // Assigned via additional task today.
       const samePersonIds = new Set(allRecords.map(r => r.id));
       if ((data.additionalTasks ?? []).some(t => t.day === day && samePersonIds.has(t.assignedPersonId))) {
         continue;
@@ -84,95 +75,117 @@ export default function UnassignedStaff({ onPersonClick }) {
     return { unassigned, unavailable };
   }
 
-  // Render one day column for the "available" grid
-  function renderAvailableColumn(day, canonical) {
-    const { unassigned, unavailable } = splitDayColumn(day, canonical);
-    const isEmpty = unassigned.length === 0 && unavailable.length === 0;
-
+  // Render one day column of unassigned chips for a given canonical list
+  function renderUnassignedColumn(day, canonical) {
+    const { unassigned } = splitDayColumn(day, canonical);
+    if (unassigned.length === 0) return <div key={day} />;
     return (
       <div key={day} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {isEmpty ? (
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic', padding: '4px 0' }}>
-            All Assigned
-          </div>
-        ) : (
-          <>
-            {unassigned.map(({ displayRecord }) => (
-              <DraggablePersonChip key={displayRecord.id} person={displayRecord} onPersonClick={onPersonClick} />
-            ))}
-          </>
-        )}
-      </div>
-    );
-  }
-
-  // Render one day column for the "unavailable" grid
-  function renderUnavailableColumn(day, canonical) {
-    const { unavailable } = splitDayColumn(day, canonical);
-    if (unavailable.length === 0) return <div key={day} />;
-
-    return (
-      <div key={day} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {unavailable.map(({ displayRecord, absenceLabel: label }) => (
-          <div
-            key={displayRecord.id}
-            style={{ opacity: 0.45, pointerEvents: 'none', userSelect: 'none' }}
-            title={label}
-          >
-            <div className="person-chip" style={{ cursor: 'default' }}>
-              <div className="dot" style={{ background: displayRecord.color }} />
-              <span style={{ flex: 1, minWidth: 0 }}>{displayRecord.name}</span>
-            </div>
-            <div style={{ fontSize: 10, color: 'var(--text-muted)', paddingLeft: 4, marginTop: 1 }}>{label}</div>
-          </div>
+        {unassigned.map(({ displayRecord }) => (
+          <DraggablePersonChip key={displayRecord.id} person={displayRecord} onPersonClick={onPersonClick} />
         ))}
       </div>
     );
   }
 
-  // Check if any day has unavailable staff for this group
-  function hasAnyUnavailable(canonical) {
-    return DAYS.some(day => {
-      const { unavailable } = splitDayColumn(day, canonical);
-      return unavailable.length > 0;
-    });
+  // Check if a day column has any unassigned people across both groups
+  function dayHasAnyUnassigned(day) {
+    const t = splitDayColumn(day, techCanonical).unassigned;
+    const a = splitDayColumn(day, adminCanonical).unassigned;
+    return t.length > 0 || a.length > 0;
   }
+
+  // Merge unavailable from both groups for a day, deduped by personKey
+  function getMergedUnavailable(day) {
+    const seen = new Set();
+    const result = [];
+    const techUnavail  = splitDayColumn(day, techCanonical).unavailable;
+    const adminUnavail = splitDayColumn(day, adminCanonical).unavailable;
+    for (const entry of [...techUnavail, ...adminUnavail]) {
+      const key = entry.displayRecord.name.trim().toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push(entry);
+    }
+    return result;
+  }
+
+  const hasAnyUnavailable = DAYS.some(day => getMergedUnavailable(day).length > 0);
+
+  // Whether the tech or admin grid has anything to show for a given day
+  const techHasAny  = DAYS.some(day => splitDayColumn(day, techCanonical).unassigned.length > 0);
+  const adminHasAny = DAYS.some(day => splitDayColumn(day, adminCanonical).unassigned.length > 0);
+
+  if (!techHasAny && !adminHasAny && !hasAnyUnavailable) return null;
 
   return (
     <div style={{ padding: '0 16px 16px', flexShrink: 0 }}>
       <div style={{ minWidth: 1000 }}>
-        {techCanonical.length > 0 && (
-          <>
-            <div className="tasks-section-header" style={{ marginBottom: 8 }}>Unassigned Tech</div>
-            <div className="tasks-grid" style={{ marginBottom: hasAnyUnavailable(techCanonical) ? 8 : 16 }}>
-              {DAYS.map(day => renderAvailableColumn(day, techCanonical))}
-            </div>
-            {hasAnyUnavailable(techCanonical) && (
+
+        {/* ── Unassigned (Tech + Admin in one section) ── */}
+        {(techHasAny || adminHasAny) && (
+          <div style={{ marginBottom: hasAnyUnavailable ? 8 : 16 }}>
+            <div className="tasks-section-header" style={{ marginBottom: 8 }}>Unassigned</div>
+
+            {/* Tech sub-section */}
+            {techHasAny && (
               <>
-                <div className="tasks-section-header" style={{ marginBottom: 8, opacity: 0.6 }}>Unavailable Tech Today</div>
-                <div className="tasks-grid" style={{ marginBottom: 16 }}>
-                  {DAYS.map(day => renderUnavailableColumn(day, techCanonical))}
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6 }}>
+                  Tech
+                </div>
+                <div className="tasks-grid" style={{ marginBottom: adminHasAny ? 10 : 0 }}>
+                  {DAYS.map(day => renderUnassignedColumn(day, techCanonical))}
                 </div>
               </>
             )}
-          </>
-        )}
-        {adminCanonical.length > 0 && (
-          <>
-            <div className="tasks-section-header" style={{ marginBottom: 8 }}>Unassigned Front Desk / Admin</div>
-            <div className="tasks-grid" style={{ marginBottom: hasAnyUnavailable(adminCanonical) ? 8 : 0 }}>
-              {DAYS.map(day => renderAvailableColumn(day, adminCanonical))}
-            </div>
-            {hasAnyUnavailable(adminCanonical) && (
+
+            {/* Divider + Admin sub-section */}
+            {adminHasAny && (
               <>
-                <div className="tasks-section-header" style={{ marginBottom: 8, opacity: 0.6 }}>Unavailable Admin Today</div>
+                {techHasAny && (
+                  <div style={{ borderTop: '1px solid var(--border)', margin: '4px 0 10px' }} />
+                )}
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6 }}>
+                  Front Desk / Admin
+                </div>
                 <div className="tasks-grid">
-                  {DAYS.map(day => renderUnavailableColumn(day, adminCanonical))}
+                  {DAYS.map(day => renderUnassignedColumn(day, adminCanonical))}
                 </div>
               </>
             )}
+          </div>
+        )}
+
+        {/* ── Unavailable Staff (merged, deduped) ── */}
+        {hasAnyUnavailable && (
+          <>
+            <div className="tasks-section-header" style={{ marginBottom: 8, opacity: 0.6 }}>Unavailable Staff</div>
+            <div className="tasks-grid">
+              {DAYS.map(day => {
+                const merged = getMergedUnavailable(day);
+                if (merged.length === 0) return <div key={day} />;
+                return (
+                  <div key={day} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {merged.map(({ displayRecord, absenceLabel: label }) => (
+                      <div
+                        key={displayRecord.id}
+                        style={{ opacity: 0.45, pointerEvents: 'none', userSelect: 'none' }}
+                        title={label}
+                      >
+                        <div className="person-chip" style={{ cursor: 'default' }}>
+                          <div className="dot" style={{ background: displayRecord.color }} />
+                          <span style={{ flex: 1, minWidth: 0 }}>{displayRecord.name}</span>
+                        </div>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)', paddingLeft: 4, marginTop: 1 }}>{label}</div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
           </>
         )}
+
       </div>
     </div>
   );
