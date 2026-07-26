@@ -1,8 +1,8 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { Pencil, AlertTriangle, Users, Power } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { getSlotLabel, getSlotTimeLabel, getSlotPersonId, getSlotTimeObj, formatVariableSlotTime, formatOpenerTimeDisplay, formatOpeningFDTimeDisplay, formatClosingFDOverlayDisplay, formatScribeTimeDisplay, formatClosingOverlayDisplay, minutesToTime, SLOT_TYPES, OBS_SLOT_TYPES, SLOT_DISPLAY_LABELS, calcSlotHours, calcPersonWeeklyHours, slotEffectiveRange } from '../data/seed.js';
+import { getSlotLabel, getSlotTimeLabel, getSlotPersonId, getSlotTimeObj, formatVariableSlotTime, formatOpenerTimeDisplay, formatOpeningFDTimeDisplay, formatClosingFDOverlayDisplay, formatScribeTimeDisplay, formatClosingOverlayDisplay, minutesToTime, SLOT_TYPES, OBS_SLOT_TYPES, SLOT_DISPLAY_LABELS, calcSlotHours, calcPersonWeeklyHours, slotEffectiveRange, STANDING_CLINIC_TASKS, generateId } from '../data/seed.js';
 import { TimeRangePicker } from './TimeRangePicker.jsx';
 
 function fmtHours(h) {
@@ -501,10 +501,160 @@ function ObsSlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSear
   );
 }
 
+// ─── Standing Task Row ────────────────────────────────────────────────────────
+
+function StandingTaskRow({ clinic, taskDef }) {
+  const { data, addTask, removeTask, assignTask } = useApp();
+  const [showPicker, setShowPicker] = useState(false);
+  const pickerRef = useRef(null);
+  const chipRef = useRef(null);
+
+  const existingTask = useMemo(
+    () => (data.additionalTasks ?? []).find(
+      t => t._standingClinicId === clinic.id && t.label === taskDef.label
+    ),
+    [data.additionalTasks, clinic.id, taskDef.label]
+  );
+  const isChecked = !!existingTask;
+
+  // People currently assigned to any slot in this clinic
+  const assigneePeople = useMemo(() => {
+    const ids = new Set();
+    for (const val of Object.values(clinic.slots ?? {})) {
+      const pid = getSlotPersonId(val);
+      if (pid) ids.add(pid);
+    }
+    return [...ids].map(id => data.people.find(p => p.id === id)).filter(Boolean);
+  }, [clinic.slots, data.people]);
+
+  const assignedPerson = existingTask?.assignedPersonId
+    ? data.people.find(p => p.id === existingTask.assignedPersonId) ?? null
+    : null;
+
+  // Close picker on outside click
+  useEffect(() => {
+    if (!showPicker) return;
+    function onDown(e) {
+      if (pickerRef.current && !pickerRef.current.contains(e.target) &&
+          chipRef.current && !chipRef.current.contains(e.target)) {
+        setShowPicker(false);
+      }
+    }
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [showPicker]);
+
+  function handleCheck(e) {
+    e.stopPropagation();
+    if (isChecked) {
+      removeTask(existingTask.id);
+      setShowPicker(false);
+    } else {
+      addTask({
+        id: generateId(),
+        label: taskDef.label,
+        day: clinic.day,
+        locationTag: clinic.location,
+        assignedPersonId: null,
+        start: null,
+        end: null,
+        _standingClinicId: clinic.id,
+      });
+    }
+  }
+
+  function handlePickPerson(personId) {
+    if (existingTask) assignTask(existingTask.id, personId);
+    setShowPicker(false);
+  }
+
+  return (
+    <div className="standing-task-row" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px', minHeight: 26 }}>
+      <input
+        type="checkbox"
+        checked={isChecked}
+        onChange={handleCheck}
+        onClick={e => e.stopPropagation()}
+        style={{ flexShrink: 0, cursor: 'pointer', accentColor: 'var(--accent)' }}
+      />
+      <span style={{ fontSize: 11, color: isChecked ? 'var(--text-primary)' : 'var(--text-muted)', flex: 1, minWidth: 0 }}>
+        {taskDef.label}
+      </span>
+      {isChecked && (
+        <div style={{ position: 'relative' }}>
+          <div
+            ref={chipRef}
+            className="person-chip"
+            style={{ cursor: 'pointer', fontSize: 11, padding: '2px 6px', opacity: assignedPerson ? 1 : 0.55 }}
+            onClick={e => { e.stopPropagation(); setShowPicker(s => !s); }}
+            title={assignedPerson ? `Assigned: ${assignedPerson.name}` : 'Assign staff'}
+          >
+            {assignedPerson ? (
+              <>
+                <div className="dot" style={{ background: assignedPerson.color }} />
+                {assignedPerson.name}
+              </>
+            ) : (
+              <span style={{ fontStyle: 'italic' }}>Assign</span>
+            )}
+          </div>
+          {showPicker && (
+            <div
+              ref={pickerRef}
+              style={{
+                position: 'absolute', right: 0, top: '100%', marginTop: 4, zIndex: 200,
+                background: 'var(--surface)', border: '1px solid var(--border)',
+                borderRadius: 6, padding: 4, minWidth: 120, boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
+              }}
+              onClick={e => e.stopPropagation()}
+            >
+              {assignedPerson && (
+                <div
+                  className="standing-task-pick-option"
+                  style={{ padding: '4px 8px', fontSize: 11, cursor: 'pointer', color: 'var(--text-muted)', fontStyle: 'italic' }}
+                  onClick={() => handlePickPerson(null)}
+                >
+                  Unassign
+                </div>
+              )}
+              {assigneePeople.length === 0 && (
+                <div style={{ padding: '4px 8px', fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                  No staff assigned yet
+                </div>
+              )}
+              {assigneePeople.map(person => (
+                <div
+                  key={person.id}
+                  className="standing-task-pick-option"
+                  style={{ padding: '4px 8px', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, borderRadius: 4 }}
+                  onClick={() => handlePickPerson(person.id)}
+                >
+                  <div className="dot" style={{ background: person.color }} />
+                  {person.name}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ClinicCard({ clinic, onPersonClick, onEditClinic, matchedPersonIds, hasSearch, isToday, isDoctorOff, holidayName }) {
   const { data, isAdmin, updateClinic } = useApp();
   const showMiddleHint = isAdmin && clinic.open && (clinic.patientCount ?? 0) >= 68 && !getSlotPersonId(clinic.slots.middle);
   const conflictSet = isAdmin ? getConflictPersonDays(data.clinics, data.people) : null;
+  const standingTasks = useMemo(() =>
+    clinic.location !== 'OBS'
+      ? STANDING_CLINIC_TASKS.filter(def =>
+          def.day === clinic.day &&
+          def.location === clinic.location &&
+          (!def.provider || def.provider === clinic.provider)
+        )
+      : [],
+    [clinic.location, clinic.day, clinic.provider]
+  );
 
   if (isDoctorOff) {
     return (
@@ -621,6 +771,13 @@ export default function ClinicCard({ clinic, onPersonClick, onEditClinic, matche
                 ));
               })()
           }
+        </div>
+      )}
+      {isAdmin && clinic.open && standingTasks.length > 0 && (
+        <div style={{ borderTop: '1px solid var(--border)', marginTop: 2 }}>
+          {standingTasks.map(def => (
+            <StandingTaskRow key={`${def.label}:${def.location}:${def.day}`} clinic={clinic} taskDef={def} />
+          ))}
         </div>
       )}
       {showMiddleHint && (

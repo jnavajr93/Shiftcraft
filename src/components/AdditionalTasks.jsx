@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react
 import { createPortal } from 'react-dom';
 import { useDroppable } from '@dnd-kit/core';
 import { Plus, X, Trash2, Pencil, Zap } from 'lucide-react';
-import { useApp } from '../context/AppContext.jsx';
+import { useApp, BUILTIN_TASK_TYPES } from '../context/AppContext.jsx';
 import { mondayOfWeek } from '../context/AppContext.jsx';
 import { getBlockingAbsence, formatAbsenceIneligibleReason } from '../utils/absenceUtils.js';
 import { DAYS, generateId, minutesToTime, getAssignmentsForPerson, slotEffectiveRange, rangesOverlap } from '../data/seed.js';
@@ -380,7 +380,7 @@ function TaskSlotRow({ task, onPersonClick, onEdit }) {
 function AddTaskForm({ day, initialTask = null, onSubmit, onCancel }) {
   const { data } = useApp();
 
-  const presetLabels = data.taskTypes ?? [];
+  const presetLabels = BUILTIN_TASK_TYPES;
   const initIsPreset = initialTask ? presetLabels.includes(initialTask.label) : false;
 
   const [labelMode, setLabelMode] = useState(

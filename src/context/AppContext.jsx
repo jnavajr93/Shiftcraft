@@ -52,7 +52,7 @@ import { getBlockingAbsence } from '../utils/absenceUtils.js';
 // localStorage keys kept only for migration and per-device flags
 const STORAGE_KEY = 'shiftcraft.v5';
 
-const BUILTIN_TASK_TYPES = ['Triage', 'See Matt/Jo', 'Imaging Upload', 'Research', 'Training', 'Med Transport'];
+export const BUILTIN_TASK_TYPES = ['Triage', 'See Matt/Jo', 'Imaging Upload', 'Research', 'Training', 'Med Transport'];
 
 const AppContext = createContext(null);
 
@@ -152,7 +152,7 @@ function migrateData(raw) {
       };
     }),
     additionalTasks: (raw.additionalTasks ?? []).filter(t => !SEEDED_TASK_IDS.has(t.id)),
-    taskTypes: [...new Set([...BUILTIN_TASK_TYPES, ...(raw.taskTypes ?? [])])],
+    taskTypes: BUILTIN_TASK_TYPES.slice(),
   };
 }
 
@@ -1036,11 +1036,7 @@ export function AppProvider({ children }) {
             );
             // Merge BUILTIN_TASK_TYPES so a broadcast from a manager with an older
             // Supabase record can never wipe built-in types (e.g. Med Transport).
-            const mergedTaskTypes = [
-              ...BUILTIN_TASK_TYPES,
-              ...((value.taskTypes ?? []).filter(t => !BUILTIN_TASK_TYPES.includes(t))),
-            ];
-            return { ...value, taskTypes: mergedTaskTypes, ...applied };
+            return { ...value, taskTypes: BUILTIN_TASK_TYPES.slice(), ...applied };
           });
         } else if (key === CHANGELOG_KEY) {
           // Merge remote changelog — guard against echo loop in the save useEffect.
@@ -1857,11 +1853,8 @@ export function AppProvider({ children }) {
     if (!globalData) return;
     const prevData = globalData;
     const additionalTasks = [...(globalData.additionalTasks ?? []), task];
-    const taskTypes = globalData.taskTypes.includes(task.label)
-      ? globalData.taskTypes
-      : [...globalData.taskTypes, task.label];
     const map = extractSlotMap(globalData.clinics, additionalTasks);
-    setGlobalData(prev => ({ ...prev, additionalTasks, taskTypes }));
+    setGlobalData(prev => ({ ...prev, additionalTasks }));
     const endStr = task.end === 'close' ? 'Close' : task.end != null ? minutesToTime(task.end) : null;
     const timeStr = task.start != null && endStr ? ` ${minutesToTime(task.start)} – ${endStr}` : '';
     const action = `Task created: ${task.label}${task.locationTag ? ` @ ${task.locationTag}` : ''} on ${task.day}${timeStr}`;
@@ -1914,11 +1907,8 @@ export function AppProvider({ children }) {
     const additionalTasks = globalData.additionalTasks.map(t =>
       t.id === taskId ? { ...t, ...changes } : t
     );
-    const taskTypes = changes.label && !globalData.taskTypes.includes(changes.label)
-      ? [...globalData.taskTypes, changes.label]
-      : globalData.taskTypes;
     const map = extractSlotMap(globalData.clinics, additionalTasks);
-    setGlobalData(g => ({ ...g, additionalTasks, taskTypes }));
+    setGlobalData(g => ({ ...g, additionalTasks }));
     const updated = { ...prev, ...changes };
     // Log content changes (label / location / time)
     const changed = [];

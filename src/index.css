@@ -691,6 +691,11 @@ html, body, #root {
   position: relative; top: -1px;
 }
 
+/* ─── Standing task row ─────────────── */
+.standing-task-pick-option:hover {
+  background: var(--surface-hover);
+}
+
 /* ─── Hint ─────────────────────────── */
 .hint-middle {
   margin: 4px 12px 8px; padding: 5px 8px;

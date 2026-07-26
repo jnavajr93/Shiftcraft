@@ -25,6 +25,20 @@ export const ACCOMMODATION_TYPES = [
 ];
 export const EARLY_LEAVE_REASONS = ['school', 'childcare', 'medical', 'personal'];
 
+/**
+ * Standing per-clinic tasks — shown as checkboxes on applicable clinic cards (manager view).
+ * Checkbox existence is a standing feature (every week); checked state + assignee is per-week only.
+ * provider filter: if set, only matches clinics with that provider.
+ */
+export const STANDING_CLINIC_TASKS = [
+  { label: 'Inventory',      location: 'Phoenix',    day: 'Mon' },
+  { label: 'Inventory',      location: 'Estrella',   day: 'Mon' },
+  { label: 'Imaging Upload', location: 'Estrella',   day: 'Mon' },
+  { label: 'Inventory',      location: 'Chandler',   day: 'Mon' },
+  { label: 'Imaging Upload', location: 'Phoenix',    day: 'Tue', provider: 'Dr. B' },
+  { label: 'Inventory',      location: 'Scottsdale', day: 'Fri' },
+];
+
 export function generateId() {
   return Math.random().toString(36).slice(2, 10);
 }

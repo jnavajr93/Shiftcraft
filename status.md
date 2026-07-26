@@ -4,6 +4,36 @@
 
 ## Work completed this session
 
+### 7. Custom task type bug fix
+- `BUILTIN_TASK_TYPES` now exported from `AppContext.jsx`
+- `migrateData`: `taskTypes` now always resets to `BUILTIN_TASK_TYPES.slice()` (was merging stored custom types)
+- Realtime handler: simplified to `BUILTIN_TASK_TYPES.slice()` (was preserving non-builtins from broadcasts)
+- `addTask`: removed `taskTypes` mutation (custom label no longer appended to global `taskTypes`)
+- `updateTask`: removed `taskTypes` mutation
+- `AdditionalTasks.jsx`: `AddTaskForm` now imports and uses `BUILTIN_TASK_TYPES` directly (was `data.taskTypes`)
+- Result: dropdown always shows exactly the 6 built-in task types; custom one-off labels typed via "+ New Task Type" no longer persist
+
+### 8. Standing per-clinic task checkboxes (manager view)
+- `STANDING_CLINIC_TASKS` exported from `seed.js` — 6 entries:
+  - Phoenix Mon: Inventory
+  - Estrella Mon: Inventory, Imaging Upload
+  - Chandler Mon: Inventory
+  - Phoenix Tue (Dr. B only): Imaging Upload
+  - Scottsdale Fri: Inventory
+- `StandingTaskRow` component added to `ClinicCard.jsx`
+  - Checkbox existence is standing (shows every applicable week)
+  - Checked state + assignee stored per-week in `__tasks` via `_standingClinicId` marker on task
+  - Person picker filters to staff currently assigned to any slot in that clinic
+  - Timeless tasks (`start: null, end: null`) — no hour conflict detection
+  - Manager view only; staff sees these in the additional tasks panel below the schedule
+- `_standingClinicId` survives `extractSlotMap → applySlotMap` round-trip (not stripped)
+- 2 new round-trip tests added to `slotMap.test.js`
+- **Files changed:** `src/data/seed.js`, `src/components/ClinicCard.jsx`, `src/index.css`
+
+---
+
+## Previous work this session
+
 ### 5. Fix 6 — Posted-week edit banner
 - Split the single `unposted-banner` into two visually distinct banners:
   - **`posted-edit-banner`** (orange, left accent border): fires when a POSTED week has been re-edited — "This week is posted — your edits are not visible to staff until you re-post. Last posted X by Y."
@@ -17,8 +47,6 @@
 - `openClosePill.test.js` (31): formatVariableSlotTime null/close, formatOpenerTimeDisplay, formatOpeningFDTimeDisplay, calcSlotHours opener/middle/training null+close semantics, slotEffectiveRange close semantics
 
 ---
-
-## Previous work this session
 
 ### 1. Open/Close pill fix
 - `formatVariableSlotTime`: null start → "Open" (was "?")
@@ -58,7 +86,7 @@
 - 6 rollback contract tests in `src/context/__tests__/saveRollback.test.js`
 
 ## Test results
-- 136/136 passing
+- 254/254 passing
 - Build: zero errors
 
 ## Architecture notes
@@ -72,6 +100,7 @@
 | clinics[].slots | Per-week (blanked in global record) |
 | additionalTasks[].id/label/day/start/end | Global baseline (per-week instances in __tasks) |
 | additionalTasks[].assignedPersonId | Per-week (nulled in global record, stored as task:<id>) |
+| additionalTasks[]._standingClinicId | Preserved through round-trip; matches standing task to source clinic |
 
 ### doSaveWeek return contract
 | Value | Meaning | Caller action |
@@ -79,3 +108,8 @@
 | `'ok'` | Saved successfully | Update dirty state, continue |
 | `'conflict'` | Version mismatch; DB state already applied to local state | No rollback needed |
 | `'error'` | DB not written after retries | Roll back local state |
+
+### Standing clinic tasks
+Defined in `STANDING_CLINIC_TASKS` (seed.js). Match criteria: `day + location [+ provider]`.
+Task instances marked with `_standingClinicId: clinic.id` to survive week slot map round-trips.
+Person picker on each checkbox row filters to people assigned to any slot in that clinic.

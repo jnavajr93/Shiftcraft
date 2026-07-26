@@ -615,3 +615,39 @@ describe('Per-week task instance isolation', () => {
     expect(defFromC.additionalTasks[0].id).toBe('tmpl');
   });
 });
+
+// ─── Standing task _standingClinicId round-trip ───────────────────────────────
+
+describe('standing task _standingClinicId round-trip', () => {
+  it('preserves _standingClinicId through extractSlotMap → applySlotMap', () => {
+    const clinic = makeClinic();
+    const task = makeTask({ id: 'st1', label: 'Inventory', _standingClinicId: 'c1' });
+    const map = extractSlotMap([clinic], [task]);
+
+    // _standingClinicId should appear in __tasks
+    expect(map.__tasks).toHaveLength(1);
+    expect(map.__tasks[0]._standingClinicId).toBe('c1');
+
+    // applySlotMap should restore the task with _standingClinicId intact
+    const applied = applySlotMap([clinic], [], map);
+    expect(applied.additionalTasks).toHaveLength(1);
+    expect(applied.additionalTasks[0]._standingClinicId).toBe('c1');
+    expect(applied.additionalTasks[0].label).toBe('Inventory');
+  });
+
+  it('assignedPersonId is NOT stored in __tasks — it is per-week via task:<id> key', () => {
+    const clinic = makeClinic();
+    const task = makeTask({ id: 'st1', _standingClinicId: 'c1', assignedPersonId: 'person-x' });
+    const map = extractSlotMap([clinic], [task]);
+
+    // assignedPersonId stripped from __tasks
+    expect(map.__tasks[0].assignedPersonId).toBeUndefined();
+    // but stored as task:st1 in the map
+    expect(map['task:st1']).toBe('person-x');
+
+    // applySlotMap should restore assignedPersonId
+    const applied = applySlotMap([clinic], [], map);
+    expect(applied.additionalTasks[0].assignedPersonId).toBe('person-x');
+    expect(applied.additionalTasks[0]._standingClinicId).toBe('c1');
+  });
+});
