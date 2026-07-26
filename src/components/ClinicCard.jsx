@@ -339,7 +339,7 @@ function SlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSearch,
             className={`variable-time-row${interactive ? ' editable' : ''}`}
             onClick={interactive ? (e) => { e.stopPropagation(); setEditingTime(true); } : undefined}
           >
-            <span className="slot-time-label">{closingStartStr} – {closingEndStr != null ? closingEndStr : <em>~Close</em>}</span>
+            <span className="slot-time-label">{closingStartStr} – {closingEndStr ?? 'Close'}</span>
             <HoursPill slotHrs={slotHrs} />
             {interactive && <Pencil size={9} style={{ opacity: 0.5 }} />}
           </div>
@@ -421,15 +421,9 @@ function ObsSlotRow({ clinic, slotType, onPersonClick, matchedPersonIds, hasSear
   const interactive = isAdmin && clinicOpen;
   const label = OBS_LABELS[slotType] ?? slotType;
   const obsTimeDisplay = formatVariableSlotTime(slotVal);
-  // Show provider-buffered range (e.g. 7:00 AM – 5:00 PM for Dr. R) when no custom time is set.
-  // Falls back to "Open – Close" for blank-provider OBS clinics (no buffer applied).
-  const defaultObsTimeDisplay = (() => {
-    const range = slotEffectiveRange(slotType, clinic);
-    if (range.start === (clinic.startTime ?? 0) && range.end === (clinic.endTime ?? 0)) {
-      return 'Open – Close';
-    }
-    return `${minutesToTime(range.start)} – ${minutesToTime(range.end)}`;
-  })();
+  // OBS slots always show "Open – Close" when no custom time is set.
+  // The provider-buffered range is used for hours calculation only, not display.
+  const defaultObsTimeDisplay = 'Open – Close';
   const slotHrs = (() => {
     if (!person || !isAdmin) return null;
     const h = calcSlotHours(clinic, slotType);

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Search, AlertTriangle, PhoneCall } from 'lucide-react';
 import { useApp, mondayOfWeek, isoWeek } from '../context/AppContext.jsx';
 import { DAYS } from '../data/seed.js';
@@ -7,14 +8,54 @@ import { getOnCallForWeek } from '../utils/oncall.js';
 
 const LOCATION_ORDER = ['Phoenix', 'Chandler', 'Estrella', 'Scottsdale', 'OBS'];
 
+// Portal dropdown — renders into document.body so parent overflow:hidden can't clip it
+function SuggestionDropdown({ suggestions, activeIdx, anchorRef, onPick, onHover }) {
+  const [rect, setRect] = useState(null);
+  useEffect(() => {
+    function update() {
+      if (anchorRef.current) setRect(anchorRef.current.getBoundingClientRect());
+    }
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    return () => { window.removeEventListener('resize', update); window.removeEventListener('scroll', update, true); };
+  }, [anchorRef]);
+  if (!rect) return null;
+  return (
+    <div style={{
+      position: 'fixed',
+      top: rect.bottom + 4,
+      left: rect.left,
+      width: rect.width,
+      zIndex: 9999,
+      background: 'var(--bg-elevated)',
+      border: '0.5px solid var(--border-strong)',
+      borderRadius: 'var(--radius)',
+      overflow: 'hidden',
+      boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+    }}>
+      {suggestions.map((p, i) => (
+        <button
+          key={p.id}
+          className={`search-suggestion${i === activeIdx ? ' search-suggestion--active' : ''}`}
+          onMouseDown={e => { e.preventDefault(); onPick(p.id); }}
+          onMouseEnter={() => onHover(i)}
+        >
+          <div className="dot" style={{ background: p.color }} />
+          {p.name}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function Board({ search, setSearch, onPersonClick, onEditClinic, footer, onOpenOnCallRotation }) {
   const { data, isAdmin, boardClinics, currentWeek, doctorOffClinicIds, holidayWorkedMap, oncall, oncallOverrides } = useApp();
   const monday = mondayOfWeek(currentWeek);
 
   // ── Staff search dropdown ──────────────────────────────────────────────────
   // Dedupe by name: one row per person, prefer tech record for color dot.
-  // Only shown in staff view (isAdmin uses the board highlight flow).
-  const searchSuggestions = (!isAdmin && search.trim())
+  const searchSuggestions = (search.trim())
     ? Object.values(
         (data.people ?? [])
           .filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
@@ -142,25 +183,15 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic, 
             onKeyDown={handleSearchKeyDown}
             autoComplete="off"
           />
-          {searchSuggestions.length > 0 && (
-            <div className="search-suggestions">
-              {searchSuggestions.map((p, i) => (
-                <button
-                  key={p.id}
-                  className={`search-suggestion${i === activeIdx ? ' search-suggestion--active' : ''}`}
-                  onMouseDown={e => {
-                    // mousedown fires before blur; prevent input blur closing dropdown
-                    e.preventDefault();
-                    onPersonClick(p.id);
-                    setSearch('');
-                  }}
-                  onMouseEnter={() => setActiveIdx(i)}
-                >
-                  <div className="dot" style={{ background: p.color }} />
-                  {p.name}
-                </button>
-              ))}
-            </div>
+          {searchSuggestions.length > 0 && createPortal(
+            <SuggestionDropdown
+              suggestions={searchSuggestions}
+              activeIdx={activeIdx}
+              anchorRef={searchWrapRef}
+              onPick={(id) => { onPersonClick(id); setSearch(''); }}
+              onHover={setActiveIdx}
+            />,
+            document.body
           )}
         </div>
       </div>
