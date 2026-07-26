@@ -169,14 +169,13 @@ export default function UnassignedStaff({ onPersonClick }) {
                     {merged.map(({ displayRecord, absenceLabel: label }) => (
                       <div
                         key={displayRecord.id}
-                        style={{ opacity: 0.45, pointerEvents: 'none', userSelect: 'none' }}
+                        className="person-chip"
+                        style={{ cursor: 'default', opacity: 0.45, pointerEvents: 'none', userSelect: 'none' }}
                         title={label}
                       >
-                        <div className="person-chip" style={{ cursor: 'default' }}>
-                          <div className="dot" style={{ background: displayRecord.color }} />
-                          <span style={{ flex: 1, minWidth: 0 }}>{displayRecord.name}</span>
-                        </div>
-                        <div style={{ fontSize: 10, color: 'var(--text-muted)', paddingLeft: 4, marginTop: 1 }}>{label}</div>
+                        <div className="dot" style={{ background: displayRecord.color }} />
+                        <span style={{ minWidth: 0 }}>{displayRecord.name}</span>
+                        <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 4, flexShrink: 0 }}>{label}</span>
                       </div>
                     ))}
                   </div>
