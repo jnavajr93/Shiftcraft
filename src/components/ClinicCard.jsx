@@ -747,7 +747,6 @@ export default function ClinicCard({ clinic, onPersonClick, onEditClinic, matche
                   ...fdSlots,
                   'scribe', 'opener', 'middle', 'training', 'closing',
                 ];
-                // Staff view: hide slots with no one assigned (keeps cards compact)
                 const visibleSlotTypes = isAdmin
                   ? clinicSlotTypes
                   : clinicSlotTypes.filter(st => !!getSlotPersonId(clinic.slots[st]));
@@ -765,16 +764,11 @@ export default function ClinicCard({ clinic, onPersonClick, onEditClinic, matche
                 ));
               })()
           }
-
-          {isAdmin && clinic.open && standingTasks.length > 0 && (
-            <div style={{ borderTop: '1px solid var(--border)', marginTop: 2 }}>
-              {standingTasks.map(def => (
-                <StandingTaskRow key={`${def.label}:${def.location}:${def.day}`} clinic={clinic} taskDef={def} />
-              ))}
-            </div>
-          )}
         </div>
       )}
+      {isAdmin && clinic.open && standingTasks.length > 0 && standingTasks.map(def => (
+        <StandingTaskRow key={`${def.label}:${def.location}:${def.day}`} clinic={clinic} taskDef={def} />
+      ))}
       {showMiddleHint && (
         <div className="hint-middle">
           <Users size={12} />
