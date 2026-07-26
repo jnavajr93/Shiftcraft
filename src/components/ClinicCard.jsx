@@ -765,13 +765,14 @@ export default function ClinicCard({ clinic, onPersonClick, onEditClinic, matche
                 ));
               })()
           }
-        </div>
-      )}
-      {isAdmin && clinic.open && standingTasks.length > 0 && (
-        <div style={{ borderTop: '1px solid var(--border)', marginTop: 2 }}>
-          {standingTasks.map(def => (
-            <StandingTaskRow key={`${def.label}:${def.location}:${def.day}`} clinic={clinic} taskDef={def} />
-          ))}
+
+          {isAdmin && clinic.open && standingTasks.length > 0 && (
+            <div style={{ borderTop: '1px solid var(--border)', marginTop: 2 }}>
+              {standingTasks.map(def => (
+                <StandingTaskRow key={`${def.label}:${def.location}:${def.day}`} clinic={clinic} taskDef={def} />
+              ))}
+            </div>
+          )}
         </div>
       )}
       {showMiddleHint && (
