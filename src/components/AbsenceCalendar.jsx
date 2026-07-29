@@ -134,7 +134,7 @@ function buildGrid(year, month) {
 
 // ─── Legend (filter chips) ────────────────────────────────────────────────────
 
-function Legend({ activeCategories, onToggle, researchTableReady }) {
+function Legend({ activeCategories, onToggle, researchTableReady, oncallConfigured }) {
   return (
     <div className="absence-legend">
       {SELECTABLE_TYPES.map(t => {
@@ -169,6 +169,17 @@ function Legend({ activeCategories, onToggle, researchTableReady }) {
         >
           <span className="absence-legend-dot" style={{ background: RESEARCH_COLOR }} />
           <span>Research</span>
+        </button>
+      )}
+      {/* On Call chip — only shown when rotation is configured */}
+      {oncallConfigured && (
+        <button
+          className={`absence-legend-item${activeCategories.has('OnCall') ? '' : ' absence-legend-item--off'}`}
+          onClick={() => onToggle('OnCall')}
+          title={activeCategories.has('OnCall') ? 'Hide On-Call Schedule' : 'Show On-Call Schedule'}
+        >
+          <span className="absence-legend-dot" style={{ background: ONCALL_COLOR }} />
+          <span>On Call</span>
         </button>
       )}
     </div>
@@ -817,14 +828,15 @@ function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, o
   // On-call: use Monday (index 1 in Sun–Sat row) to determine ISO week
   const rowMonday = week[1];
   const rowWeekStr = rowMonday ? isoWeekUTC(rowMonday) : null;
-  // On-call: only compute when the On Call panel is open
-  const onCallResult = (showOncallPanel && oncallSettings && rowWeekStr)
+  // Show on-call bar when the OnCall legend category is active (independent of panel state)
+  const showOnCallBar = activeCategories.has('OnCall') && !!(oncallSettings?.rotation?.length) && !!(oncallSettings?.anchorWeek);
+  const onCallResult = ((showOncallPanel || showOnCallBar) && oncallSettings && rowWeekStr)
     ? getOnCallForWeek(rowWeekStr, oncallSettings, oncallOverrides ?? [])
     : null;
   // Block-start detection: show a tag only when the on-call person changes from the previous week.
   // This fires at every 4-week block boundary AND whenever an override changes who holds a week.
   const prevWeekStr = rowWeekStr ? addWeeks(rowWeekStr, -1) : null;
-  const prevOnCallResult = (showOncallPanel && oncallSettings && prevWeekStr)
+  const prevOnCallResult = ((showOncallPanel || showOnCallBar) && oncallSettings && prevWeekStr)
     ? getOnCallForWeek(prevWeekStr, oncallSettings, oncallOverrides ?? [])
     : null;
   const isBlockStart = !!(showOncallPanel && onCallResult &&
@@ -867,7 +879,9 @@ function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, o
     onDayDoubleClick(ds);
   };
 
-  const allBars = weekClosures.length + weekAbsences.length + weekResearch.length;
+  const hasOnCallBar = showOnCallBar && !!onCallResult;
+  const barOffset = hasOnCallBar ? 1 : 0; // on-call occupies lane 0; other bars shift down
+  const allBars = barOffset + weekClosures.length + weekAbsences.length + weekResearch.length;
 
   return (
     <div className={`absence-week-row${isCurrentWeek ? ' absence-week-row--current-week' : ''}`}>
@@ -901,7 +915,24 @@ function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, o
 
       {allBars > 0 && (
         <div className="absence-bars-layer" style={{ pointerEvents: 'none' }}>
-          {/* Closure bars first (holidays + office-closed); may span multiple days */}
+          {/* On-call bar — amber, spans full week row, lane 0 */}
+          {hasOnCallBar && (
+            <div
+              className="absence-bar oncall-cal-bar"
+              style={{
+                left: '2px',
+                width: 'calc(100% - 4px)',
+                top: '30px',
+                background: ONCALL_COLOR,
+                borderRadius: 3,
+                opacity: 0.88,
+              }}
+              title={`On Call: ${onCallResult.person}${onCallResult.isOverride ? ' (Override)' : ''}`}
+            >
+              <span className="absence-bar-label">{onCallResult.person} · On Call{onCallResult.isOverride ? ' · Override' : ''}</span>
+            </div>
+          )}
+          {/* Closure bars (holidays + office-closed); may span multiple days */}
           {weekClosures.map((closure, laneIdx) => {
             const barStart = closure.startDate < weekStart ? weekStart : closure.startDate;
             const barEnd   = closure.endDate   > weekEnd   ? weekEnd   : closure.endDate;
@@ -919,7 +950,7 @@ function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, o
                 style={{
                   left:         `calc(${startCol} / 7 * 100% + 2px)`,
                   width:        `calc(${endCol - startCol + 1} / 7 * 100% - 4px)`,
-                  top:          `${30 + laneIdx * 22}px`,
+                  top:          `${30 + (barOffset + laneIdx) * 22}px`,
                   background:   CLOSED_COLOR,
                   borderRadius: `${isSStart ? 3 : 0}px ${isSEnd ? 3 : 0}px ${isSEnd ? 3 : 0}px ${isSStart ? 3 : 0}px`,
                   pointerEvents: 'none',
@@ -954,7 +985,7 @@ function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, o
                 style={{
                   left:       `calc(${startCol} / 7 * 100% + 2px)`,
                   width:      `calc(${endCol - startCol + 1} / 7 * 100% - 4px)`,
-                  top:        `${30 + laneIdx * 22}px`,
+                  top:        `${30 + (barOffset + laneIdx) * 22}px`,
                   background: color,
                   borderRadius: `${isStart ? 3 : 0}px ${isEnd ? 3 : 0}px ${isEnd ? 3 : 0}px ${isStart ? 3 : 0}px`,
                   pointerEvents: 'auto',
@@ -970,7 +1001,7 @@ function WeekRow({ week, viewMonth, absences, closures, personByKey, todayStr, o
 
           {/* Research bars */}
           {weekResearch.map((ra, idx) => {
-            const laneIdx = weekClosures.length + weekAbsences.length + idx;
+            const laneIdx = barOffset + weekClosures.length + weekAbsences.length + idx;
             const startCol = week.findIndex(d => toDateStr(d) === ra.date);
             if (startCol < 0) return null;
             const person = personByKey.get((ra.person_name ?? '').trim().toLowerCase());
@@ -2085,7 +2116,7 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
 
   // Category filter chips — all on by default (including 'Closed', 'OnCall', 'Research')
   const [activeCategories, setActiveCategories] = useState(
-    () => new Set([...SELECTABLE_TYPES.map(t => t.key), 'Closed', 'Research']),
+    () => new Set([...SELECTABLE_TYPES.map(t => t.key), 'Closed', 'Research', 'OnCall']),
   );
   const toggleCategory = useCallback((key) => {
     setActiveCategories(prev => {
@@ -2666,7 +2697,7 @@ export default function AbsenceCalendar({ onClose, currentWeek, onJumpToWeek }) 
               <div className="absence-dow-row">
                 {DOW.map(d => <div key={d} className="absence-dow-cell">{d}</div>)}
               </div>
-              <Legend activeCategories={activeCategories} onToggle={toggleCategory} researchTableReady={researchTableReady} />
+              <Legend activeCategories={activeCategories} onToggle={toggleCategory} researchTableReady={researchTableReady} oncallConfigured={!!(effectiveOncallSettings?.rotation?.length && effectiveOncallSettings?.anchorWeek)} />
               <div className="absence-grid">
                 {grid.map((week, wi) => (
                   <WeekRow

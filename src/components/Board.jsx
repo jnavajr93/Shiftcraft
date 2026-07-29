@@ -212,7 +212,7 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic, 
             <button className="staff-oncall-pill" onClick={onOpenOnCallRotation} title="View on-call rotation">
               <PhoneCall size={11} />
               <span className="staff-oncall-pill-dot" style={{ background: onCallPersonColor }} />
-              <span>On Call: {onCallForWeek.person}{onCallDateRange ? ` · ${onCallDateRange}` : ''}</span>
+              <span>On Call: {onCallForWeek.person}</span>
             </button>
           )}
         </div>
