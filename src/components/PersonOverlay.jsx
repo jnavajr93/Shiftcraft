@@ -111,8 +111,8 @@ function OverlayInner({ person, onClose, onOpenOnCallRotation }) {
     0
   );
 
-  // On-call block — shown for all users (staff and admin)
-  const nextBlock = (oncall?.rotation?.length && oncall?.anchorWeek)
+  // On-call block — staff view only
+  const nextBlock = (!isAdmin && oncall?.rotation?.length && oncall?.anchorWeek)
     ? getPersonNextBlock(person.name, oncall, currentWeek)
     : null;
 

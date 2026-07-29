@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useDraggable } from '@dnd-kit/core';
-import { PhoneCall } from 'lucide-react';
 import { useApp, mondayOfWeek } from '../context/AppContext.jsx';
 import {
   calcPersonWeeklyHours, getBoardClinics, DAYS,
@@ -9,13 +8,10 @@ import {
   formatClosingOverlayDisplay, formatClosingFDOverlayDisplay, formatScribeTimeDisplay,
   slotEffectiveRange,
 } from '../data/seed.js';
-import { getPersonNextBlock, formatBlockRange } from '../utils/oncall.js';
-
-const ONCALL_COLOR = '#f59e0b';
 
 // ─── Staff Hover Card ─────────────────────────────────────────────────────────
 
-function StaffHoverCard({ person, hours, clinics, people, monday, style, onMouseEnter, onMouseLeave, nextBlock }) {
+function StaffHoverCard({ person, hours, clinics, people, monday, style, onMouseEnter, onMouseLeave }) {
   const daysOff = person.daysOff ?? [];
   const nameKey = person.name.trim().toLowerCase();
 
@@ -109,20 +105,6 @@ function StaffHoverCard({ person, hours, clinics, people, monday, style, onMouse
         <div className="staff-hovercard-value">{hours}h / {person.targetHours ?? 40}h target</div>
       </div>
 
-      {/* On-call block */}
-      {nextBlock && (
-        <div className="staff-hovercard-section staff-hovercard-oncall-row">
-          <PhoneCall size={11} style={{ color: ONCALL_COLOR, flexShrink: 0 }} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="staff-hovercard-label" style={{ color: ONCALL_COLOR }}>
-              {nextBlock.isCurrent ? 'On Call Now' : 'On Call Next'}
-            </div>
-            <div className="staff-hovercard-value">
-              {formatBlockRange(nextBlock.startWeek, nextBlock.endWeek)}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -130,19 +112,12 @@ function StaffHoverCard({ person, hours, clinics, people, monday, style, onMouse
 // ─── Person Card ──────────────────────────────────────────────────────────────
 
 function PersonCard({ person, onPersonClick, clinics, monday }) {
-  const { data, isAdmin, effectiveAdditionalTasks, oncall, oncallOverrides, currentWeek } = useApp();
+  const { data, isAdmin, effectiveAdditionalTasks } = useApp();
   const linkedPerson = person.linkedPersonId
     ? (data.people.find(p => p.id === person.linkedPersonId) ?? null)
     : null;
   const hours = calcPersonWeeklyHours(person.id, clinics, effectiveAdditionalTasks)
     + (linkedPerson ? calcPersonWeeklyHours(linkedPerson.id, clinics, effectiveAdditionalTasks) : 0);
-
-  // On-call status for this person
-  const nextBlock = (oncall?.rotation?.length && oncall?.anchorWeek && currentWeek)
-    ? getPersonNextBlock(person.name, oncall, currentWeek)
-    : null;
-  const onCallNow = nextBlock?.isCurrent ?? false;
-  const onCallNext = !onCallNow && nextBlock != null;
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: person.id });
 
   const [cardPos, setCardPos] = useState(null);
@@ -198,12 +173,6 @@ function PersonCard({ person, onPersonClick, clinics, monday }) {
           <span onClick={(e) => { e.stopPropagation(); onPersonClick(person.id); }}>
             {person.name}
           </span>
-          {onCallNow && (
-            <span className="sidebar-oncall-badge sidebar-oncall-badge--now">On Call</span>
-          )}
-          {onCallNext && (
-            <span className="sidebar-oncall-badge sidebar-oncall-badge--next">Next</span>
-          )}
         </div>
         <div className="sidebar-employment">
           {person.employmentType && (
@@ -231,7 +200,6 @@ function PersonCard({ person, onPersonClick, clinics, monday }) {
           style={{ top: cardPos.top, left: cardPos.left }}
           onMouseEnter={cancelClose}
           onMouseLeave={closeCard}
-          nextBlock={nextBlock}
         />
       )}
     </>
