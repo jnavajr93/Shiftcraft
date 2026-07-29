@@ -15,6 +15,7 @@ import { getBlockingAbsence, formatAbsenceBlockMsg } from './utils/absenceUtils.
 import { TourProvider } from './components/Tour.jsx';
 import TopBar from './components/TopBar.jsx';
 import Board from './components/Board.jsx';
+import TriageBoard from './components/TriageBoard.jsx';
 import Sidebar from './components/Sidebar.jsx';
 import HoursBar from './components/HoursBar.jsx';
 import ClinicConfig from './components/ClinicConfig.jsx';
@@ -52,6 +53,25 @@ function SavedToast() {
   if (!visible) return null;
   return (
     <div className={`saved-toast${fadingOut ? ' saved-toast--out' : ''}`}>✓ Saved</div>
+  );
+}
+
+function BoardTabBar({ boardTab, setBoardTab }) {
+  return (
+    <div className="board-tab-bar">
+      <button
+        className={`board-tab-btn${boardTab === 'clinics' ? ' active' : ''}`}
+        onClick={() => setBoardTab('clinics')}
+      >
+        Clinics
+      </button>
+      <button
+        className={`board-tab-btn${boardTab === 'triage' ? ' active' : ''}`}
+        onClick={() => setBoardTab('triage')}
+      >
+        Triage
+      </button>
+    </div>
   );
 }
 
@@ -117,6 +137,7 @@ function AppContent() {
     );
   }
   const [activeTab, setActiveTab] = useState('schedule');
+  const [boardTab, setBoardTab] = useState('clinics');
   const [setupSection, setSetupSection] = useState('staff');
   const [showOnCallRotation, setShowOnCallRotation] = useState(false);
 
@@ -224,25 +245,30 @@ function AppContent() {
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
                 {isAdmin && <ConflictBanner />}
                 {(!isAdmin && isMobile) ? (
-                  <MobileStaffView onPersonClick={openPerson} onOpenOnCallRotation={() => setShowOnCallRotation(true)} />
+                  <MobileStaffView onPersonClick={openPerson} onOpenOnCallRotation={() => setShowOnCallRotation(true)} boardTab={boardTab} setBoardTab={setBoardTab} />
                 ) : (
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
-                    <Board
-                      search={search}
-                      setSearch={setSearch}
-                      onPersonClick={openPerson}
-                      onEditClinic={isAdmin ? setConfigClinicId : () => {}}
-                      onOpenOnCallRotation={() => setShowOnCallRotation(true)}
-                      footer={
-                        <>
-                          {(isAdmin || boardClinics !== null) && <AdditionalTasks onPersonClick={openPerson} />}
-                          {isAdmin && <UnassignedStaff onPersonClick={openPerson} />}
-                        </>
-                      }
-                    />
+                    <BoardTabBar boardTab={boardTab} setBoardTab={setBoardTab} />
+                    {boardTab === 'clinics' ? (
+                      <Board
+                        search={search}
+                        setSearch={setSearch}
+                        onPersonClick={openPerson}
+                        onEditClinic={isAdmin ? setConfigClinicId : () => {}}
+                        onOpenOnCallRotation={() => setShowOnCallRotation(true)}
+                        footer={
+                          <>
+                            {(isAdmin || boardClinics !== null) && <AdditionalTasks onPersonClick={openPerson} />}
+                            {isAdmin && <UnassignedStaff onPersonClick={openPerson} />}
+                          </>
+                        }
+                      />
+                    ) : (
+                      <TriageBoard />
+                    )}
                   </div>
                 )}
-                {isAdmin && <HoursBar />}
+                {isAdmin && boardTab === 'clinics' && <HoursBar />}
               </div>
             </div>
           ) : (
@@ -314,9 +340,7 @@ function AppContent() {
 export default function App() {
   return (
     <AppProvider>
-      <TourProvider>
-        <AppContent />
-      </TourProvider>
+      <AppContent />
     </AppProvider>
   );
 }

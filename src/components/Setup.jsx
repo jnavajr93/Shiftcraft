@@ -942,7 +942,6 @@ function RosterHealthModal({ people, onClose }) {
 function StaffTab() {
   const { data, reorderPeople } = useApp();
   const [showModal, setShowModal] = useState(false);
-  const [showHealth, setShowHealth] = useState(false);
   const [staffSubTab, setStaffSubTab] = useState('tech');
 
   const sensors = useSensors(useSensor(PointerSensor, {
@@ -956,36 +955,34 @@ function StaffTab() {
     reorderPeople(arrayMove(data.people, oldIndex, newIndex));
   };
 
-  const techPeople = data.people.filter(p => (p.staffType ?? 'tech') !== 'admin');
+  const techPeople = data.people.filter(p => (p.staffType ?? 'tech') !== 'admin' && p.staffType !== 'triage');
   const adminPeople = data.people.filter(p => p.staffType === 'admin');
-  const visiblePeople = staffSubTab === 'tech' ? techPeople : adminPeople;
+  const triagePeople = data.people.filter(p => p.staffType === 'triage');
+  const visiblePeople = staffSubTab === 'tech' ? techPeople : staffSubTab === 'admin' ? adminPeople : triagePeople;
 
   return (
     <div className="setup-content">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <div style={{ display: 'flex', gap: 4 }}>
-          {['tech', 'admin'].map(t => (
+          {[
+            { id: 'tech', label: 'Tech', count: techPeople.length },
+            { id: 'admin', label: 'Admin', count: adminPeople.length },
+            { id: 'triage', label: 'Triage', count: triagePeople.length },
+          ].map(({ id, label, count }) => (
             <button
-              key={t}
-              className={`setup-subtab${staffSubTab === t ? ' active' : ''}`}
+              key={id}
+              className={`setup-subtab${staffSubTab === id ? ' active' : ''}`}
               style={{ fontSize: 12, padding: '4px 12px' }}
-              onClick={() => setStaffSubTab(t)}
+              onClick={() => setStaffSubTab(id)}
             >
-              {t.charAt(0).toUpperCase() + t.slice(1)}
-              <span style={{ marginLeft: 5, opacity: 0.6, fontWeight: 400 }}>
-                ({t === 'tech' ? techPeople.length : adminPeople.length})
-              </span>
+              {label}
+              <span style={{ marginLeft: 5, opacity: 0.6, fontWeight: 400 }}>({count})</span>
             </button>
           ))}
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn" style={{ fontSize: 12 }} onClick={() => setShowHealth(true)}>
-            <AlertTriangle size={13} /> Roster Health
-          </button>
-          <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-            <Plus size={15} /> Add Person
-          </button>
-        </div>
+        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+          <Plus size={15} /> Add Person
+        </button>
       </div>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={visiblePeople.map(p => p.id)} strategy={verticalListSortingStrategy}>
@@ -1008,12 +1005,6 @@ function StaffTab() {
           providers={data.providers}
           locations={data.locations}
           defaultStaffType={staffSubTab}
-        />
-      )}
-      {showHealth && (
-        <RosterHealthModal
-          people={data.people}
-          onClose={() => setShowHealth(false)}
         />
       )}
     </div>

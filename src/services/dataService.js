@@ -422,3 +422,25 @@ export function subscribeResearchAssignments(callback) {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'research_assignments' }, callback)
     .subscribe();
 }
+
+// ─── Triage board ─────────────────────────────
+export const TRIAGE_KEY_PREFIX = 'shiftcraft_triage_';
+
+export async function loadTriageWeek(weekStr) {
+  const key = TRIAGE_KEY_PREFIX + weekStr;
+  const { data, error } = await supabase
+    .from('schedule_data')
+    .select('value')
+    .eq('key', key)
+    .single();
+  if (error || !data) return { status: 'empty', data: null };
+  return { status: 'ok', data: data.value };
+}
+
+export async function saveTriageWeek(weekStr, payload) {
+  const key = TRIAGE_KEY_PREFIX + weekStr;
+  const { error } = await supabase
+    .from('schedule_data')
+    .upsert({ key, value: payload, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+  return { error: error ?? null };
+}

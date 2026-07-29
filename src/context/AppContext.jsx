@@ -39,6 +39,8 @@ import {
   updateResearchAssignment as updateResearchAssignmentDB,
   deleteResearchAssignment as deleteResearchAssignmentDB,
   subscribeResearchAssignments,
+  loadTriageWeek as loadTriageWeekDB,
+  saveTriageWeek as saveTriageWeekDB,
   weekKey,
   SCHEDULE_KEY,
   CHANGELOG_KEY,
@@ -2308,6 +2310,23 @@ export function AppProvider({ children }) {
     return workedHolidayMap;
   }, [calendarOverrides, globalData, currentWeek]);
 
+  // ─── Triage board ─────────────────────────────
+  const [triageData, setTriageData] = useState(null);
+
+  useEffect(() => {
+    if (!currentWeek) return;
+    loadTriageWeekDB(currentWeek).then(result => {
+      setTriageData(result.status === 'ok' ? result.data : null);
+    });
+  }, [currentWeek]);
+
+  const saveTriageWeekFn = useCallback(async (payload) => {
+    setTriageData(payload);
+    const { error } = await saveTriageWeekDB(currentWeek, payload);
+    if (error) console.error('[Shiftcraft] Save triage error:', error);
+    return { error };
+  }, [currentWeek]);
+
   const dismissSaveError = useCallback(() => {
     if (saveStatus === 'error') {
       clearTimeout(saveStatusTimerRef.current);
@@ -2349,6 +2368,7 @@ export function AppProvider({ children }) {
       researchAssignments, researchTableReady,
       addResearchAssignment, editResearchAssignment, removeResearchAssignment,
       effectiveAdditionalTasks,
+      triageData, saveTriageWeek: saveTriageWeekFn,
     }}>
       {children}
     </AppContext.Provider>

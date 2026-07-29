@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Search, User, X, AlertTriangle, PhoneCall } from 'lucide-react';
 import { useApp, isoWeek, mondayOfWeek } from '../context/AppContext.jsx';
+import TriageBoard from './TriageBoard.jsx';
 import {
   DAYS,
   getRenderedSlotEntries,
@@ -27,7 +28,7 @@ function todayDayIdx(currentWeek) {
   return dow - 1;
 }
 
-export default function MobileStaffView({ onPersonClick, onOpenOnCallRotation }) {
+export default function MobileStaffView({ onPersonClick, onOpenOnCallRotation, boardTab, setBoardTab }) {
   const { data, boardClinics, currentWeek, effectiveAdditionalTasks, oncall, oncallOverrides } = useApp();
 
   const [dayIdx, setDayIdx] = useState(() => todayDayIdx(currentWeek) ?? 0);
@@ -106,6 +107,28 @@ export default function MobileStaffView({ onPersonClick, onOpenOnCallRotation })
 
   return (
     <div className="mobile-staff-view">
+      {/* Board tab switcher */}
+      {boardTab !== undefined && setBoardTab && (
+        <div className="board-tab-bar">
+          <button
+            className={`board-tab-btn${boardTab === 'clinics' ? ' active' : ''}`}
+            onClick={() => setBoardTab('clinics')}
+          >
+            Clinics
+          </button>
+          <button
+            className={`board-tab-btn${boardTab === 'triage' ? ' active' : ''}`}
+            onClick={() => setBoardTab('triage')}
+          >
+            Triage
+          </button>
+        </div>
+      )}
+
+      {boardTab === 'triage' ? (
+        <TriageBoard myName={myName} />
+      ) : (
+      <>
       {/* Item 5: single-field search bar — no two-step tap-then-type */}
       <MobileNameBar
         myName={myName}
@@ -224,6 +247,8 @@ export default function MobileStaffView({ onPersonClick, onOpenOnCallRotation })
           </div>
         );
       })()}
+      </>
+      )}
     </div>
   );
 }
