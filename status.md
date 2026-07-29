@@ -1,58 +1,66 @@
 # Shiftcraft Session Status — 2026-07-29
 
-## SHA deployed: 3658ada
+## SHA deployed: 169ba51
+
+## Deployed URL: https://shiftcraft-azretvit.vercel.app
+
+---
 
 ## Work completed this session
 
-### On-call visibility improvements
+### On-call visibility improvements (staff-only)
 
-**Goal:** Make on-call schedule visible across all parts of the app — shiftboard, individual staff cards, personal overlay, and a new calendar view.
-
----
-
-#### 1. OnCallRotationView — list / calendar toggle
-
-- Added a **List | Calendar** toggle (icon buttons) in the header
-- **List view** — unchanged; shows next 26 weeks as before
-- **Calendar view** — new; shows next 4 months as month grids
-  - Each day cell is colored with the on-call person's color (low opacity)
-  - First name of the person appears on the Monday that starts their block
-  - Today's date highlighted with accent circle
-  - Weekend cells dimmed at 55% opacity
-- **Files changed:** `src/components/OnCallRotationView.jsx`, `src/index.css`
+- **OnCallRotationView** — added List | Calendar toggle; calendar shows 4 months as month grids with person color, first name on Monday, today highlighted
+- **Board staff notice bar** — on-call pill shows "On Call: [name]" (staff-only, no dates)
+- **PersonOverlay** — on-call row moved to top (below name, above Monday row), staff-only
+- **TopBar** — removed duplicate on-call badge from topbar center
+- **AbsenceCalendar** — on-call blocks shown as amber bars in calendar cells; "On Call" legend filter (defaults on, lane 0, other bars shift down by 1)
 
 ---
 
-#### 2. Sidebar PersonCard — on-call badges
+### Triage tab + staffType + tour removal (2026-07-29)
 
-- Each person row in the Staff sidebar now shows a badge when relevant:
-  - **"On Call"** (amber solid) — person is currently on call this week
-  - **"Next"** (amber outlined) — person is next up in the rotation
-- Badges appear inline after the person's name in the sidebar row
-- **Files changed:** `src/components/Sidebar.jsx`
+#### 1. Tours removed
+- `TourProvider` made a no-op — renders children only, no welcome card, no tooltips, no localStorage
+- `<TourProvider>` wrapper removed from `App.jsx`
+- **Files changed:** `src/components/Tour.jsx`, `src/App.jsx`
+
+#### 2. Roster Health removed
+- Removed "Roster Health" button and modal from Setup page
+- **Files changed:** `src/components/Setup.jsx`
+
+#### 3. Triage staffType added
+- Third staffType option: `tech` | `admin` | `triage`
+- Setup Staff section now has Tech / Admin / Triage sub-tabs with counts
+- Tech sub-tab excludes both `admin` and `triage` types
+- **Files changed:** `src/components/Setup.jsx`
+
+#### 4. Clinics | Triage tab switcher
+- `boardTab` state (`'clinics'` | `'triage'`) added to `App.jsx`
+- `BoardTabBar` segmented control renders above board in desktop view
+- Mobile: `boardTab`/`setBoardTab` passed to `MobileStaffView` which renders `BoardTabBar`
+- `HoursBar` only shown when `boardTab === 'clinics'` (manager mode)
+- **Files changed:** `src/App.jsx`, `src/components/MobileStaffView.jsx`, `src/index.css`
+
+#### 5. TriageBoard component
+- Weekly grid: Mon–Fri columns, role rows:
+  - Scanning / Sorting / Records
+  - NP Calls
+  - Phreesia
+  - Triage & Overflow (multi-person)
+  - NP Attachments
+  - Lunch 12PM → Lunch / Phone Coverage
+  - Lunch 1PM → Lunch / Phone Coverage
+- Manager: clickable cells, inline picker to assign triage staff
+- Staff: read-only, own name highlighted amber
+- Data stored per-week in Supabase: `shiftcraft_triage_{weekStr}`
+- **Files created:** `src/components/TriageBoard.jsx`
+- **Files changed:** `src/services/dataService.js`, `src/context/AppContext.jsx`, `src/index.css`
 
 ---
 
-#### 3. Sidebar StaffHoverCard — on-call section
+## Next steps
 
-- Admin hover card now has an on-call section at the bottom:
-  - Shows "On Call Now" label + date range if person is currently on call
-  - Shows "On Call Next" label + date range if person is up next
-- **Files changed:** `src/components/Sidebar.jsx`
-
----
-
-#### 4. Board — admin also sees on-call pill
-
-- `onCallForWeek` now computed for all users (removed `!isAdmin` guard)
-- Admin view shows `admin-oncall-bar` above day headers: "On Call This Week: [name]"
-- Staff notice bar unchanged
-- **Files changed:** `src/components/Board.jsx`, `src/index.css`
-
----
-
-#### 5. PersonOverlay — on-call info visible to admins
-
-- Removed `!isAdmin` guard on on-call block row in PersonOverlay
-- Both admin and staff now see on-call dates when viewing any person's card
-- **Files changed:** `src/components/PersonOverlay.jsx`
+- Go to Setup → Staff → Triage sub-tab to assign triage staffType to triage team members
+- In Triage tab, manager can click cells to assign triage staff per role/day
+- Staff assigned as `triage` type will see their name highlighted amber in the Triage board
