@@ -1180,12 +1180,6 @@ export default function TopBar({ activeTab, setActiveTab, setupSection, setSetup
           <button className="btn btn-icon topbar-nav-btn" onClick={() => navigateWeek(1)} aria-label="Next week">
             <ChevronRight size={16} />
           </button>
-          {onCallThisWeek && (
-            <div className="topbar-oncall-badge" title={`On call this week: ${onCallThisWeek}`}>
-              <PhoneCall size={11} />
-              {onCallThisWeek}
-            </div>
-          )}
         </div>
 
         <div className="topbar-right">

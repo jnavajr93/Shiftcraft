@@ -139,7 +139,6 @@ function OverlayInner({ person, onClose, onOpenOnCallRotation }) {
         <button className="overlay-close" onClick={onClose}><X size={16} /></button>
       </div>
       <div className="overlay-body">
-        <WeekRows personIds={personIds} clinics={boardClinics} additionalTasks={effectiveAdditionalTasks} monday={currentWeek ? mondayOfWeek(currentWeek) : null} />
         {nextBlock && (
           <button className="overlay-oncall-row" onClick={onOpenOnCallRotation}>
             <PhoneCall size={13} style={{ color: ONCALL_COLOR, flexShrink: 0 }} />
@@ -151,6 +150,7 @@ function OverlayInner({ person, onClose, onOpenOnCallRotation }) {
             </span>
           </button>
         )}
+        <WeekRows personIds={personIds} clinics={boardClinics} additionalTasks={effectiveAdditionalTasks} monday={currentWeek ? mondayOfWeek(currentWeek) : null} />
         {isAdmin && (
           <ArcChart
             hours={hours}

@@ -4,7 +4,7 @@ import { Search, AlertTriangle, PhoneCall } from 'lucide-react';
 import { useApp, mondayOfWeek, isoWeek } from '../context/AppContext.jsx';
 import { DAYS } from '../data/seed.js';
 import ClinicCard from './ClinicCard.jsx';
-import { getOnCallForWeek } from '../utils/oncall.js';
+import { getOnCallForWeek, getPersonNextBlock, formatBlockRange } from '../utils/oncall.js';
 
 const LOCATION_ORDER = ['Phoenix', 'Chandler', 'Estrella', 'Scottsdale', 'OBS'];
 
@@ -137,6 +137,11 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic, 
   const onCallPersonColor = onCallForWeek
     ? ((data.people ?? []).find(p => p.name.trim().toLowerCase() === onCallForWeek.person.trim().toLowerCase())?.color ?? '#f59e0b')
     : null;
+  // Date range for the current on-call block (shown in the pill)
+  const onCallBlock = (onCallForWeek && oncall?.anchorWeek)
+    ? getPersonNextBlock(onCallForWeek.person, oncall, currentWeek)
+    : null;
+  const onCallDateRange = onCallBlock ? formatBlockRange(onCallBlock.startWeek, onCallBlock.endWeek) : null;
 
   // Staff view: boardClinics is null when the week has never been posted
   const showNotPosted = !isAdmin && boardClinics === null;
@@ -207,7 +212,7 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic, 
             <button className="staff-oncall-pill" onClick={onOpenOnCallRotation} title="View on-call rotation">
               <PhoneCall size={11} />
               <span className="staff-oncall-pill-dot" style={{ background: onCallPersonColor }} />
-              <span>On Call: {onCallForWeek.person}</span>
+              <span>On Call: {onCallForWeek.person}{onCallDateRange ? ` · ${onCallDateRange}` : ''}</span>
             </button>
           )}
         </div>
