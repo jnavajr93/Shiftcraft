@@ -2886,3 +2886,86 @@ html, body, #root {
     box-shadow: 0 8px 32px rgba(0,0,0,0.45);
   }
 }
+
+/* ─── On-call rotation view toggle (list / calendar) ───────────────────────── */
+.oncall-view-toggle {
+  display: flex; align-items: center;
+  background: var(--bg-surface); border: 0.5px solid var(--border);
+  border-radius: var(--radius); overflow: hidden;
+}
+.oncall-view-toggle-btn {
+  display: flex; align-items: center; justify-content: center;
+  padding: 5px 8px; background: transparent; border: none;
+  color: var(--text-muted); cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+.oncall-view-toggle-btn:hover { color: var(--text-primary); background: var(--bg-hover, var(--bg-elevated)); }
+.oncall-view-toggle-btn--active { background: #f59e0b; color: #fff; }
+.oncall-view-toggle-btn--active:hover { background: #d97706; }
+
+/* ─── On-call calendar grid ─────────────────────────────────────────────────── */
+.oncall-cal-view { display: flex; flex-direction: column; gap: 24px; padding-bottom: 8px; }
+.oncall-cal-month-title {
+  font-size: 13px; font-weight: 700; color: var(--text-primary);
+  margin-bottom: 8px; letter-spacing: -0.2px;
+}
+.oncall-cal-dow-row {
+  display: grid; grid-template-columns: repeat(7, 1fr); margin-bottom: 3px;
+}
+.oncall-cal-dow {
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.4px; color: var(--text-muted); text-align: center; padding: 2px 0;
+}
+.oncall-cal-grid {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;
+}
+.oncall-cal-cell {
+  position: relative; aspect-ratio: 1;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  border-radius: var(--radius); overflow: hidden; min-height: 34px;
+}
+.oncall-cal-cell--pad { background: transparent; }
+.oncall-cal-cell--assigned { background: color-mix(in srgb, var(--cell-color) 18%, transparent); }
+[data-theme="dark"] .oncall-cal-cell--assigned { background: color-mix(in srgb, var(--cell-color) 24%, transparent); }
+.oncall-cal-cell--weekend { opacity: 0.55; }
+.oncall-cal-day-num {
+  font-size: 11px; font-weight: 500; color: var(--text-primary); line-height: 1; z-index: 1;
+}
+.oncall-cal-cell--today .oncall-cal-day-num {
+  background: var(--accent); color: #fff; border-radius: 50%;
+  width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
+}
+.oncall-cal-person-name {
+  font-size: 8px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.3px; line-height: 1; margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 92%; text-align: center;
+}
+
+/* ─── Sidebar on-call badges ────────────────────────────────────────────────── */
+.sidebar-oncall-badge {
+  display: inline-flex; align-items: center;
+  font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.4px; border-radius: 3px; padding: 1px 5px;
+  flex-shrink: 0; white-space: nowrap;
+}
+.sidebar-oncall-badge--now { background: #f59e0b; color: #fff; }
+.sidebar-oncall-badge--next {
+  background: color-mix(in srgb, #f59e0b 15%, transparent);
+  color: #b45309; border: 0.5px solid color-mix(in srgb, #f59e0b 38%, transparent);
+}
+[data-theme="dark"] .sidebar-oncall-badge--next {
+  color: #fbbf24; border-color: color-mix(in srgb, #f59e0b 30%, transparent);
+}
+
+/* ─── Staff hover card on-call row ─────────────────────────────────────────── */
+.staff-hovercard-oncall-row {
+  display: flex; align-items: flex-start; gap: 7px;
+  border-top: 0.5px solid var(--border); padding-top: 8px; margin-top: 2px;
+}
+
+/* ─── Admin on-call bar on the board ────────────────────────────────────────── */
+.admin-oncall-bar {
+  display: flex; align-items: center; justify-content: flex-end;
+  padding: 4px 16px; border-bottom: 0.5px solid var(--border);
+}

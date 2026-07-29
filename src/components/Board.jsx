@@ -130,8 +130,8 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic, 
     return () => clearTimeout(t);
   }, [currentWeek, todayDay]);
 
-  // On-call pill — staff view only; shows who's on call for the current viewed week
-  const onCallForWeek = (!isAdmin && oncall?.rotation?.length && oncall?.anchorWeek)
+  // On-call pill — shows who's on call for the current viewed week (all users)
+  const onCallForWeek = (oncall?.rotation?.length && oncall?.anchorWeek)
     ? getOnCallForWeek(currentWeek, oncall, oncallOverrides ?? [])
     : null;
   const onCallPersonColor = onCallForWeek
@@ -196,8 +196,8 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic, 
         </div>
       </div>
 
-      {/* Standing staff notice + on-call pill — staff view only */}
-      {!isAdmin && (
+      {/* Staff notice + on-call pill */}
+      {!isAdmin ? (
         <div className="staff-notice-bar">
           <div className="staff-notice-text">
             <AlertTriangle size={13} />
@@ -211,7 +211,15 @@ export default function Board({ search, setSearch, onPersonClick, onEditClinic, 
             </button>
           )}
         </div>
-      )}
+      ) : onCallForWeek ? (
+        <div className="admin-oncall-bar">
+          <button className="staff-oncall-pill" onClick={onOpenOnCallRotation} title="View on-call rotation">
+            <PhoneCall size={11} />
+            <span className="staff-oncall-pill-dot" style={{ background: onCallPersonColor }} />
+            <span>On Call This Week: {onCallForWeek.person}</span>
+          </button>
+        </div>
+      ) : null}
 
       {/* Day-header strip: OUTSIDE board-scroll — never scrolls away vertically.
           Horizontal scroll is mirrored from board-scroll via the JS listener above. */}
